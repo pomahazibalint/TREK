@@ -15,8 +15,10 @@ const texts = {
       'API-Schluessel (Google Maps, Wetter)',
       'Benutzer- & Rechteverwaltung',
       'Automatische Backups',
+      'Addon-Verwaltung (aktivieren/deaktivieren)',
+      'OIDC / SSO Single Sign-On',
     ],
-    addonsTitle: 'Modulare Addons',
+    addonsTitle: 'Modulare Addons (in der Vollversion deaktivierbar)',
     addons: [
       ['Vacay', 'Urlaubsplaner mit Kalender, Feiertagen & Fusion'],
       ['Atlas', 'Weltkarte mit besuchten Laendern & Reisestatistiken'],
@@ -43,8 +45,10 @@ const texts = {
       'API key management (Google Maps, Weather)',
       'User & permission management',
       'Automatic backups',
+      'Addon management (enable/disable)',
+      'OIDC / SSO single sign-on',
     ],
-    addonsTitle: 'Modular Addons',
+    addonsTitle: 'Modular Addons (can be deactivated in full version)',
     addons: [
       ['Vacay', 'Vacation planner with calendar, holidays & user fusion'],
       ['Atlas', 'World map with visited countries & travel stats'],
@@ -61,7 +65,7 @@ const texts = {
   },
 }
 
-const featureIcons = [Upload, Key, Users, Database]
+const featureIcons = [Upload, Key, Users, Database, Puzzle, Shield]
 const addonIcons = [CalendarDays, Globe, ListChecks, Wallet, FileText, ArrowRightLeft]
 
 export default function DemoBanner() {
@@ -152,15 +156,14 @@ export default function DemoBanner() {
             const Icon = addonIcons[i]
             return (
               <div key={name} style={{
-                display: 'flex', alignItems: 'flex-start', gap: 8,
                 background: '#f8fafc', borderRadius: 10, padding: '8px 10px',
                 border: '1px solid #f1f5f9',
               }}>
-                <Icon size={14} style={{ flexShrink: 0, color: '#111827', marginTop: 1 }} />
-                <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                  <Icon size={12} style={{ flexShrink: 0, color: '#111827' }} />
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#111827' }}>{name}</span>
-                  <p style={{ fontSize: 10, color: '#94a3b8', margin: '2px 0 0', lineHeight: 1.3 }}>{desc}</p>
                 </div>
+                <p style={{ fontSize: 10, color: '#94a3b8', margin: 0, lineHeight: 1.3, paddingLeft: 18 }}>{desc}</p>
               </div>
             )
           })}

@@ -404,7 +404,7 @@ export default function LoginPage() {
               onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(245, 158, 11, 0.3)' }}
             >
               <Plane size={18} />
-              Demo ausprobieren — ohne Registrierung
+              {language === 'de' ? 'Demo ausprobieren — ohne Registrierung' : 'Try the demo — no registration needed'}
             </button>
           )}
         </div>
