@@ -285,6 +285,28 @@ function runMigrations(db: Database.Database): void {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
     },
+    () => {
+      // Configurable weekend days
+      try { db.exec("ALTER TABLE vacay_plans ADD COLUMN weekend_days TEXT DEFAULT '0,6'"); } catch {}
+    },
+    () => {
+      // Immich integration
+      try { db.exec("ALTER TABLE users ADD COLUMN immich_url TEXT"); } catch {}
+      try { db.exec("ALTER TABLE users ADD COLUMN immich_api_key TEXT"); } catch {}
+      db.exec(`CREATE TABLE IF NOT EXISTS trip_photos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        immich_asset_id TEXT NOT NULL,
+        shared INTEGER NOT NULL DEFAULT 1,
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(trip_id, user_id, immich_asset_id)
+      )`);
+      // Add memories addon
+      try {
+        db.prepare("INSERT INTO addons (id, name, type, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?)").run('memories', 'Photos', 'trip', 'Image', 0, 7);
+      } catch {}
+    },
   ];
 
   if (currentVersion < migrations.length) {
