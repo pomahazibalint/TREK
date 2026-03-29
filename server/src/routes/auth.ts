@@ -93,7 +93,7 @@ const authLimiter = rateLimiter(10, RATE_LIMIT_WINDOW);
 
 function isOidcOnlyMode(): boolean {
   const get = (key: string) => (db.prepare("SELECT value FROM app_settings WHERE key = ?").get(key) as { value: string } | undefined)?.value || null;
-  const enabled = get('oidc_only') === 'true';
+  const enabled = process.env.OIDC_ONLY === 'true' || get('oidc_only') === 'true';
   if (!enabled) return false;
   const oidcConfigured = !!(
     (process.env.OIDC_ISSUER || get('oidc_issuer')) &&
@@ -132,7 +132,7 @@ router.get('/app-config', (_req: Request, res: Response) => {
     (process.env.OIDC_ISSUER || (db.prepare("SELECT value FROM app_settings WHERE key = 'oidc_issuer'").get() as { value: string } | undefined)?.value) &&
     (process.env.OIDC_CLIENT_ID || (db.prepare("SELECT value FROM app_settings WHERE key = 'oidc_client_id'").get() as { value: string } | undefined)?.value)
   );
-  const oidcOnlySetting = (db.prepare("SELECT value FROM app_settings WHERE key = 'oidc_only'").get() as { value: string } | undefined)?.value;
+  const oidcOnlySetting = process.env.OIDC_ONLY || (db.prepare("SELECT value FROM app_settings WHERE key = 'oidc_only'").get() as { value: string } | undefined)?.value;
   const oidcOnlyMode = oidcConfigured && oidcOnlySetting === 'true';
   res.json({
     allow_registration: isDemo ? false : allowRegistration,
