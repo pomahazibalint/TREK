@@ -120,23 +120,44 @@ services:
   app:
     image: mauriceboe/trek:latest
     container_name: trek
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    tmpfs:
+      - /tmp:noexec,nosuid,size=64m
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - TZ=UTC
-      - LOG_LEVEL=info
-      # - ALLOWED_ORIGINS=https://trek.example.com
-      # - OIDC_ISSUER=https://auth.example.com
-      # - OIDC_CLIENT_ID=trek
-      # - OIDC_CLIENT_SECRET=supersecret
-      # - OIDC_DISPLAY_NAME=SSO
-      # - OIDC_ONLY=false
+      - JWT_SECRET=${JWT_SECRET:-} # Auto-generated if not set; persist across restarts for stable sessions
+      - TZ=${TZ:-UTC} # Timezone for logs, reminders and scheduled tasks (e.g. Europe/Berlin)
+      - LOG_LEVEL=${LOG_LEVEL:-info} # info = concise user actions; debug = verbose admin-level details
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-} # Comma-separated origins for CORS and email notification links
+      - FORCE_HTTPS=true # Redirect HTTP to HTTPS when behind a TLS-terminating proxy
+      - TRUST_PROXY=1 # Number of trusted proxies (for X-Forwarded-For / real client IP)
+      - OIDC_ISSUER=https://auth.example.com # OpenID Connect provider URL
+      - OIDC_CLIENT_ID=trek # OpenID Connect client ID
+      - OIDC_CLIENT_SECRET=supersecret # OpenID Connect client secret
+      - OIDC_DISPLAY_NAME=SSO # Label shown on the SSO login button
+      - OIDC_ONLY=false # Set true to disable local password auth entirely (SSO only)
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
 ```
 
 ```bash
