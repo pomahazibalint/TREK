@@ -60,17 +60,17 @@ function runMigrations(db: Database.Database): void {
       }
     },
     () => {
-      try { db.exec('ALTER TABLE day_accommodations ADD COLUMN check_in TEXT'); } catch {}
-      try { db.exec('ALTER TABLE day_accommodations ADD COLUMN check_out TEXT'); } catch {}
-      try { db.exec('ALTER TABLE day_accommodations ADD COLUMN confirmation TEXT'); } catch {}
+      try { db.exec('ALTER TABLE day_accommodations ADD COLUMN check_in TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE day_accommodations ADD COLUMN check_out TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE day_accommodations ADD COLUMN confirmation TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
-      try { db.exec('ALTER TABLE places ADD COLUMN end_time TEXT'); } catch {}
+      try { db.exec('ALTER TABLE places ADD COLUMN end_time TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
-      try { db.exec('ALTER TABLE day_assignments ADD COLUMN reservation_status TEXT DEFAULT \'none\''); } catch {}
-      try { db.exec('ALTER TABLE day_assignments ADD COLUMN reservation_notes TEXT'); } catch {}
-      try { db.exec('ALTER TABLE day_assignments ADD COLUMN reservation_datetime TEXT'); } catch {}
+      try { db.exec('ALTER TABLE day_assignments ADD COLUMN reservation_status TEXT DEFAULT \'none\''); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE day_assignments ADD COLUMN reservation_notes TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE day_assignments ADD COLUMN reservation_datetime TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
       try {
         db.exec(`
           UPDATE day_assignments SET
@@ -85,7 +85,7 @@ function runMigrations(db: Database.Database): void {
       }
     },
     () => {
-      try { db.exec('ALTER TABLE reservations ADD COLUMN assignment_id INTEGER REFERENCES day_assignments(id) ON DELETE SET NULL'); } catch {}
+      try { db.exec('ALTER TABLE reservations ADD COLUMN assignment_id INTEGER REFERENCES day_assignments(id) ON DELETE SET NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
       db.exec(`
@@ -144,18 +144,22 @@ function runMigrations(db: Database.Database): void {
       `);
       try {
         db.prepare("INSERT OR IGNORE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES ('collab', 'Collab', 'Notes, polls, and live chat for trip collaboration', 'trip', 'Users', 1, 6)").run();
-      } catch {}
+      } catch (err: any) {
+        console.warn('[migrations] Non-fatal migration step failed:', err);
+      }
     },
     () => {
-      try { db.exec('ALTER TABLE day_assignments ADD COLUMN assignment_time TEXT'); } catch {}
-      try { db.exec('ALTER TABLE day_assignments ADD COLUMN assignment_end_time TEXT'); } catch {}
+      try { db.exec('ALTER TABLE day_assignments ADD COLUMN assignment_time TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE day_assignments ADD COLUMN assignment_end_time TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
       try {
         db.exec(`
           UPDATE day_assignments SET
             assignment_time = (SELECT place_time FROM places WHERE places.id = day_assignments.place_id),
             assignment_end_time = (SELECT end_time FROM places WHERE places.id = day_assignments.place_id)
         `);
-      } catch {}
+      } catch (err: any) {
+        console.warn('[migrations] Non-fatal migration step failed:', err);
+      }
     },
     () => {
       db.exec(`
@@ -184,26 +188,26 @@ function runMigrations(db: Database.Database): void {
       `);
     },
     () => {
-      try { db.exec('ALTER TABLE collab_messages ADD COLUMN deleted INTEGER DEFAULT 0'); } catch {}
+      try { db.exec('ALTER TABLE collab_messages ADD COLUMN deleted INTEGER DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
-      try { db.exec('ALTER TABLE trip_files ADD COLUMN note_id INTEGER REFERENCES collab_notes(id) ON DELETE SET NULL'); } catch {}
-      try { db.exec('ALTER TABLE collab_notes ADD COLUMN website TEXT'); } catch {}
+      try { db.exec('ALTER TABLE trip_files ADD COLUMN note_id INTEGER REFERENCES collab_notes(id) ON DELETE SET NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE collab_notes ADD COLUMN website TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
-      try { db.exec('ALTER TABLE reservations ADD COLUMN reservation_end_time TEXT'); } catch {}
+      try { db.exec('ALTER TABLE reservations ADD COLUMN reservation_end_time TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
-      try { db.exec('ALTER TABLE places ADD COLUMN osm_id TEXT'); } catch {}
+      try { db.exec('ALTER TABLE places ADD COLUMN osm_id TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
-      try { db.exec('ALTER TABLE trip_files ADD COLUMN uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL'); } catch {}
-      try { db.exec('ALTER TABLE trip_files ADD COLUMN starred INTEGER DEFAULT 0'); } catch {}
-      try { db.exec('ALTER TABLE trip_files ADD COLUMN deleted_at TEXT'); } catch {}
+      try { db.exec('ALTER TABLE trip_files ADD COLUMN uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE trip_files ADD COLUMN starred INTEGER DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE trip_files ADD COLUMN deleted_at TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
-      try { db.exec('ALTER TABLE reservations ADD COLUMN accommodation_id INTEGER REFERENCES day_accommodations(id) ON DELETE SET NULL'); } catch {}
-      try { db.exec('ALTER TABLE reservations ADD COLUMN metadata TEXT'); } catch {}
+      try { db.exec('ALTER TABLE reservations ADD COLUMN accommodation_id INTEGER REFERENCES day_accommodations(id) ON DELETE SET NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE reservations ADD COLUMN metadata TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
       db.exec(`CREATE TABLE IF NOT EXISTS invite_tokens (
@@ -217,8 +221,8 @@ function runMigrations(db: Database.Database): void {
       )`);
     },
     () => {
-      try { db.exec('ALTER TABLE users ADD COLUMN mfa_enabled INTEGER DEFAULT 0'); } catch {}
-      try { db.exec('ALTER TABLE users ADD COLUMN mfa_secret TEXT'); } catch {}
+      try { db.exec('ALTER TABLE users ADD COLUMN mfa_enabled INTEGER DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE users ADD COLUMN mfa_secret TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
       db.exec(`CREATE TABLE IF NOT EXISTS packing_category_assignees (
@@ -243,7 +247,9 @@ function runMigrations(db: Database.Database): void {
         sort_order INTEGER NOT NULL DEFAULT 0
       )`);
       // Recreate items table with category_id FK (replaces old template_id-based schema)
-      try { db.exec('DROP TABLE IF EXISTS packing_template_items'); } catch {}
+      try { db.exec('DROP TABLE IF EXISTS packing_template_items'); } catch (err: any) {
+        console.warn('[migrations] Non-fatal migration step failed:', err);
+      }
       db.exec(`CREATE TABLE packing_template_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         category_id INTEGER NOT NULL REFERENCES packing_template_categories(id) ON DELETE CASCADE,
@@ -261,8 +267,8 @@ function runMigrations(db: Database.Database): void {
         sort_order INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
-      try { db.exec('ALTER TABLE packing_items ADD COLUMN weight_grams INTEGER'); } catch {}
-      try { db.exec('ALTER TABLE packing_items ADD COLUMN bag_id INTEGER REFERENCES packing_bags(id) ON DELETE SET NULL'); } catch {}
+      try { db.exec('ALTER TABLE packing_items ADD COLUMN weight_grams INTEGER'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE packing_items ADD COLUMN bag_id INTEGER REFERENCES packing_bags(id) ON DELETE SET NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
       db.exec(`CREATE TABLE IF NOT EXISTS visited_countries (
@@ -287,12 +293,12 @@ function runMigrations(db: Database.Database): void {
     },
     () => {
       // Configurable weekend days
-      try { db.exec("ALTER TABLE vacay_plans ADD COLUMN weekend_days TEXT DEFAULT '0,6'"); } catch {}
+      try { db.exec("ALTER TABLE vacay_plans ADD COLUMN weekend_days TEXT DEFAULT '0,6'"); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
       // Immich integration
-      try { db.exec("ALTER TABLE users ADD COLUMN immich_url TEXT"); } catch {}
-      try { db.exec("ALTER TABLE users ADD COLUMN immich_api_key TEXT"); } catch {}
+      try { db.exec("ALTER TABLE users ADD COLUMN immich_url TEXT"); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec("ALTER TABLE users ADD COLUMN immich_api_key TEXT"); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
       db.exec(`CREATE TABLE IF NOT EXISTS trip_photos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
@@ -305,7 +311,9 @@ function runMigrations(db: Database.Database): void {
       // Add memories addon
       try {
         db.prepare("INSERT INTO addons (id, name, type, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?)").run('memories', 'Photos', 'trip', 'Image', 0, 7);
-      } catch {}
+      } catch (err: any) {
+        console.warn('[migrations] Non-fatal migration step failed:', err);
+      }
     },
     () => {
       // Allow files to be linked to multiple reservations/assignments
@@ -323,15 +331,15 @@ function runMigrations(db: Database.Database): void {
     },
     () => {
       // Add day_plan_position to reservations for persistent transport ordering in day timeline
-      try { db.exec('ALTER TABLE reservations ADD COLUMN day_plan_position REAL DEFAULT NULL'); } catch {}
+      try { db.exec('ALTER TABLE reservations ADD COLUMN day_plan_position REAL DEFAULT NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
       // Add paid_by_user_id to budget_items for expense tracking / settlement
-      try { db.exec('ALTER TABLE budget_items ADD COLUMN paid_by_user_id INTEGER REFERENCES users(id)'); } catch {}
+      try { db.exec('ALTER TABLE budget_items ADD COLUMN paid_by_user_id INTEGER REFERENCES users(id)'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
       // Add target_date to bucket_list for optional visit planning
-      try { db.exec('ALTER TABLE bucket_list ADD COLUMN target_date TEXT DEFAULT NULL'); } catch {}
+      try { db.exec('ALTER TABLE bucket_list ADD COLUMN target_date TEXT DEFAULT NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
       // Notification preferences per user
@@ -351,10 +359,10 @@ function runMigrations(db: Database.Database): void {
     },
     () => {
       // Add missing notification preference columns for existing tables
-      try { db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_vacay_invite INTEGER DEFAULT 1'); } catch {}
-      try { db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_photos_shared INTEGER DEFAULT 1'); } catch {}
-      try { db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_collab_message INTEGER DEFAULT 1'); } catch {}
-      try { db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_packing_tagged INTEGER DEFAULT 1'); } catch {}
+      try { db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_vacay_invite INTEGER DEFAULT 1'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_photos_shared INTEGER DEFAULT 1'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_collab_message INTEGER DEFAULT 1'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_packing_tagged INTEGER DEFAULT 1'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
       // Public share links for read-only trip access
@@ -373,11 +381,11 @@ function runMigrations(db: Database.Database): void {
     },
     () => {
       // Add permission columns to share_tokens
-      try { db.exec('ALTER TABLE share_tokens ADD COLUMN share_map INTEGER DEFAULT 1'); } catch {}
-      try { db.exec('ALTER TABLE share_tokens ADD COLUMN share_bookings INTEGER DEFAULT 1'); } catch {}
-      try { db.exec('ALTER TABLE share_tokens ADD COLUMN share_packing INTEGER DEFAULT 0'); } catch {}
-      try { db.exec('ALTER TABLE share_tokens ADD COLUMN share_budget INTEGER DEFAULT 0'); } catch {}
-      try { db.exec('ALTER TABLE share_tokens ADD COLUMN share_collab INTEGER DEFAULT 0'); } catch {}
+      try { db.exec('ALTER TABLE share_tokens ADD COLUMN share_map INTEGER DEFAULT 1'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE share_tokens ADD COLUMN share_bookings INTEGER DEFAULT 1'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE share_tokens ADD COLUMN share_packing INTEGER DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE share_tokens ADD COLUMN share_budget INTEGER DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE share_tokens ADD COLUMN share_collab INTEGER DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
       // Audit log
@@ -396,7 +404,7 @@ function runMigrations(db: Database.Database): void {
     },
     () => {
       // MFA backup/recovery codes
-      try { db.exec('ALTER TABLE users ADD COLUMN mfa_backup_codes TEXT'); } catch {}
+      try { db.exec('ALTER TABLE users ADD COLUMN mfa_backup_codes TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     // MCP long-lived API tokens
     () => db.exec(`
@@ -415,7 +423,9 @@ function runMigrations(db: Database.Database): void {
       try {
         db.prepare("INSERT OR IGNORE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)")
           .run('mcp', 'MCP', 'Model Context Protocol for AI assistant integration', 'integration', 'Terminal', 0, 12);
-      } catch {}
+      } catch (err: any) {
+        console.warn('[migrations] Non-fatal migration step failed:', err);
+      }
     },
     // Index on mcp_tokens.token_hash
     () => db.exec(`
@@ -425,25 +435,32 @@ function runMigrations(db: Database.Database): void {
     () => {
       try {
         db.prepare("UPDATE addons SET type = 'integration' WHERE id = 'mcp'").run();
-      } catch {}
+      } catch (err: any) {
+        console.warn('[migrations] Non-fatal migration step failed:', err);
+      }
     },
     () => {
-      try { db.exec('ALTER TABLE places ADD COLUMN route_geometry TEXT'); } catch {}
+      try { db.exec('ALTER TABLE places ADD COLUMN route_geometry TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
-      try { db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0'); } catch {}
+      try { db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
     () => {
-      try { db.exec('ALTER TABLE trips ADD COLUMN reminder_days INTEGER DEFAULT 3'); } catch {}
+      try { db.exec('ALTER TABLE trips ADD COLUMN reminder_days INTEGER DEFAULT 3'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
   ];
 
   if (currentVersion < migrations.length) {
     for (let i = currentVersion; i < migrations.length; i++) {
       console.log(`[DB] Running migration ${i + 1}/${migrations.length}`);
-      migrations[i]();
+      try {
+        db.transaction(() => migrations[i]())();
+      } catch (err) {
+        console.error(`[migrations] FATAL: Migration ${i + 1} failed, rolled back:`, err);
+        process.exit(1);
+      }
+      db.prepare('UPDATE schema_version SET version = ?').run(i + 1);
     }
-    db.prepare('UPDATE schema_version SET version = ?').run(migrations.length);
     console.log(`[DB] Migrations complete — schema version ${migrations.length}`);
   }
 }
