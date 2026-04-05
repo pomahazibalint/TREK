@@ -86,6 +86,7 @@ const I18N: Record<string, EmailStrings> = {
   nl: { footer: 'Je ontvangt dit omdat je meldingen hebt ingeschakeld in TREK.', manage: 'Voorkeuren beheren', madeWith: 'Made with', openTrek: 'TREK openen' },
   ru: { footer: 'Вы получили это, потому что у вас включены уведомления в TREK.', manage: 'Управление настройками', madeWith: 'Made with', openTrek: 'Открыть TREK' },
   zh: { footer: '您收到此邮件是因为您在 TREK 中启用了通知。', manage: '管理偏好设置', madeWith: 'Made with', openTrek: '打开 TREK' },
+  'zh-TW': { footer: '您收到這封郵件是因為您在 TREK 中啟用了通知。', manage: '管理偏好設定', madeWith: 'Made with', openTrek: '開啟 TREK' },
   ar: { footer: 'تلقيت هذا لأنك قمت بتفعيل الإشعارات في TREK.', manage: 'إدارة التفضيلات', madeWith: 'Made with', openTrek: 'فتح TREK' },
 };
 
@@ -163,6 +164,15 @@ const EVENT_TEXTS: Record<string, Record<NotifEventType, EventTextFn>> = {
     collab_message: p => ({ title: `"${p.trip}"中的新消息`, body: `${p.actor}：${p.preview}` }),
     packing_tagged: p => ({ title: `行李清单：${p.category}`, body: `${p.actor} 将你分配到"${p.trip}"中的"${p.category}"类别。` }),
     version_available: p => ({ title: '新版 TREK 可用', body: `TREK ${p.version} 现已可用。请前往管理面板进行更新。` }),
+  },
+  'zh-TW': {
+    trip_invite: p => ({ title: `邀請加入「${p.trip}」`, body: `${p.actor} 邀請了 ${p.invitee || '成員'} 加入行程「${p.trip}」。` }),
+    booking_change: p => ({ title: `新預訂：${p.booking}`, body: `${p.actor} 在「${p.trip}」中新增了預訂「${p.booking}」（${p.type}）。` }),
+    trip_reminder: p => ({ title: `行程提醒：${p.trip}`, body: `您的行程「${p.trip}」即將開始！` }),
+    vacay_invite: p => ({ title: 'Vacay 融合邀請', body: `${p.actor} 邀請您合併假期計畫。開啟 TREK 以接受或拒絕。` }),
+    photos_shared: p => ({ title: `已分享 ${p.count} 張照片`, body: `${p.actor} 在「${p.trip}」中分享了 ${p.count} 張照片。` }),
+    collab_message: p => ({ title: `「${p.trip}」中的新訊息`, body: `${p.actor}：${p.preview}` }),
+    packing_tagged: p => ({ title: `打包清單：${p.category}`, body: `${p.actor} 已將您指派到「${p.trip}」中的「${p.category}」分類。` }),
   },
   ar: {
     trip_invite: p => ({ title: `دعوة إلى "${p.trip}"`, body: `${p.actor} دعا ${p.invitee || 'عضو'} إلى الرحلة "${p.trip}".` }),
