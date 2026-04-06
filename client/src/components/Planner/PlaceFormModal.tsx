@@ -23,6 +23,12 @@ interface PlaceFormData {
   notes: string
   transport_mode: string
   website: string
+  phone: string
+  price: string
+  currency: string
+  duration_minutes: string
+  google_place_id?: string
+  osm_id?: string
 }
 
 const DEFAULT_FORM: PlaceFormData = {
@@ -37,6 +43,12 @@ const DEFAULT_FORM: PlaceFormData = {
   notes: '',
   transport_mode: 'walking',
   website: '',
+  phone: '',
+  price: '',
+  currency: '',
+  duration_minutes: '',
+  google_place_id: '',
+  osm_id: '',
 }
 
 interface PlaceFormModalProps {
@@ -86,6 +98,10 @@ export default function PlaceFormModal({
         notes: place.notes || '',
         transport_mode: place.transport_mode || 'walking',
         website: place.website || '',
+        phone: place.phone || '',
+        price: place.price != null ? String(place.price) : '',
+        currency: place.currency || '',
+        duration_minutes: place.duration_minutes != null ? String(place.duration_minutes) : '',
       })
     } else if (prefillCoords) {
       setForm({
@@ -204,6 +220,8 @@ export default function PlaceFormModal({
         lat: form.lat ? parseFloat(form.lat) : null,
         lng: form.lng ? parseFloat(form.lng) : null,
         category_id: form.category_id || null,
+        price: form.price !== '' ? parseFloat(form.price) : null,
+        duration_minutes: form.duration_minutes !== '' ? parseInt(form.duration_minutes, 10) : null,
         _pendingFiles: pendingFiles.length > 0 ? pendingFiles : undefined,
       })
       onClose()
@@ -391,6 +409,77 @@ export default function PlaceFormModal({
           />
         </div>
 
+        {/* Phone */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('places.formPhone') || 'Phone'}</label>
+          <input
+            type="tel"
+            value={form.phone}
+            onChange={e => handleChange('phone', e.target.value)}
+            placeholder="+1 234 567 8900"
+            className="form-input"
+          />
+        </div>
+
+        {/* Price + Currency */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('places.formPrice') || 'Price'}</label>
+          <div className="grid grid-cols-3 gap-2">
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={form.price}
+              onChange={e => handleChange('price', e.target.value)}
+              placeholder="0.00"
+              className="form-input col-span-2"
+            />
+            <input
+              type="text"
+              value={form.currency}
+              onChange={e => handleChange('currency', e.target.value.toUpperCase())}
+              placeholder="EUR"
+              maxLength={3}
+              className="form-input"
+            />
+          </div>
+        </div>
+
+        {/* Duration */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('places.formDuration') || 'Estimated visit duration (min)'}</label>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={form.duration_minutes}
+            onChange={e => handleChange('duration_minutes', e.target.value)}
+            placeholder="60"
+            className="form-input"
+          />
+        </div>
+
+        {/* Transport Mode */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('places.formTransportMode') || 'Getting here by'}</label>
+          <div className="flex gap-2">
+            {[
+              { value: 'walking', label: t('places.transportWalking') || 'Walking' },
+              { value: 'cycling', label: t('places.transportCycling') || 'Cycling' },
+              { value: 'driving', label: t('places.transportDriving') || 'Driving' },
+            ].map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => handleChange('transport_mode', opt.value)}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.transport_mode === opt.value ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* File Attachments */}
         {canUploadFiles && (
           <div className="border border-gray-200 rounded-xl p-3 space-y-2">
@@ -445,7 +534,7 @@ export default function PlaceFormModal({
 
 interface TimeSectionProps {
   form: PlaceFormData
-  handleChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void
+  handleChange: (field: string, value: string) => void
   assignmentId: number | null
   dayAssignments: Assignment[]
   hasTimeError: boolean
