@@ -68,32 +68,27 @@ const DETAILS_TTL = 6 * 60 * 60 * 1000; // 6 hours
 const DETAILS_CACHE_MAX_ENTRIES = 500;
 const DETAILS_CACHE_PRUNE_TARGET = 250;
 
+function pruneCache<T extends { fetchedAt: number }>(
+  cache: Map<string, T>,
+  ttl: number,
+  maxEntries: number,
+  pruneTarget: number,
+  now: number,
+): void {
+  for (const [key, entry] of cache) {
+    if (now - entry.fetchedAt > ttl) cache.delete(key);
+  }
+  if (cache.size > maxEntries) {
+    const entries = [...cache.entries()].sort((a, b) => a[1].fetchedAt - b[1].fetchedAt);
+    entries.slice(0, entries.length - pruneTarget).forEach(([key]) => cache.delete(key));
+  }
+}
+
 setInterval(() => {
   const now = Date.now();
-  for (const [key, entry] of photoCache) {
-    if (now - entry.fetchedAt > PHOTO_TTL) photoCache.delete(key);
-  }
-  if (photoCache.size > CACHE_MAX_ENTRIES) {
-    const entries = [...photoCache.entries()].sort((a, b) => a[1].fetchedAt - b[1].fetchedAt);
-    const toDelete = entries.slice(0, entries.length - CACHE_PRUNE_TARGET);
-    toDelete.forEach(([key]) => photoCache.delete(key));
-  }
-  for (const [key, entry] of searchCache) {
-    if (now - entry.fetchedAt > SEARCH_TTL) searchCache.delete(key);
-  }
-  if (searchCache.size > SEARCH_CACHE_MAX_ENTRIES) {
-    const entries = [...searchCache.entries()].sort((a, b) => a[1].fetchedAt - b[1].fetchedAt);
-    const toDelete = entries.slice(0, entries.length - SEARCH_CACHE_PRUNE_TARGET);
-    toDelete.forEach(([key]) => searchCache.delete(key));
-  }
-  for (const [key, entry] of detailsCache) {
-    if (now - entry.fetchedAt > DETAILS_TTL) detailsCache.delete(key);
-  }
-  if (detailsCache.size > DETAILS_CACHE_MAX_ENTRIES) {
-    const entries = [...detailsCache.entries()].sort((a, b) => a[1].fetchedAt - b[1].fetchedAt);
-    const toDelete = entries.slice(0, entries.length - DETAILS_CACHE_PRUNE_TARGET);
-    toDelete.forEach(([key]) => detailsCache.delete(key));
-  }
+  pruneCache(photoCache, PHOTO_TTL, CACHE_MAX_ENTRIES, CACHE_PRUNE_TARGET, now);
+  pruneCache(searchCache, SEARCH_TTL, SEARCH_CACHE_MAX_ENTRIES, SEARCH_CACHE_PRUNE_TARGET, now);
+  pruneCache(detailsCache, DETAILS_TTL, DETAILS_CACHE_MAX_ENTRIES, DETAILS_CACHE_PRUNE_TARGET, now);
 }, CACHE_CLEANUP_INTERVAL);
 
 // ── API key retrieval ────────────────────────────────────────────────────────
