@@ -201,6 +201,36 @@ export default function DisplaySettingsTab(): React.ReactElement {
           ))}
         </div>
       </div>
+
+      {/* Show Place Description */}
+      <div>
+        <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>{t('settings.showPlaceDescription') || 'Show place description'}</label>
+        <div className="flex gap-3">
+          {[
+            { value: true, label: t('settings.on') || 'On' },
+            { value: false, label: t('settings.off') || 'Off' },
+          ].map(opt => (
+            <button
+              key={String(opt.value)}
+              onClick={async () => {
+                try { await updateSetting('show_place_description', opt.value) }
+                catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Error') }
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 20px', borderRadius: 10, cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 14, fontWeight: 500,
+                border: (!!settings.show_place_description) === opt.value ? '2px solid var(--text-primary)' : '2px solid var(--border-primary)',
+                background: (!!settings.show_place_description) === opt.value ? 'var(--bg-hover)' : 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
     </Section>
   )
 }

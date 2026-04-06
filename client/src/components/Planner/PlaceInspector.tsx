@@ -32,11 +32,14 @@ function usePlaceDetails(googlePlaceId, osmId, language) {
     if (detailsCache.has(cacheKey)) { setDetails(detailsCache.get(cacheKey)); return }
     const cached = getSessionCache(cacheKey)
     if (cached) { detailsCache.set(cacheKey, cached); setDetails(cached); return }
+    let mounted = true
     mapsApi.details(detailId, language).then(data => {
+      if (!mounted) return
       detailsCache.set(cacheKey, data.place)
       setSessionCache(cacheKey, data.place)
       setDetails(data.place)
     }).catch(() => {})
+    return () => { mounted = false }
   }, [detailId, language])
   return details
 }
@@ -135,6 +138,7 @@ export default function PlaceInspector({
 }: PlaceInspectorProps) {
   const { t, locale, language } = useTranslation()
   const timeFormat = useSettingsStore(s => s.settings.time_format) || '24h'
+  const showPlaceDescription = useSettingsStore(s => s.settings.show_place_description)
   const [hoursExpanded, setHoursExpanded] = useState(false)
   const [filesExpanded, setFilesExpanded] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -341,7 +345,7 @@ export default function PlaceInspector({
           )}
 
           {/* Description / Summary */}
-          {(place.description || place.notes || googleDetails?.summary) && (
+          {showPlaceDescription && (place.description || place.notes || googleDetails?.summary) && (
             <div className="collab-note-md" style={{ background: 'var(--bg-hover)', borderRadius: 10, overflow: 'hidden', fontSize: 12, color: 'var(--text-muted)', lineHeight: '1.5', padding: '8px 12px' }}>
               <Markdown remarkPlugins={[remarkGfm]}>{place.description || place.notes || googleDetails?.summary || ''}</Markdown>
             </div>
