@@ -61,6 +61,13 @@ const SEARCH_TTL = 24 * 60 * 60 * 1000; // 24 hours
 const SEARCH_CACHE_MAX_ENTRIES = 500;
 const SEARCH_CACHE_PRUNE_TARGET = 250;
 
+// ── Details cache ─────────────────────────────────────────────────────────────
+
+const detailsCache = new Map<string, { data: Record<string, unknown>; fetchedAt: number }>();
+const DETAILS_TTL = 6 * 60 * 60 * 1000; // 6 hours
+const DETAILS_CACHE_MAX_ENTRIES = 500;
+const DETAILS_CACHE_PRUNE_TARGET = 250;
+
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of photoCache) {
@@ -78,6 +85,14 @@ setInterval(() => {
     const entries = [...searchCache.entries()].sort((a, b) => a[1].fetchedAt - b[1].fetchedAt);
     const toDelete = entries.slice(0, entries.length - SEARCH_CACHE_PRUNE_TARGET);
     toDelete.forEach(([key]) => searchCache.delete(key));
+  }
+  for (const [key, entry] of detailsCache) {
+    if (now - entry.fetchedAt > DETAILS_TTL) detailsCache.delete(key);
+  }
+  if (detailsCache.size > DETAILS_CACHE_MAX_ENTRIES) {
+    const entries = [...detailsCache.entries()].sort((a, b) => a[1].fetchedAt - b[1].fetchedAt);
+    const toDelete = entries.slice(0, entries.length - DETAILS_CACHE_PRUNE_TARGET);
+    toDelete.forEach(([key]) => detailsCache.delete(key));
   }
 }, CACHE_CLEANUP_INTERVAL);
 
@@ -330,12 +345,18 @@ export async function searchPlaces(userId: number, query: string, lang?: string)
 // ── Place details (Google or OSM) ────────────────────────────────────────────
 
 export async function getPlaceDetails(userId: number, placeId: string, lang?: string): Promise<{ place: Record<string, unknown> }> {
+  const cacheKey = `${placeId}:${lang || 'de'}`;
+
+  const cached = detailsCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < DETAILS_TTL) return { place: cached.data };
+
   // OSM details: placeId is "node:123456" or "way:123456" etc.
   if (placeId.includes(':')) {
     const [osmType, osmId] = placeId.split(':');
     const element = await fetchOverpassDetails(osmType, osmId);
-    if (!element?.tags) return { place: buildOsmDetails({}, osmType, osmId) };
-    return { place: buildOsmDetails(element.tags, osmType, osmId) };
+    const place = !element?.tags ? buildOsmDetails({}, osmType, osmId) : buildOsmDetails(element.tags, osmType, osmId);
+    detailsCache.set(cacheKey, { data: place, fetchedAt: Date.now() });
+    return { place };
   }
 
   // Google details
@@ -384,6 +405,7 @@ export async function getPlaceDetails(userId: number, placeId: string, lang?: st
     source: 'google' as const,
   };
 
+  detailsCache.set(cacheKey, { data: place, fetchedAt: Date.now() });
   return { place };
 }
 
