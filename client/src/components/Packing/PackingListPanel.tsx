@@ -121,7 +121,7 @@ function BagCard({ bag, bagItems, totalWeight, pct, tripId, tripMembers, canEdit
               <img src={m.avatar} alt={m.username} style={{ width: sz.avatar, height: sz.avatar, borderRadius: '50%', objectFit: 'cover', border: `1.5px solid ${bag.color}`, boxSizing: 'border-box' }} />
             ) : (
               <span style={{ width: sz.avatar, height: sz.avatar, borderRadius: '50%', background: bag.color + '25', color: bag.color, fontSize: sz.avatar * 0.45, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1.5px solid ${bag.color}`, boxSizing: 'border-box' }}>
-                {m.username[0].toUpperCase()}
+                {(m.username || '?')[0].toUpperCase()}
               </span>
             )}
           </span>
@@ -144,7 +144,7 @@ function BagCard({ bag, bagItems, totalWeight, pct, tripId, tripMembers, canEdit
                     <img src={m.avatar} alt="" style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover' }} />
                   ) : (
                     <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--bg-tertiary)', fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-faint)' }}>
-                      {m.username[0].toUpperCase()}
+                      {(m.username || '?')[0].toUpperCase()}
                     </span>
                   )}
                   <span style={{ flex: 1, fontWeight: isSelected ? 600 : 400 }}>{m.username}</span>

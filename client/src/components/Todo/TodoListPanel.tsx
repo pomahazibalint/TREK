@@ -363,7 +363,7 @@ export default function TodoListPanel({ tripId, items }: { tripId: number; items
                             <img src={`/uploads/avatars/${assignedUser.avatar}`} style={{ width: 13, height: 13, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                           ) : (
                             <span style={{ width: 13, height: 13, borderRadius: '50%', background: 'var(--border-primary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: 'var(--text-faint)', fontWeight: 700 }}>
-                              {assignedUser.username.charAt(0).toUpperCase()}
+                              {(assignedUser.username || '?').charAt(0).toUpperCase()}
                             </span>
                           )}
                           {assignedUser.username}
@@ -594,7 +594,7 @@ function DetailPane({ item, tripId, categories, members, onClose }: {
                   <img src={`/uploads/avatars/${m.avatar}`} style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover' as const }} alt="" />
                 ) : (
                   <span style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--border-primary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--text-faint)', fontWeight: 600 }}>
-                    {m.username.charAt(0).toUpperCase()}
+                    {(m.username || '?').charAt(0).toUpperCase()}
                   </span>
                 ),
               })),
@@ -752,7 +752,7 @@ function NewTaskPane({ tripId, categories, members, defaultCategory, onCreated, 
                   <img src={`/uploads/avatars/${m.avatar}`} style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover' as const }} alt="" />
                 ) : (
                   <span style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--border-primary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--text-faint)', fontWeight: 600 }}>
-                    {m.username.charAt(0).toUpperCase()}
+                    {(m.username || '?').charAt(0).toUpperCase()}
                   </span>
                 ),
               })),
