@@ -2,14 +2,18 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { useSettingsStore } from '../store/settingsStore'
 import { calculateSegments } from '../components/Map/RouteCalculator'
 import type { TripStoreState } from '../store/tripStore'
-import type { RouteSegment, RouteResult } from '../types'
+import type { RouteSegment, RouteResult, TransportMode } from '../types'
 
 /**
  * Manages route calculation state for a selected day. Extracts geo-coded waypoints from
  * day assignments, draws a straight-line route, and optionally fetches per-segment
  * driving/walking durations via OSRM. Aborts in-flight requests when the day changes.
  */
-export function useRouteCalculation(tripStore: TripStoreState, selectedDayId: number | null) {
+export function useRouteCalculation(
+  tripStore: TripStoreState,
+  selectedDayId: number | null,
+  transportMode: TransportMode = 'walking'
+) {
   const [route, setRoute] = useState<[number, number][] | null>(null)
   const [routeInfo, setRouteInfo] = useState<RouteResult | null>(null)
   const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([])
@@ -31,20 +35,20 @@ export function useRouteCalculation(tripStore: TripStoreState, selectedDayId: nu
     const controller = new AbortController()
     routeAbortRef.current = controller
     try {
-      const segments = await calculateSegments(waypoints as { lat: number; lng: number }[], { signal: controller.signal })
+      const segments = await calculateSegments(waypoints as { lat: number; lng: number }[], { signal: controller.signal, profile: transportMode })
       if (!controller.signal.aborted) setRouteSegments(segments)
     } catch (err: unknown) {
       if (err instanceof Error && err.name !== 'AbortError') setRouteSegments([])
       else if (!(err instanceof Error)) setRouteSegments([])
     }
-  }, [routeCalcEnabled])
+  }, [routeCalcEnabled, transportMode])
 
-  // Only recalculate when assignments for the SELECTED day change
+  // Recalculate when assignments change OR when transport mode changes
   const selectedDayAssignments = selectedDayId ? tripStore.assignments?.[String(selectedDayId)] : null
   useEffect(() => {
     if (!selectedDayId) { setRoute(null); setRouteSegments([]); return }
     updateRouteForDay(selectedDayId)
-  }, [selectedDayId, selectedDayAssignments])
+  }, [selectedDayId, selectedDayAssignments, updateRouteForDay])
 
   return { route, routeSegments, routeInfo, setRoute, setRouteInfo, updateRouteForDay }
 }

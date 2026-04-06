@@ -1,11 +1,11 @@
-import type { RouteResult, RouteSegment, Waypoint } from '../../types'
+import type { RouteResult, RouteSegment, Waypoint, TransportMode } from '../../types'
 
 const OSRM_BASE = 'https://router.project-osrm.org/route/v1'
 
 /** Fetches a full route via OSRM and returns coordinates, distance, and duration estimates for driving/walking. */
 export async function calculateRoute(
   waypoints: Waypoint[],
-  profile: 'driving' | 'walking' | 'cycling' = 'driving',
+  profile: TransportMode = 'driving',
   { signal }: { signal?: AbortSignal } = {}
 ): Promise<RouteResult> {
   if (!waypoints || waypoints.length < 2) {
@@ -40,7 +40,7 @@ export async function calculateRoute(
   }
 
   const walkingDuration = distance / (5000 / 3600)
-  const drivingDuration: number = route.duration
+  const drivingDuration: number = profile === 'driving' ? route.duration : distance / (50000 / 3600)
 
   return {
     coordinates,
@@ -95,12 +95,12 @@ export function optimizeRoute(places: Waypoint[]): Waypoint[] {
 /** Fetches per-leg distance/duration from OSRM and returns segment metadata (midpoints, walking/driving times). */
 export async function calculateSegments(
   waypoints: Waypoint[],
-  { signal }: { signal?: AbortSignal } = {}
+  { signal, profile = 'driving' }: { signal?: AbortSignal; profile?: TransportMode } = {}
 ): Promise<RouteSegment[]> {
   if (!waypoints || waypoints.length < 2) return []
 
   const coords = waypoints.map((p) => `${p.lng},${p.lat}`).join(';')
-  const url = `${OSRM_BASE}/driving/${coords}?overview=false&geometries=geojson&steps=false&annotations=distance,duration`
+  const url = `${OSRM_BASE}/${profile}/${coords}?overview=false&geometries=geojson&steps=false&annotations=distance,duration`
 
   const response = await fetch(url, { signal })
   if (!response.ok) throw new Error('Route could not be calculated')

@@ -4,7 +4,7 @@ declare global { interface Window { __dragData: DragDataPayload | null } }
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom'
-import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Bike, Footprints } from 'lucide-react'
 
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
 import { assignmentsApi, reservationsApi } from '../../api/client'
@@ -23,7 +23,7 @@ import { useSettingsStore } from '../../store/settingsStore'
 import { useTranslation } from '../../i18n'
 import { formatDate, formatTime, dayTotalCost, currencyDecimals } from '../../utils/formatters'
 import { useDayNotes } from '../../hooks/useDayNotes'
-import type { Trip, Day, Place, Category, Assignment, Reservation, AssignmentsMap, RouteResult } from '../../types'
+import type { Trip, Day, Place, Category, Assignment, Reservation, AssignmentsMap, RouteResult, Accommodation, TransportMode } from '../../types'
 
 const NOTE_ICONS = [
   { id: 'FileText', Icon: FileText },
@@ -68,7 +68,7 @@ interface DayPlanSidebarProps {
   onSelectDay: (dayId: number | null) => void
   onPlaceClick: (placeId: number) => void
   onDayDetail: (day: Day) => void
-  accommodations?: Assignment[]
+  accommodations?: Accommodation[]
   onReorder: (dayId: number, orderedIds: number[]) => void
   onUpdateDayTitle: (dayId: number, title: string) => void
   onRouteCalculated: (dayId: number, route: RouteResult | null) => void
@@ -78,6 +78,8 @@ interface DayPlanSidebarProps {
   onDeletePlace: (placeId: number) => void
   reservations?: Reservation[]
   onAddReservation: () => void
+  transportMode?: TransportMode
+  onTransportModeChange?: (mode: TransportMode) => void
   onNavigateToFiles?: () => void
   onExpandedDaysChange?: (expandedDayIds: Set<number>) => void
   pushUndo?: (label: string, undoFn: () => Promise<void> | void) => void
@@ -95,6 +97,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   onAssignToDay, onRemoveAssignment, onEditPlace, onDeletePlace,
   reservations = [],
   onAddReservation,
+  transportMode = 'walking' as TransportMode,
+  onTransportModeChange,
   onNavigateToFiles,
   onExpandedDaysChange,
   pushUndo,
@@ -671,7 +675,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     if (waypoints.length < 2) { toast.error(t('dayplan.toast.needTwoPlaces')); return }
     setIsCalculating(true)
     try {
-      const result = await calculateRoute(waypoints, 'walking')
+      const result = await calculateRoute(waypoints, transportMode)
       // Luftlinien zwischen Wegpunkten anzeigen
       const lineCoords = waypoints.map(p => [p.lat, p.lng])
       setRouteInfo({ distance: result.distanceText, duration: result.durationText })
@@ -1603,6 +1607,32 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                           <span>{routeInfo.duration}</span>
                         </div>
                       )}
+
+                      {/* Transport mode selector */}
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {([
+                          { mode: 'walking' as TransportMode, Icon: Footprints, label: t('dayplan.transportWalking') || 'Walk' },
+                          { mode: 'cycling' as TransportMode, Icon: Bike, label: t('dayplan.transportCycling') || 'Bike' },
+                          { mode: 'driving' as TransportMode, Icon: Car, label: t('dayplan.transportDriving') || 'Drive' },
+                        ]).map(({ mode, Icon, label }) => (
+                          <button
+                            key={mode}
+                            onClick={() => onTransportModeChange?.(mode)}
+                            title={label}
+                            style={{
+                              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                              padding: '5px 0', fontSize: 10, fontWeight: 500, borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
+                              border: transportMode === mode ? '1.5px solid var(--text-primary)' : '1.5px solid var(--border-faint)',
+                              background: transportMode === mode ? 'var(--bg-hover)' : 'transparent',
+                              color: transportMode === mode ? 'var(--text-primary)' : 'var(--text-faint)',
+                              transition: 'all 0.15s',
+                            }}
+                          >
+                            <Icon size={11} strokeWidth={2} />
+                            {label}
+                          </button>
+                        ))}
+                      </div>
 
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button onClick={handleOptimize} style={{
