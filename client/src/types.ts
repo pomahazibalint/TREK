@@ -231,6 +231,7 @@ export interface RouteResult {
   durationText: string
   walkingText: string
   drivingText: string
+  segments?: RouteSegment[]
 }
 
 export interface Waypoint {

@@ -2,7 +2,28 @@ import type { RouteResult, RouteSegment, Waypoint, TransportMode } from '../../t
 
 const OSRM_BASE = 'https://router.project-osrm.org/route/v1'
 
-/** Fetches a full route via OSRM and returns coordinates, distance, and duration estimates for driving/walking. */
+// Client-side cache: same waypoints + profile → same OSRM geometry
+const routeCache = new Map<string, { result: RouteResult; fetchedAt: number }>()
+const ROUTE_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
+const ROUTE_CACHE_MAX = 200
+const ROUTE_CACHE_PRUNE_TARGET = 100
+
+function routeCacheKey(waypoints: Waypoint[], profile: TransportMode): string {
+  return `${profile}:${waypoints.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|')}`
+}
+
+function pruneRouteCache(now: number): void {
+  for (const [key, entry] of routeCache) {
+    if (now - entry.fetchedAt > ROUTE_CACHE_TTL) routeCache.delete(key)
+  }
+  if (routeCache.size > ROUTE_CACHE_MAX) {
+    const sorted = [...routeCache.entries()].sort((a, b) => a[1].fetchedAt - b[1].fetchedAt)
+    sorted.slice(0, sorted.length - ROUTE_CACHE_PRUNE_TARGET).forEach(([k]) => routeCache.delete(k))
+  }
+}
+
+/** Fetches a full route via OSRM and returns coordinates, per-leg segments, distance, and duration estimates.
+ *  Results are cached client-side for 10 minutes to reduce OSRM API load. */
 export async function calculateRoute(
   waypoints: Waypoint[],
   profile: TransportMode = 'driving',
@@ -12,8 +33,15 @@ export async function calculateRoute(
     throw new Error('At least 2 waypoints required')
   }
 
+  const now = Date.now()
+  const cacheKey = routeCacheKey(waypoints, profile)
+  const cached = routeCache.get(cacheKey)
+  if (cached && now - cached.fetchedAt < ROUTE_CACHE_TTL) {
+    return cached.result
+  }
+
   const coords = waypoints.map((p) => `${p.lng},${p.lat}`).join(';')
-  const url = `${OSRM_BASE}/${profile}/${coords}?overview=full&geometries=geojson&steps=false`
+  const url = `${OSRM_BASE}/${profile}/${coords}?overview=full&geometries=geojson&steps=false&annotations=distance,duration`
 
   const response = await fetch(url, { signal })
   if (!response.ok) {
@@ -42,7 +70,20 @@ export async function calculateRoute(
   const walkingDuration = distance / (5000 / 3600)
   const drivingDuration: number = profile === 'driving' ? route.duration : distance / (50000 / 3600)
 
-  return {
+  const segments: RouteSegment[] = (route.legs ?? []).map(
+    (leg: { distance: number; duration: number }, i: number): RouteSegment => {
+      const from: [number, number] = [waypoints[i].lat, waypoints[i].lng]
+      const to: [number, number] = [waypoints[i + 1].lat, waypoints[i + 1].lng]
+      const mid: [number, number] = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2]
+      return {
+        mid, from, to,
+        walkingText: formatDuration(leg.distance / (5000 / 3600)),
+        drivingText: formatDuration(leg.duration),
+      }
+    }
+  )
+
+  const result: RouteResult = {
     coordinates,
     distance,
     duration,
@@ -50,6 +91,63 @@ export async function calculateRoute(
     durationText: formatDuration(duration),
     walkingText: formatDuration(walkingDuration),
     drivingText: formatDuration(drivingDuration),
+    segments,
+  }
+
+  pruneRouteCache(now)
+  routeCache.set(cacheKey, { result, fetchedAt: now })
+
+  return result
+}
+
+/** Groups consecutive legs that share the same transport mode into batched OSRM calls.
+ *  If all legs use the same mode, delegates to a single calculateRoute call.
+ *  Parallel sub-calls each hit the per-profile cache, so re-routing the same day is cheap. */
+export async function calculateMultiModeRoute(
+  waypoints: Waypoint[],
+  legModes: TransportMode[],
+  { signal }: { signal?: AbortSignal } = {}
+): Promise<RouteResult> {
+  if (waypoints.length < 2 || legModes.length !== waypoints.length - 1) {
+    throw new Error('legModes length must equal waypoints.length - 1')
+  }
+
+  // Fast path: all legs use the same mode
+  if (legModes.every((m) => m === legModes[0])) {
+    return calculateRoute(waypoints, legModes[0], { signal })
+  }
+
+  // Group consecutive legs by mode, sharing boundary waypoints between groups
+  type RouteGroup = { waypoints: Waypoint[]; profile: TransportMode }
+  const groups: RouteGroup[] = []
+  let start = 0
+  for (let i = 1; i < legModes.length; i++) {
+    if (legModes[i] !== legModes[i - 1]) {
+      groups.push({ waypoints: waypoints.slice(start, i + 1), profile: legModes[i - 1] })
+      start = i
+    }
+  }
+  groups.push({ waypoints: waypoints.slice(start), profile: legModes[legModes.length - 1] })
+
+  const results = await Promise.all(groups.map((g) => calculateRoute(g.waypoints, g.profile, { signal })))
+
+  // Concatenate geometry — skip the first coord of each subsequent group (duplicate junction point)
+  const combinedCoordinates: [number, number][] = results.flatMap((r, i) =>
+    i === 0 ? r.coordinates : r.coordinates.slice(1)
+  )
+  const combinedSegments: RouteSegment[] = results.flatMap((r) => r.segments ?? [])
+  const totalDistance = results.reduce((sum, r) => sum + r.distance, 0)
+  const totalDuration = results.reduce((sum, r) => sum + r.duration, 0)
+
+  return {
+    coordinates: combinedCoordinates,
+    segments: combinedSegments,
+    distance: totalDistance,
+    duration: totalDuration,
+    distanceText: formatDistance(totalDistance),
+    durationText: formatDuration(totalDuration),
+    walkingText: formatDuration(totalDistance / (5000 / 3600)),
+    drivingText: formatDuration(totalDistance / (50000 / 3600)),
   }
 }
 
