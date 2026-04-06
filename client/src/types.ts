@@ -18,11 +18,12 @@ export interface User {
 
 export interface Trip {
   id: number
-  name: string
+  title: string
   description: string | null
   start_date: string
   end_date: string
-  cover_url: string | null
+  currency: string
+  cover_image: string | null
   is_archived: boolean
   reminder_days: number
   owner_id: number

@@ -160,58 +160,81 @@ function ExpenseModal({ item, category, tripId, tripCurrency, tripMembers, categ
   const [name, setName] = useState(item?.name || '')
   const [totalPrice, setTotalPrice] = useState(item?.total_price ?? 0)
   const [itemCurrency, setItemCurrency] = useState(item?.currency || tripCurrency)
+  const isForeignCurrency = itemCurrency !== tripCurrency
   const [totalPriceRef, setTotalPriceRef] = useState<number>(
-    item?.total_price_ref ?? (item ? item.total_price : 0)
+    item?.total_price_ref ?? (item?.total_price || 0)
   )
   const [exchangeRate, setExchangeRate] = useState<number | null>(item?.exchange_rate ?? null)
   const [note, setNote] = useState(item?.note || '')
   const [expenseDate, setExpenseDate] = useState(item?.expense_date || '')
   const [selectedCategory, setSelectedCategory] = useState(item?.category || category)
-  const [tip, setTip] = useState(item?.tip_ref ?? 0)
+
+  const [tip, setTip] = useState(() => {
+    if (!item) return 0
+    const tipRef = item.tip_ref || 0
+    const isForeign = item.currency !== tripCurrency
+    const rate = (isForeign && item.exchange_rate) ? item.exchange_rate : 1
+    return isForeign ? Math.round(tipRef / rate * 100) / 100 : tipRef
+  })
+
   const [fetchingRate, setFetchingRate] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const isForeignCurrency = itemCurrency !== tripCurrency
-  const ref = isForeignCurrency ? totalPriceRef : totalPrice
-
   // Per-member rows: { user_id, owed, paid }
   type MemberRow = { user_id: number; owed: number; paid: number }
   const initRows = useCallback((): MemberRow[] => {
+    const rate = (item?.currency !== tripCurrency && item?.exchange_rate) ? item.exchange_rate : 1
+    const storedIsForeign = item?.currency !== tripCurrency
+
     if (!item || !item.members?.length) {
       return tripMembers.map(m => ({ user_id: m.id, owed: 0, paid: 0 }))
     }
     const rowsByUser = new Map(item.members.map(m => [m.user_id, m]))
-    // Show all trip members; pre-fill from stored values
+    // Show all trip members; pre-fill from stored values (convert to original currency if needed)
     return tripMembers.map(m => {
       const stored = rowsByUser.get(m.id)
-      return { user_id: m.id, owed: stored?.amount_owed_ref ?? 0, paid: stored?.amount_paid_ref ?? 0 }
+      const o = stored?.amount_owed_ref || 0
+      const p = stored?.amount_paid_ref || 0
+      return {
+        user_id: m.id,
+        owed: storedIsForeign ? Math.round(o / rate * 100) / 100 : o,
+        paid: storedIsForeign ? Math.round(p / rate * 100) / 100 : p
+      }
     })
-  }, [item, tripMembers])
+  }, [item, tripMembers, tripCurrency])
 
   const [rows, setRows] = useState<MemberRow[]>(initRows)
 
   const owedSum = rows.reduce((s, r) => s + r.owed, 0)
   const paidSum = rows.reduce((s, r) => r.paid > 0 ? s + r.paid : s, 0)
   const owedTotal = owedSum + tip
-  const owedDelta = Math.abs(owedTotal - ref)
-  const paidDelta = paidSum > 0.01 ? Math.abs(paidSum - ref) : 0
+  // Balance against original amount (totalPrice) instead of reference amount
+  const target = totalPrice
+  const owedDelta = Math.abs(owedTotal - target)
+  const paidDelta = paidSum > 0.01 ? Math.abs(paidSum - target) : 0
   const owedBalanced = owedDelta < 0.01
-  const paidBalanced = paidSum < 0.01 || Math.abs(paidSum - ref) < 0.01
+  const paidBalanced = paidSum < 0.01 || Math.abs(paidSum - target) < 0.01
 
   const equalSplitOwed = () => {
-    const base = ref - tip
+    const base = totalPrice - tip
     const n = rows.length
     if (n === 0) return
-    const each = base / n
-    setRows(prev => prev.map(r => ({ ...r, owed: Math.round(each * 100) / 100 })))
+    const each = Math.round(base / n * 100) / 100
+    const shares = rows.map((_, i) =>
+      i === n - 1 ? Math.round((base - each * (n - 1)) * 100) / 100 : each
+    )
+    setRows(prev => prev.map((r, i) => ({ ...r, owed: shares[i] })))
   }
 
   const equalSplitPaid = () => {
-    const payingRows = rows.filter(r => r.paid > 0)
-    const n = payingRows.length || rows.length
-    const each = ref / n
-    setRows(prev => prev.map(r => ({ ...r, paid: Math.round(each * 100) / 100 })))
+    const n = rows.length
+    if (n === 0) return
+    const each = Math.round(totalPrice / n * 100) / 100
+    const shares = rows.map((_, i) =>
+      i === n - 1 ? Math.round((totalPrice - each * (n - 1)) * 100) / 100 : each
+    )
+    setRows(prev => prev.map((r, i) => ({ ...r, paid: shares[i] })))
   }
 
   const fetchRate = async () => {
@@ -249,13 +272,17 @@ function ExpenseModal({ item, category, tripId, tripCurrency, tripMembers, categ
     setSaving(true)
     setError('')
     try {
+      const effectiveRate = (isForeignCurrency && totalPrice > 0) ? (totalPriceRef / totalPrice) : 1
+      const tipVal = tip || 0
+      const tip_ref = isForeignCurrency ? Math.round(tipVal * effectiveRate * 100) / 100 : tipVal
+
       const itemData = {
         name: name.trim(),
         total_price: totalPrice,
         currency: itemCurrency,
         total_price_ref: isForeignCurrency ? totalPriceRef : null,
-        exchange_rate: isForeignCurrency ? exchangeRate : null,
-        tip_ref: tip,
+        exchange_rate: isForeignCurrency ? (exchangeRate || effectiveRate) : null,
+        tip_ref: tip_ref,
         note: note.trim() || null,
         expense_date: expenseDate || null,
         category: selectedCategory,
@@ -272,16 +299,38 @@ function ExpenseModal({ item, category, tripId, tripCurrency, tripMembers, categ
 
       // Only send members who participate (non-zero owed) for the owes side
       const owedMembers = rows
-        .filter(r => r.owed > 0 || rows.some(x => x.owed > 0 && x.user_id === r.user_id))
         .filter(r => r.owed > 0)
-        .map(r => ({ user_id: r.user_id, amount_owed_ref: r.owed }))
+        .map(r => ({ user_id: r.user_id, amount_owed_ref: Math.round((r.owed || 0) * effectiveRate * 100) / 100 }))
 
-      if (owedMembers.length > 0 && owedBalanced) {
-        await setBudgetItemMemberOwed(tripId, savedId, owedMembers, tip)
+      // Adjust rounding discrepancy for owed to match totalPriceRef
+      if (isForeignCurrency && owedBalanced && owedMembers.length > 0) {
+        const sum = owedMembers.reduce((s, m) => s + m.amount_owed_ref, 0) + tip_ref
+        const diff = totalPriceRef - sum
+        if (Math.abs(diff) < 0.1) {
+          owedMembers[0].amount_owed_ref = Math.round((owedMembers[0].amount_owed_ref + diff) * 100) / 100
+        }
       }
 
-      const payments = rows.map(r => ({ user_id: r.user_id, amount_paid_ref: r.paid }))
-      if (paidSum > 0.01 && paidBalanced) {
+      if (owedMembers.length > 0 && (owedBalanced || !isForeignCurrency)) {
+        await setBudgetItemMemberOwed(tripId, savedId, owedMembers, tip_ref)
+      }
+
+      const payments = rows.map(r => ({
+        user_id: r.user_id,
+        amount_paid_ref: Math.round((r.paid || 0) * effectiveRate * 100) / 100
+      }))
+
+      // Adjust rounding discrepancy for payments to match totalPriceRef
+      if (isForeignCurrency && paidBalanced && paidSum > 0.01) {
+        const sum = payments.reduce((s, p) => s + p.amount_paid_ref, 0)
+        const diff = totalPriceRef - sum
+        if (Math.abs(diff) < 0.1) {
+          const firstPaid = payments.find(p => p.amount_paid_ref > 0)
+          if (firstPaid) firstPaid.amount_paid_ref = Math.round((firstPaid.amount_paid_ref + diff) * 100) / 100
+        }
+      }
+
+      if (paidSum > 0.01 && (paidBalanced || !isForeignCurrency)) {
         await setBudgetItemMemberPayments(tripId, savedId, payments)
       }
 
@@ -299,10 +348,10 @@ function ExpenseModal({ item, category, tripId, tripCurrency, tripMembers, categ
       style={{ ...inp, textAlign: 'right', padding: '4px 6px', fontSize: 13, width: '100%', minWidth: 0 }} />
   )
 
-  const DeltaBadge = ({ delta, allZero }: { delta: number; allZero?: boolean }) => {
+  const DeltaBadge = ({ delta, allZero, cur = tripCurrency }: { delta: number; allZero?: boolean; cur?: string }) => {
     if (allZero) return <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>{t('budget.modal.notReconciled')}</span>
     if (delta < 0.01) return <span style={{ fontSize: 12, fontWeight: 700, color: '#4ade80' }}>{t('budget.modal.balanced')} ✓</span>
-    return <span style={{ fontSize: 12, fontWeight: 600, color: '#fb923c' }}>{fmtNum(delta, locale, tripCurrency)} {t('budget.modal.remaining')}</span>
+    return <span style={{ fontSize: 12, fontWeight: 600, color: '#fb923c' }}>{fmtNum(delta, locale, cur)} {t('budget.modal.remaining')}</span>
   }
 
   return ReactDOM.createPortal(
@@ -392,7 +441,7 @@ function ExpenseModal({ item, category, tripId, tripCurrency, tripMembers, categ
                     <th style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.05em', width: '40%' }}></th>
                     <th style={{ padding: '9px 12px', textAlign: 'right', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.05em', width: '30%' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-                        {t('budget.modal.owes')} ({tripCurrency})
+                        {t('budget.modal.owes')} ({itemCurrency})
                         <button onClick={equalSplitOwed} style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.2)', background: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
                           = {t('budget.modal.equalSplit')}
                         </button>
@@ -400,7 +449,7 @@ function ExpenseModal({ item, category, tripId, tripCurrency, tripMembers, categ
                     </th>
                     <th style={{ padding: '9px 12px', textAlign: 'right', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.05em', width: '30%' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-                        {t('budget.modal.paid')} ({tripCurrency})
+                        {t('budget.modal.paid')} ({itemCurrency})
                         <button onClick={equalSplitPaid} style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.2)', background: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
                           = {t('budget.modal.equalSplit')}
                         </button>
@@ -424,9 +473,19 @@ function ExpenseModal({ item, category, tripId, tripCurrency, tripMembers, categ
                         </td>
                         <td style={{ padding: '5px 12px', textAlign: 'right' }}>
                           {numInp(row.owed, v => setRows(prev => prev.map((r, j) => j === i ? { ...r, owed: v } : r)))}
+                          {isForeignCurrency && row.owed > 0 && (
+                            <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>
+                              ≈ {fmtNum(row.owed * (totalPriceRef / (totalPrice || 1)), locale, tripCurrency)}
+                            </div>
+                          )}
                         </td>
                         <td style={{ padding: '5px 12px', textAlign: 'right' }}>
                           {numInp(row.paid, v => setRows(prev => prev.map((r, j) => j === i ? { ...r, paid: v } : r)))}
+                          {isForeignCurrency && row.paid > 0 && (
+                            <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>
+                              ≈ {fmtNum(row.paid * (totalPriceRef / (totalPrice || 1)), locale, tripCurrency)}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     )
@@ -439,6 +498,11 @@ function ExpenseModal({ item, category, tripId, tripCurrency, tripMembers, categ
                     </td>
                     <td style={{ padding: '5px 12px', textAlign: 'right' }}>
                       {numInp(tip, setTip)}
+                      {isForeignCurrency && tip > 0 && (
+                        <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>
+                          ≈ {fmtNum(tip * (totalPriceRef / (totalPrice || 1)), locale, tripCurrency)}
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: '5px 12px' }} />
                   </tr>
@@ -446,18 +510,23 @@ function ExpenseModal({ item, category, tripId, tripCurrency, tripMembers, categ
                   {/* Totals row */}
                   <tr style={{ borderTop: '2px solid var(--border-primary)', background: '#000', color: '#fff' }}>
                     <td style={{ padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>
-                      {fmtNum(ref, locale, tripCurrency)}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700 }}>{fmtNum(owedTotal, locale, tripCurrency)}</span>
-                        <DeltaBadge delta={owedDelta} />
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span>{fmtNum(totalPrice, locale, itemCurrency)}</span>
+                        {isForeignCurrency && (
+                          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: 400 }}>{fmtNum(totalPriceRef, locale, tripCurrency)}</span>
+                        )}
                       </div>
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700 }}>{paidSum > 0.01 ? fmtNum(paidSum, locale, tripCurrency) : '—'}</span>
-                        <DeltaBadge delta={paidDelta} allZero={paidSum < 0.01} />
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>{fmtNum(owedTotal, locale, itemCurrency)}</span>
+                        <DeltaBadge delta={owedDelta} cur={itemCurrency} />
+                      </div>
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>{paidSum > 0.01 ? fmtNum(paidSum, locale, itemCurrency) : '—'}</span>
+                        <DeltaBadge delta={paidDelta} allZero={paidSum < 0.01} cur={itemCurrency} />
                       </div>
                     </td>
                   </tr>

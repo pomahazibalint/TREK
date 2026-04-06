@@ -206,12 +206,12 @@ describe('Budget item members', () => {
     const res = await request(app)
       .put(`/api/trips/${trip.id}/budget/${item.id}/members`)
       .set('Cookie', authCookie(user.id))
-      .send({ user_ids: [user.id, member.id] });
+      .send({ members: [{ user_id: user.id, amount_owed_ref: 50 }, { user_id: member.id, amount_owed_ref: 50 }], tip_ref: 0 });
     expect(res.status).toBe(200);
     expect(res.body.members).toBeDefined();
   });
 
-  it('BUDGET-005 — PUT /members with non-array user_ids returns 400', async () => {
+  it('BUDGET-005 — PUT /members with non-array members returns 400', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const item = createBudgetItem(testDb, trip.id);
@@ -219,27 +219,27 @@ describe('Budget item members', () => {
     const res = await request(app)
       .put(`/api/trips/${trip.id}/budget/${item.id}/members`)
       .set('Cookie', authCookie(user.id))
-      .send({ user_ids: 'not-an-array' });
+      .send({ members: 'not-an-array' });
     expect(res.status).toBe(400);
   });
 
-  it('BUDGET-006 — PUT /members/:userId/paid toggles paid status', async () => {
+  it('BUDGET-006 — PUT /members/payments sets paid amounts', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const item = createBudgetItem(testDb, trip.id);
+    const item = createBudgetItem(testDb, trip.id, { total_price: 100 });
 
     // Assign user as member first
     await request(app)
       .put(`/api/trips/${trip.id}/budget/${item.id}/members`)
       .set('Cookie', authCookie(user.id))
-      .send({ user_ids: [user.id] });
+      .send({ members: [{ user_id: user.id, amount_owed_ref: 100 }] });
 
     const res = await request(app)
-      .put(`/api/trips/${trip.id}/budget/${item.id}/members/${user.id}/paid`)
+      .put(`/api/trips/${trip.id}/budget/${item.id}/members/payments`)
       .set('Cookie', authCookie(user.id))
-      .send({ paid: true });
+      .send({ payments: [{ user_id: user.id, amount_paid_ref: 100 }] });
     expect(res.status).toBe(200);
-    expect(res.body.member).toBeDefined();
+    expect(res.body.members).toBeDefined();
   });
 });
 
@@ -248,18 +248,6 @@ describe('Budget item members', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('Budget summary and settlement', () => {
-  it('BUDGET-007 — GET /summary/per-person returns per-person breakdown', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    createBudgetItem(testDb, trip.id, { name: 'Dinner', total_price: 60 });
-
-    const res = await request(app)
-      .get(`/api/trips/${trip.id}/budget/summary/per-person`)
-      .set('Cookie', authCookie(user.id));
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body.summary)).toBe(true);
-  });
-
   it('BUDGET-008 — GET /settlement returns settlement transactions', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);

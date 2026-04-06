@@ -177,8 +177,8 @@ export function updateMemberOwed(
   if (!item) return null;
 
   const ref = item.total_price_ref ?? item.total_price;
-  const individualSum = members.reduce((s, m) => s + m.amount_owed_ref, 0);
-  const effectiveTotal = individualSum + tip_ref;
+  const individualSum = members.reduce((s, m) => s + (Number(m.amount_owed_ref) || 0), 0);
+  const effectiveTotal = individualSum + (Number(tip_ref) || 0);
 
   if (Math.abs(effectiveTotal - ref) > 0.01) {
     return { error: 'Owed amounts plus tip must sum to the total expense value' };
@@ -215,7 +215,7 @@ export function updateMemberPayments(
   if (!item) return null;
 
   const ref = item.total_price_ref ?? item.total_price;
-  const totalPaid = payments.reduce((s, p) => s + p.amount_paid_ref, 0);
+  const totalPaid = payments.reduce((s, p) => s + (Number(p.amount_paid_ref) || 0), 0);
   const allZero = totalPaid < 0.01;
 
   if (!allZero && Math.abs(totalPaid - ref) > 0.01) {
