@@ -1,5 +1,7 @@
 // Shared types for the TREK travel planner
 
+export type TransportMode = 'walking' | 'cycling' | 'driving'
+
 export interface User {
   id: number
   username: string
@@ -48,13 +50,19 @@ export interface Place {
   address: string | null
   category_id: number | null
   icon: string | null
-  price: string | null
+  price: number | null
+  currency: string | null
   image_url: string | null
   google_place_id: string | null
   osm_id: string | null
   route_geometry: string | null
   place_time: string | null
   end_time: string | null
+  transport_mode: TransportMode
+  duration_minutes: number | null
+  phone: string | null
+  website: string | null
+  notes: string | null
   created_at: string
 }
 
@@ -228,17 +236,21 @@ export interface UserWithOidc extends User {
   oidc_issuer?: string | null
 }
 
-// Accommodation type
+// Accommodation type (day_accommodations joined with place data)
 export interface Accommodation {
   id: number
   trip_id: number
-  name: string
-  address: string | null
+  place_id: number
+  start_day_id: number
+  end_day_id: number
   check_in: string | null
   check_out: string | null
-  confirmation_number: string | null
+  confirmation: string | null
   notes: string | null
-  url: string | null
+  place_name: string
+  address: string | null
+  lat: number | null
+  lng: number | null
   created_at: string
 }
 
