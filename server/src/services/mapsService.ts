@@ -448,7 +448,15 @@ export async function getPlacePhoto(
     throw Object.assign(new Error('(Wikimedia) No photo available'), { status: 404 });
   }
 
-  // Google Photos
+  // Google Photos — check DB before hitting the API (survives server restarts)
+  const dbPhoto = db.prepare(
+    "SELECT image_url FROM places WHERE google_place_id = ? AND image_url IS NOT NULL AND image_url != ''"
+  ).get(placeId) as { image_url: string } | undefined;
+  if (dbPhoto?.image_url) {
+    photoCache.set(placeId, { photoUrl: dbPhoto.image_url, attribution: null, fetchedAt: Date.now() });
+    return { photoUrl: dbPhoto.image_url, attribution: null };
+  }
+
   const detailsRes = await fetch(`https://places.googleapis.com/v1/places/${placeId}`, {
     headers: {
       'X-Goog-Api-Key': apiKey,
