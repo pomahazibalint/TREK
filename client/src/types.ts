@@ -125,18 +125,25 @@ export interface BudgetItem {
   id: number
   trip_id: number
   name: string
-  amount: number
+  total_price: number
   currency: string
+  total_price_ref: number | null
+  exchange_rate: number | null
+  tip_ref: number
   category: string | null
-  paid_by: number | null
-  persons: number
+  note: string | null
+  sort_order: number
+  reservation_id: number | null
   members: BudgetMember[]
   expense_date: string | null
 }
 
 export interface BudgetMember {
   user_id: number
-  paid: boolean
+  amount_owed_ref: number
+  amount_paid_ref: number
+  username?: string
+  avatar_url?: string | null
 }
 
 export interface Reservation {

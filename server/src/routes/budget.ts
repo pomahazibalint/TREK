@@ -10,9 +10,8 @@ import {
   createBudgetItem,
   updateBudgetItem,
   deleteBudgetItem,
-  updateMembers,
-  toggleMemberPaid,
-  getPerPersonSummary,
+  updateMemberOwed,
+  updateMemberPayments,
   calculateSettlement,
 } from '../services/budgetService';
 
@@ -26,16 +25,6 @@ router.get('/', authenticate, (req: Request, res: Response) => {
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
   res.json({ items: listBudgetItems(tripId) });
-});
-
-router.get('/summary/per-person', authenticate, (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const { tripId } = req.params;
-
-  if (!verifyTripAccess(Number(tripId), authReq.user.id))
-    return res.status(404).json({ error: 'Trip not found' });
-
-  res.json({ summary: getPerPersonSummary(tripId) });
 });
 
 router.post('/', authenticate, (req: Request, res: Response) => {
@@ -89,6 +78,7 @@ router.put('/:id', authenticate, (req: Request, res: Response) => {
   broadcast(tripId, 'budget:updated', { item: updated }, req.headers['x-socket-id'] as string);
 });
 
+// Set who owes how much (beneficiary side) + tip
 router.put('/:id/members', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const { tripId, id } = req.params;
@@ -99,19 +89,21 @@ router.put('/:id/members', authenticate, (req: Request, res: Response) => {
   if (!checkPermission('budget_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
     return res.status(403).json({ error: 'No permission' });
 
-  const { user_ids } = req.body;
-  if (!Array.isArray(user_ids)) return res.status(400).json({ error: 'user_ids must be an array' });
+  const { members, tip_ref = 0 } = req.body;
+  if (!Array.isArray(members)) return res.status(400).json({ error: 'members must be an array' });
 
-  const result = updateMembers(id, tripId, user_ids);
+  const result = updateMemberOwed(id, tripId, members, tip_ref);
   if (!result) return res.status(404).json({ error: 'Budget item not found' });
+  if ('error' in result) return res.status(400).json({ error: result.error });
 
   res.json({ members: result.members, item: result.item });
-  broadcast(Number(tripId), 'budget:members-updated', { itemId: Number(id), members: result.members, persons: result.item.persons }, req.headers['x-socket-id'] as string);
+  broadcast(Number(tripId), 'budget:members-updated', { itemId: Number(id), members: result.members, tip_ref: result.item.tip_ref }, req.headers['x-socket-id'] as string);
 });
 
-router.put('/:id/members/:userId/paid', authenticate, (req: Request, res: Response) => {
+// Set who paid how much
+router.put('/:id/members/payments', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  const { tripId, id, userId } = req.params;
+  const { tripId, id } = req.params;
 
   const access = verifyTripAccess(Number(tripId), authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
@@ -119,10 +111,15 @@ router.put('/:id/members/:userId/paid', authenticate, (req: Request, res: Respon
   if (!checkPermission('budget_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
     return res.status(403).json({ error: 'No permission' });
 
-  const { paid } = req.body;
-  const member = toggleMemberPaid(id, userId, paid);
-  res.json({ member });
-  broadcast(Number(tripId), 'budget:member-paid-updated', { itemId: Number(id), userId: Number(userId), paid: paid ? 1 : 0 }, req.headers['x-socket-id'] as string);
+  const { payments } = req.body;
+  if (!Array.isArray(payments)) return res.status(400).json({ error: 'payments must be an array' });
+
+  const result = updateMemberPayments(id, tripId, payments);
+  if (!result) return res.status(404).json({ error: 'Budget item not found' });
+  if ('error' in result) return res.status(400).json({ error: result.error });
+
+  res.json({ members: result.members });
+  broadcast(Number(tripId), 'budget:members-payments-updated', { itemId: Number(id), payments }, req.headers['x-socket-id'] as string);
 });
 
 router.get('/settlement', authenticate, (req: Request, res: Response) => {

@@ -2,7 +2,8 @@ import type { AssignmentsMap } from '../types'
 
 const ZERO_DECIMAL_CURRENCIES = new Set(['JPY', 'KRW', 'VND', 'CLP', 'ISK', 'HUF'])
 
-export function currencyDecimals(currency: string): number {
+export function currencyDecimals(currency: string | undefined | null): number {
+  if (!currency) return 2
   return ZERO_DECIMAL_CURRENCIES.has(currency.toUpperCase()) ? 0 : 2
 }
 

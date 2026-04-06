@@ -12,8 +12,17 @@ export interface BudgetSlice {
   addBudgetItem: (tripId: number | string, data: Partial<BudgetItem>) => Promise<BudgetItem>
   updateBudgetItem: (tripId: number | string, id: number, data: Partial<BudgetItem>) => Promise<BudgetItem>
   deleteBudgetItem: (tripId: number | string, id: number) => Promise<void>
-  setBudgetItemMembers: (tripId: number | string, itemId: number, userIds: number[]) => Promise<{ members: BudgetMember[]; item: BudgetItem }>
-  toggleBudgetMemberPaid: (tripId: number | string, itemId: number, userId: number, paid: boolean) => Promise<void>
+  setBudgetItemMemberOwed: (
+    tripId: number | string,
+    itemId: number,
+    members: { user_id: number; amount_owed_ref: number }[],
+    tip_ref: number,
+  ) => Promise<{ members: BudgetMember[]; item: BudgetItem }>
+  setBudgetItemMemberPayments: (
+    tripId: number | string,
+    itemId: number,
+    payments: { user_id: number; amount_paid_ref: number }[],
+  ) => Promise<{ members: BudgetMember[] }>
 }
 
 export const createBudgetSlice = (set: SetState, get: GetState): BudgetSlice => ({
@@ -28,7 +37,7 @@ export const createBudgetSlice = (set: SetState, get: GetState): BudgetSlice => 
 
   addBudgetItem: async (tripId, data) => {
     try {
-      const result = await budgetApi.create(tripId, data)
+      const result = await budgetApi.create(tripId, data as Record<string, unknown>)
       set(state => ({ budgetItems: [...state.budgetItems, result.item] }))
       return result.item
     } catch (err: unknown) {
@@ -38,7 +47,7 @@ export const createBudgetSlice = (set: SetState, get: GetState): BudgetSlice => 
 
   updateBudgetItem: async (tripId, id, data) => {
     try {
-      const result = await budgetApi.update(tripId, id, data)
+      const result = await budgetApi.update(tripId, id, data as Record<string, unknown>)
       set(state => ({
         budgetItems: state.budgetItems.map(item => item.id === id ? result.item : item)
       }))
@@ -62,24 +71,23 @@ export const createBudgetSlice = (set: SetState, get: GetState): BudgetSlice => 
     }
   },
 
-  setBudgetItemMembers: async (tripId, itemId, userIds) => {
-    const result = await budgetApi.setMembers(tripId, itemId, userIds);
+  setBudgetItemMemberOwed: async (tripId, itemId, members, tip_ref) => {
+    const result = await budgetApi.setMemberOwed(tripId, itemId, members, tip_ref)
     set(state => ({
       budgetItems: state.budgetItems.map(item =>
-        item.id === itemId ? { ...item, members: result.members, persons: result.item.persons } : item
+        item.id === itemId ? { ...item, members: result.members, tip_ref: result.item.tip_ref } : item
       )
-    }));
-    return result;
+    }))
+    return result
   },
 
-  toggleBudgetMemberPaid: async (tripId, itemId, userId, paid) => {
-    await budgetApi.togglePaid(tripId, itemId, userId, paid);
+  setBudgetItemMemberPayments: async (tripId, itemId, payments) => {
+    const result = await budgetApi.setMemberPayments(tripId, itemId, payments)
     set(state => ({
       budgetItems: state.budgetItems.map(item =>
-        item.id === itemId
-          ? { ...item, members: (item.members || []).map(m => m.user_id === userId ? { ...m, paid } : m) }
-          : item
+        item.id === itemId ? { ...item, members: result.members } : item
       )
-    }));
+    }))
+    return result
   },
 })

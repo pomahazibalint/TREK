@@ -864,6 +864,43 @@ function runMigrations(db: Database.Database): void {
         for (const d of matchingDays) ins.run(r.id, d.id, r.day_plan_position);
       }
     },
+    // Migration 76: Multi-currency budget with per-member owed/paid amounts
+    () => {
+      // Add currency to trips (may already exist on fresh installs)
+      try { db.exec("ALTER TABLE trips ADD COLUMN currency TEXT DEFAULT 'EUR'"); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+
+      // Add new columns to budget_items
+      try { db.exec("ALTER TABLE budget_items ADD COLUMN currency TEXT NOT NULL DEFAULT 'EUR'"); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec('ALTER TABLE budget_items ADD COLUMN total_price_ref REAL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec('ALTER TABLE budget_items ADD COLUMN exchange_rate REAL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec('ALTER TABLE budget_items ADD COLUMN tip_ref REAL NOT NULL DEFAULT 0'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+
+      // Sync currency on each budget item from its parent trip
+      db.exec("UPDATE budget_items SET currency = (SELECT COALESCE(currency, 'EUR') FROM trips WHERE trips.id = budget_items.trip_id)");
+
+      // Add per-member amount columns to budget_item_members
+      try { db.exec('ALTER TABLE budget_item_members ADD COLUMN amount_owed_ref REAL NOT NULL DEFAULT 0'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec('ALTER TABLE budget_item_members ADD COLUMN amount_paid_ref REAL NOT NULL DEFAULT 0'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+
+      // Migrate existing paid flag: populate amount_owed_ref and amount_paid_ref using equal-split assumption
+      const items = db.prepare('SELECT id, total_price FROM budget_items').all() as { id: number; total_price: number }[];
+      const getMemberCount = db.prepare('SELECT COUNT(*) as cnt FROM budget_item_members WHERE budget_item_id = ?');
+      const getPayerCount = db.prepare('SELECT COUNT(*) as cnt FROM budget_item_members WHERE budget_item_id = ? AND paid = 1');
+      const updateOwed = db.prepare('UPDATE budget_item_members SET amount_owed_ref = ? WHERE budget_item_id = ?');
+      const updatePaid = db.prepare('UPDATE budget_item_members SET amount_paid_ref = ? WHERE budget_item_id = ? AND paid = 1');
+
+      for (const item of items) {
+        const { cnt: memberCount } = getMemberCount.get(item.id) as { cnt: number };
+        const { cnt: payerCount } = getPayerCount.get(item.id) as { cnt: number };
+        if (memberCount > 0) updateOwed.run(item.total_price / memberCount, item.id);
+        if (payerCount > 0) updatePaid.run(item.total_price / payerCount, item.id);
+      }
+
+      // Drop obsolete columns
+      try { db.exec('ALTER TABLE budget_items DROP COLUMN persons'); } catch {}
+      try { db.exec('ALTER TABLE budget_items DROP COLUMN days'); } catch {}
+      try { db.exec('ALTER TABLE budget_item_members DROP COLUMN paid'); } catch {}
+    },
   ];
 
   if (currentVersion < migrations.length) {

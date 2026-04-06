@@ -120,17 +120,21 @@ export interface BudgetItem {
   category: string;
   name: string;
   total_price: number;
-  persons?: number | null;
-  days?: number | null;
+  currency: string;
+  total_price_ref: number | null;
+  exchange_rate: number | null;
+  tip_ref: number;
   note?: string | null;
   sort_order: number;
   created_at?: string;
+  reservation_id?: number | null;
   members?: BudgetItemMember[];
 }
 
 export interface BudgetItemMember {
   user_id: number;
-  paid: number;
+  amount_owed_ref: number;
+  amount_paid_ref: number;
   username: string;
   avatar_url?: string | null;
   avatar?: string | null;

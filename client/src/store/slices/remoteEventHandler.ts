@@ -203,14 +203,17 @@ export function handleRemoteEvent(set: SetState, event: WebSocketEvent): void {
       case 'budget:members-updated':
         return {
           budgetItems: state.budgetItems.map(i =>
-            i.id === payload.itemId ? { ...i, members: payload.members as BudgetMember[], persons: payload.persons as number } : i
+            i.id === payload.itemId ? { ...i, members: payload.members as BudgetMember[], tip_ref: payload.tip_ref as number } : i
           ),
         }
-      case 'budget:member-paid-updated':
+      case 'budget:members-payments-updated':
         return {
           budgetItems: state.budgetItems.map(i =>
             i.id === payload.itemId
-              ? { ...i, members: (i.members || []).map(m => m.user_id === payload.userId ? { ...m, paid: payload.paid } : m) }
+              ? { ...i, members: (i.members || []).map(m => {
+                  const p = (payload.payments as { user_id: number; amount_paid_ref: number }[]).find(x => x.user_id === m.user_id)
+                  return p ? { ...m, amount_paid_ref: p.amount_paid_ref } : m
+                })}
               : i
           ),
         }

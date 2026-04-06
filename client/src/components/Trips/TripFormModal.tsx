@@ -30,6 +30,8 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
   const canUploadCover = !isEditing || can('trip_cover_upload', trip)
   const canEditTrip = !isEditing || can('trip_edit', trip)
 
+  const CURRENCIES = ['EUR','USD','GBP','JPY','CHF','CZK','PLN','SEK','NOK','DKK','TRY','THB','AUD','CAD','NZD','BRL','MXN','INR','IDR','MYR','PHP','SGD','KRW','CNY','HKD','TWD','ZAR','AED','SAR','ILS','EGP','MAD','HUF','RON','BGN','ISK','UAH','BDT','LKR','VND','CLP','COP','PEN','ARS']
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -37,6 +39,7 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
     end_date: '',
     reminder_days: 0 as number,
     day_count: 7,
+    currency: 'EUR',
   })
   const [customReminder, setCustomReminder] = useState(false)
   const [error, setError] = useState('')
@@ -58,11 +61,12 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
         end_date: trip.end_date || '',
         reminder_days: rd,
         day_count: trip.day_count || 7,
+        currency: trip.currency || 'EUR',
       })
       setCustomReminder(![0, 1, 3, 9].includes(rd))
       setCoverPreview(trip.cover_image || null)
     } else {
-      setFormData({ title: '', description: '', start_date: '', end_date: '', reminder_days: tripRemindersEnabled ? 3 : 0, day_count: 7 })
+      setFormData({ title: '', description: '', start_date: '', end_date: '', reminder_days: tripRemindersEnabled ? 3 : 0, day_count: 7, currency: 'EUR' })
       setCustomReminder(false)
       setCoverPreview(null)
     }
@@ -100,6 +104,7 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
         start_date: formData.start_date || null,
         end_date: formData.end_date || null,
         reminder_days: formData.reminder_days,
+        currency: formData.currency,
         ...(!formData.start_date && !formData.end_date ? { day_count: formData.day_count } : {}),
       })
       // Add selected members for newly created trips
@@ -309,6 +314,25 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
               onChange={e => update('day_count', Math.max(1, Math.min(365, Number(e.target.value) || 1)))}
               className={inputCls} />
             <p className="text-xs text-slate-400 mt-1.5">{t('dashboard.dayCountHint')}</p>
+          </div>
+        )}
+
+        {/* Settlement currency */}
+        {canEditTrip && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              {t('dashboard.settlementCurrency')}
+            </label>
+            <select
+              value={formData.currency}
+              onChange={e => update('currency', e.target.value)}
+              className={inputCls}
+            >
+              {CURRENCIES.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-400 mt-1.5">{t('dashboard.settlementCurrencyHint')}</p>
           </div>
         )}
 
