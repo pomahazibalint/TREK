@@ -1,6 +1,5 @@
 import ReactDOM from 'react-dom'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import DOM from 'react-dom'
 import { useTripStore } from '../../store/tripStore'
 import { useCanDo } from '../../store/permissionsStore'
 import { useTranslation } from '../../i18n'
@@ -434,6 +433,7 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
 
   const fmt = (v, cur) => fmtNum(v, locale, cur)
   const hasMultipleMembers = tripMembers.length > 1
+  const memberById = useMemo(() => new Map(tripMembers.map(m => [m.id, m])), [tripMembers])
 
   // Load settlement data whenever budget items change
   useEffect(() => {
@@ -618,6 +618,7 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                         <th className="hidden md:table-cell" style={{ ...th, minWidth: 90 }}>{t('budget.table.perDay')}</th>
                         <th className="hidden lg:table-cell" style={{ ...th, minWidth: 95 }}>{t('budget.table.perPersonDay')}</th>
                         <th className="hidden sm:table-cell" style={{ ...th, width: 90, maxWidth: 90 }}>{t('budget.table.date')}</th>
+                        {hasMultipleMembers && <th className="hidden md:table-cell" style={{ ...th, minWidth: 100 }}>{t('budget.table.paidBy') || 'Paid by'}</th>}
                         <th className="hidden sm:table-cell" style={{ ...th, minWidth: 150 }}>{t('budget.table.note')}</th>
                         <th style={{ ...th, width: 36 }}></th>
                       </tr>
@@ -679,6 +680,26 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                                 <span style={{ fontSize: 11, color: item.expense_date ? 'var(--text-secondary)' : 'var(--text-faint)' }}>{item.expense_date || '—'}</span>
                               )}
                             </td>
+                            {hasMultipleMembers && (
+                              <td className="hidden md:table-cell" style={{ ...td, textAlign: 'center' }}>
+                                {canEdit ? (
+                                  <select
+                                    value={item.paid_by ?? ''}
+                                    onChange={e => handleUpdateField(item.id, 'paid_by', e.target.value ? parseInt(e.target.value) : null)}
+                                    style={{ fontSize: 12, border: '1px solid var(--border-primary)', borderRadius: 6, padding: '2px 4px', background: 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer', maxWidth: 90 }}
+                                  >
+                                    <option value="">—</option>
+                                    {tripMembers.map(m => (
+                                      <option key={m.id} value={m.id}>{m.username}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span style={{ fontSize: 12, color: item.paid_by ? 'var(--text-secondary)' : 'var(--text-faint)' }}>
+                                    {item.paid_by ? (memberById.get(item.paid_by)?.username ?? '—') : '—'}
+                                  </span>
+                                )}
+                              </td>
+                            )}
                             <td className="hidden sm:table-cell" style={td}><InlineEditCell value={item.note} onSave={v => handleUpdateField(item.id, 'note', v)} placeholder={t('budget.table.note')} locale={locale} editTooltip={t('budget.editTooltip')} readOnly={!canEdit} /></td>
                             <td style={{ ...td, textAlign: 'center' }}>
                               {canEdit && (
