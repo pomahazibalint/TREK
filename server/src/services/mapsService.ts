@@ -54,6 +54,13 @@ const CACHE_MAX_ENTRIES = 1000;
 const CACHE_PRUNE_TARGET = 500;
 const CACHE_CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
+// ── Search cache ──────────────────────────────────────────────────────────────
+
+const searchCache = new Map<string, { data: { places: Record<string, unknown>[]; source: string }; fetchedAt: number }>();
+const SEARCH_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const SEARCH_CACHE_MAX_ENTRIES = 500;
+const SEARCH_CACHE_PRUNE_TARGET = 250;
+
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of photoCache) {
@@ -63,6 +70,14 @@ setInterval(() => {
     const entries = [...photoCache.entries()].sort((a, b) => a[1].fetchedAt - b[1].fetchedAt);
     const toDelete = entries.slice(0, entries.length - CACHE_PRUNE_TARGET);
     toDelete.forEach(([key]) => photoCache.delete(key));
+  }
+  for (const [key, entry] of searchCache) {
+    if (now - entry.fetchedAt > SEARCH_TTL) searchCache.delete(key);
+  }
+  if (searchCache.size > SEARCH_CACHE_MAX_ENTRIES) {
+    const entries = [...searchCache.entries()].sort((a, b) => a[1].fetchedAt - b[1].fetchedAt);
+    const toDelete = entries.slice(0, entries.length - SEARCH_CACHE_PRUNE_TARGET);
+    toDelete.forEach(([key]) => searchCache.delete(key));
   }
 }, CACHE_CLEANUP_INTERVAL);
 
@@ -264,10 +279,17 @@ export async function fetchWikimediaPhoto(lat: number, lng: number, name?: strin
 
 export async function searchPlaces(userId: number, query: string, lang?: string): Promise<{ places: Record<string, unknown>[]; source: string }> {
   const apiKey = getMapsKey(userId);
+  const normalizedQuery = query.trim().toLowerCase();
+  const cacheKey = `${apiKey ? 'google' : 'osm'}:${normalizedQuery}:${lang || 'en'}`;
+
+  const cached = searchCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < SEARCH_TTL) return cached.data;
 
   if (!apiKey) {
     const places = await searchNominatim(query, lang);
-    return { places, source: 'openstreetmap' };
+    const result = { places, source: 'openstreetmap' };
+    searchCache.set(cacheKey, { data: result, fetchedAt: Date.now() });
+    return result;
   }
 
   const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
@@ -300,7 +322,9 @@ export async function searchPlaces(userId: number, query: string, lang?: string)
     source: 'google',
   }));
 
-  return { places, source: 'google' };
+  const result = { places, source: 'google' };
+  searchCache.set(cacheKey, { data: result, fetchedAt: Date.now() });
+  return result;
 }
 
 // ── Place details (Google or OSM) ────────────────────────────────────────────
