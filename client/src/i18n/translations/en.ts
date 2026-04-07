@@ -1158,7 +1158,6 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'packing.saveAsTemplate': 'Save as template',
   'packing.templateName': 'Template name',
   'packing.templateSaved': 'Packing list saved as template',
-  'packing.assignUser': 'Assign user',
   'packing.bags': 'Bags',
   'packing.noBag': 'Unassigned',
   'packing.totalWeight': 'Total weight',

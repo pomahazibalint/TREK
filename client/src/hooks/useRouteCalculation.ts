@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useSettingsStore } from '../store/settingsStore'
+import { useTripStore } from '../store/tripStore'
 import { calculateMultiModeRoute, fetchElevationForRoute, elevationCacheKey, getCachedElevation, setCachedElevation } from '../components/Map/RouteCalculator'
 import type { TripStoreState } from '../store/tripStore'
 import type { RouteSegment, RouteResult, TransportMode, Assignment } from '../types'
@@ -21,18 +22,16 @@ export function useRouteCalculation(
   const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([])
   const routeCalcEnabled = useSettingsStore((s) => s.settings.route_calculation) !== false
   const routeAbortRef = useRef<AbortController | null>(null)
-  // Keep a ref to the latest tripStore so updateRouteForDay never has a stale closure
-  const tripStoreRef = useRef(tripStore)
-  tripStoreRef.current = tripStore
 
   const updateRouteForDay = useCallback(async (dayId: number | null) => {
     if (routeAbortRef.current) routeAbortRef.current.abort()
-    const currentAssignments = tripStoreRef.current.assignments || {}
+    const freshState = useTripStore.getState()
+    const currentAssignments = freshState.assignments || {}
     let da: Assignment[] = []
     if (dayId) {
       da = (currentAssignments[String(dayId)] || []).slice().sort((a, b) => a.order_index - b.order_index)
     } else {
-      const sortedDays = (tripStoreRef.current.days || []).slice().sort((a, b) => a.order_index - b.order_index)
+      const sortedDays = (freshState.days || []).slice().sort((a, b) => a.order_index - b.order_index)
       for (const d of sortedDays) {
         const dayAssignments = (currentAssignments[String(d.id)] || []).slice().sort((a, b) => a.order_index - b.order_index)
         da.push(...dayAssignments)
