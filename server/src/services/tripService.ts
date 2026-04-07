@@ -17,7 +17,8 @@ export const TRIP_SELECT = `
     (SELECT COUNT(*) FROM places p WHERE p.trip_id = t.id) as place_count,
     CASE WHEN t.user_id = :userId THEN 1 ELSE 0 END as is_owner,
     u.username as owner_username,
-    (SELECT COUNT(*) FROM trip_members tm WHERE tm.trip_id = t.id) as shared_count
+    (SELECT COUNT(*) FROM trip_members tm WHERE tm.trip_id = t.id) as shared_count,
+    (SELECT COUNT(*) FROM budget_items bi WHERE bi.trip_id = t.id AND bi.currency != t.currency) as has_foreign_currency_expenses
   FROM trips t
   JOIN users u ON u.id = t.user_id
 `;
@@ -198,6 +199,14 @@ export function updateTrip(tripId: string | number, userId: number, data: Update
 
   if (start_date && end_date && new Date(end_date) < new Date(start_date))
     throw new ValidationError('End date must be after start date');
+
+  if (currency && currency !== trip.currency) {
+    const foreignCount = (db.prepare(
+      'SELECT COUNT(*) as cnt FROM budget_items WHERE trip_id = ? AND currency != ?'
+    ).get(tripId, trip.currency) as { cnt: number }).cnt;
+    if (foreignCount > 0)
+      throw new ValidationError('Cannot change currency while foreign-currency expenses exist');
+  }
 
   const newTitle = title || trip.title;
   const newDesc = description !== undefined ? description : trip.description;

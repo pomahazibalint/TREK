@@ -327,6 +327,7 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
               value={formData.currency}
               onChange={e => update('currency', e.target.value)}
               className={inputCls}
+              disabled={isEditing && !!trip?.has_foreign_currency_expenses}
             >
               {CURRENCIES.map(c => (
                 <option key={c} value={c}>{c}</option>

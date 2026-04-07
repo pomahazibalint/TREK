@@ -29,6 +29,7 @@ export interface Trip {
   owner_id: number
   created_at: string
   updated_at: string
+  has_foreign_currency_expenses?: number
 }
 
 export interface Day {
