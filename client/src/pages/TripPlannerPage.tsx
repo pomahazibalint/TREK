@@ -300,6 +300,8 @@ export default function TripPlannerPage(): React.ReactElement | null {
         await assignmentsApi.updateTime(tripId, editingAssignmentId, { place_time: place_time || null, end_time: end_time || null })
         await tripActions.refreshDays(tripId)
       }
+      // Explicitly recalculate route — the reactive chain may batch across awaited calls
+      updateRouteForDay(selectedDayId)
       // Upload pending files with place_id
       if (pendingFiles?.length > 0) {
         for (const file of pendingFiles) {
@@ -328,7 +330,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
         })
       }
     }
-  }, [editingPlace, editingAssignmentId, tripId, toast, pushUndo])
+  }, [editingPlace, editingAssignmentId, tripId, toast, pushUndo, updateRouteForDay, selectedDayId])
 
   const handleDeletePlace = useCallback((placeId) => {
     setDeletePlaceId(placeId)
