@@ -224,6 +224,8 @@ export interface RouteSegment {
   to: [number, number]
   walkingText: string
   drivingText: string
+  distanceText: string
+  distanceM: number
 }
 
 export interface RouteResult {

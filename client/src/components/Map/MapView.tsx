@@ -343,24 +343,33 @@ function OfflineTileDownloader({ tileUrl }: { tileUrl: string }) {
   )
 }
 
-// ── Route travel time label ──
+// ── Route travel time + distance label ──
+// Minimum zoom to show the label: longer segments are readable at lower zoom levels.
+// distanceM=500 → minZoom≈14, distanceM=5000 → minZoom≈12, distanceM=50000 → minZoom≈10
+function minZoomForDistance(distanceM: number): number {
+  return Math.max(10, Math.min(15, Math.round(15 - Math.log2(Math.max(distanceM, 100) / 100))))
+}
+
 interface RouteLabelProps {
   midpoint: [number, number]
   walkingText: string
   drivingText: string
+  distanceText: string
+  distanceM: number
 }
 
-function RouteLabel({ midpoint, walkingText, drivingText }: RouteLabelProps) {
+function RouteLabel({ midpoint, walkingText, drivingText, distanceText, distanceM }: RouteLabelProps) {
   const map = useMap()
-  const [visible, setVisible] = useState(map ? map.getZoom() >= 12 : false)
+  const minZoom = minZoomForDistance(distanceM)
+  const [visible, setVisible] = useState(map ? map.getZoom() >= minZoom : false)
 
   useEffect(() => {
     if (!map) return
-    const check = () => setVisible(map.getZoom() >= 12)
+    const check = () => setVisible(map.getZoom() >= minZoom)
     check()
     map.on('zoomend', check)
     return () => map.off('zoomend', check)
-  }, [map])
+  }, [map, minZoom])
 
   if (!visible || !midpoint) return null
 
@@ -376,6 +385,8 @@ function RouteLabel({ midpoint, walkingText, drivingText }: RouteLabelProps) {
       pointer-events:none;
       position:relative;left:-50%;top:-50%;
     ">
+      <span style="opacity:0.7">${distanceText}</span>
+      <span style="opacity:0.3">|</span>
       <span style="display:flex;align-items:center;gap:2px">
         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2"/><path d="M7 21l3-7"/><path d="M10 14l5-5"/><path d="M15 9l-4 7"/><path d="M18 18l-3-7"/></svg>
         ${walkingText}
@@ -691,7 +702,7 @@ export const MapView = memo(function MapView({
             dashArray="6, 5"
           />
           {routeSegments.map((seg, i) => (
-            <RouteLabel key={i} midpoint={seg.mid} from={seg.from} to={seg.to} walkingText={seg.walkingText} drivingText={seg.drivingText} />
+            <RouteLabel key={i} midpoint={seg.mid} walkingText={seg.walkingText} drivingText={seg.drivingText} distanceText={seg.distanceText} distanceM={seg.distanceM} />
           ))}
         </>
       )}

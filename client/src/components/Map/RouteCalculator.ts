@@ -80,6 +80,8 @@ export async function calculateRoute(
         mid, from, to,
         walkingText: formatDuration(leg.distance / (5000 / 3600)),
         drivingText: formatDuration(leg.duration),
+        distanceText: formatDistance(leg.distance),
+        distanceM: leg.distance,
       }
     }
   )
@@ -236,6 +238,8 @@ export async function calculateSegments(
       mid, from, to,
       walkingText: formatDuration(walkingDuration),
       drivingText: formatDuration(leg.duration),
+      distanceText: formatDistance(leg.distance),
+      distanceM: leg.distance,
     }
   })
 }
