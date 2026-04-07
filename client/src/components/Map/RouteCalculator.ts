@@ -105,8 +105,9 @@ export async function calculateRoute(
     return cached.result
   }
 
+  const osrmProfile = profile === 'walking' ? 'foot' : profile === 'cycling' ? 'bicycle' : 'car'
   const coords = waypoints.map((p) => `${p.lng},${p.lat}`).join(';')
-  const url = `${OSRM_BASE}/${profile}/${coords}?overview=full&geometries=geojson&steps=false&annotations=distance,duration`
+  const url = `${OSRM_BASE}/${osrmProfile}/${coords}?overview=full&geometries=geojson&steps=false&annotations=distance,duration`
 
   const response = await fetch(url, { signal })
   if (!response.ok) {

@@ -664,7 +664,15 @@ export default function TripPlannerPage(): React.ReactElement | null {
                   onDeletePlace={(placeId) => handleDeletePlace(placeId)}
                   accommodations={tripAccommodations}
                   transportMode={transportMode}
-                  onTransportModeChange={setTransportMode}
+                  onTransportModeChange={(mode) => {
+                    setTransportMode(mode)
+                    if (selectedDayId) {
+                      const dayAssignments = assignments[String(selectedDayId)] || []
+                      dayAssignments.forEach(a => {
+                        if (a.place) tripActions.updatePlace(tripId, a.place.id, { transport_mode: mode })
+                      })
+                    }
+                  }}
                   onNavigateToFiles={() => handleTabChange('dateien')}
                   onExpandedDaysChange={setExpandedDayIds}
                   pushUndo={pushUndo}
