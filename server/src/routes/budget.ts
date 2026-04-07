@@ -14,6 +14,7 @@ import {
   updateMemberPayments,
   calculateSettlement,
 } from '../services/budgetService';
+import { listFilesForBudgetItem } from '../services/fileService';
 
 const router = express.Router({ mergeParams: true });
 
@@ -130,6 +131,13 @@ router.get('/settlement', authenticate, (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Trip not found' });
 
   res.json(calculateSettlement(tripId));
+});
+
+router.get('/:id/files', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { tripId, id } = req.params;
+  if (!verifyTripAccess(tripId, authReq.user.id)) return res.status(404).json({ error: 'Trip not found' });
+  res.json({ files: listFilesForBudgetItem(id) });
 });
 
 router.delete('/:id', authenticate, (req: Request, res: Response) => {

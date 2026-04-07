@@ -219,16 +219,20 @@ export function emptyTrash(tripId: string | number): number {
 
 export function createFileLink(
   fileId: string | number,
-  opts: { reservation_id?: string | null; assignment_id?: string | null; place_id?: string | null }
+  opts: { reservation_id?: string | null; assignment_id?: string | null; place_id?: string | null; budget_item_id?: string | null }
 ) {
   try {
-    db.prepare('INSERT OR IGNORE INTO file_links (file_id, reservation_id, assignment_id, place_id) VALUES (?, ?, ?, ?)').run(
-      fileId, opts.reservation_id || null, opts.assignment_id || null, opts.place_id || null
+    db.prepare('INSERT OR IGNORE INTO file_links (file_id, reservation_id, assignment_id, place_id, budget_item_id) VALUES (?, ?, ?, ?, ?)').run(
+      fileId, opts.reservation_id || null, opts.assignment_id || null, opts.place_id || null, opts.budget_item_id || null
     );
   } catch (err) {
     console.error('[Files] Error creating file link:', err instanceof Error ? err.message : err);
   }
   return db.prepare('SELECT * FROM file_links WHERE file_id = ?').all(fileId);
+}
+
+export function listFilesForBudgetItem(budgetItemId: string | number) {
+  return db.prepare(`${FILE_SELECT} WHERE f.deleted_at IS NULL AND EXISTS (SELECT 1 FROM file_links fl WHERE fl.file_id = f.id AND fl.budget_item_id = ?) ORDER BY f.created_at DESC`).all(budgetItemId).map(formatFile);
 }
 
 export function deleteFileLink(linkId: string | number, fileId: string | number) {

@@ -905,6 +905,11 @@ function runMigrations(db: Database.Database): void {
     () => {
       try { db.exec('ALTER TABLE places ADD COLUMN opening_hours TEXT'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
     },
+    // Migration 78: File attachments on budget items
+    () => {
+      try { db.exec('ALTER TABLE file_links ADD COLUMN budget_item_id INTEGER REFERENCES budget_items(id) ON DELETE CASCADE'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_file_links_budget ON file_links(file_id, budget_item_id) WHERE budget_item_id IS NOT NULL'); } catch {}
+    },
   ];
 
   if (currentVersion < migrations.length) {

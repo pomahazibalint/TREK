@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useTripStore } from '../../store/tripStore'
 import { useCanDo } from '../../store/permissionsStore'
 import { useTranslation } from '../../i18n'
-import { Plus, Trash2, Calculator, Wallet, Pencil, Info, ChevronDown, ChevronRight, Download, X, RefreshCw } from 'lucide-react'
+import { Plus, Trash2, Calculator, Wallet, Pencil, Info, ChevronDown, ChevronRight, Download, X, RefreshCw, Paperclip, Upload } from 'lucide-react'
 import { budgetApi } from '../../api/client'
 import { CustomDatePicker } from '../shared/CustomDateTimePicker'
 import type { BudgetItem, BudgetMember } from '../../types'
@@ -180,6 +180,26 @@ function ExpenseModal({ item, category, tripId, tripCurrency, tripMembers, categ
   const [fetchingRate, setFetchingRate] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [receipts, setReceipts] = useState<any[]>([])
+  const [uploading, setUploading] = useState(false)
+  const receiptInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!item?.id) return
+    budgetApi.listFiles(tripId, item.id).then((d: any) => setReceipts(d.files || [])).catch(() => {})
+  }, [item?.id, tripId])
+
+  const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !item?.id) return
+    e.target.value = ''
+    setUploading(true)
+    try {
+      await budgetApi.uploadReceipt(tripId, item.id, file)
+      const d: any = await budgetApi.listFiles(tripId, item.id)
+      setReceipts(d.files || [])
+    } catch {} finally { setUploading(false) }
+  }
 
   // Per-member rows: { user_id, owed, paid }
   type MemberRow = { user_id: number; owed: number; paid: number }
@@ -532,6 +552,37 @@ function ExpenseModal({ item, category, tripId, tripCurrency, tripMembers, categ
                   </tr>
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Receipts — only shown when editing an existing item */}
+          {item?.id && (
+            <div style={{ border: '1px solid var(--border-primary)', borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{ padding: '8px 12px', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <Paperclip size={11} /> {t('budget.modal.receipts')}
+                </span>
+                <button
+                  onClick={() => receiptInputRef.current?.click()}
+                  disabled={uploading}
+                  style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-primary)', background: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  <Upload size={10} /> {uploading ? '…' : t('budget.modal.uploadReceipt')}
+                </button>
+                <input ref={receiptInputRef} type="file" accept="image/*,application/pdf" style={{ display: 'none' }} onChange={handleReceiptUpload} />
+              </div>
+              {receipts.length === 0 ? (
+                <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-faint)', fontStyle: 'italic' }}>{t('budget.modal.noReceipts')}</div>
+              ) : (
+                <div style={{ padding: '6px 12px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {receipts.map((f: any) => (
+                    <a key={f.id} href={f.url} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 6px', borderRadius: 5, border: '1px solid var(--border-faint)', background: 'var(--bg-tertiary)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <Paperclip size={9} />{f.original_name || f.filename}
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

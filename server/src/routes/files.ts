@@ -238,7 +238,7 @@ router.delete('/trash/empty', authenticate, (req: Request, res: Response) => {
 router.post('/:id/link', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const { tripId, id } = req.params;
-  const { reservation_id, assignment_id, place_id } = req.body;
+  const { reservation_id, assignment_id, place_id, budget_item_id } = req.body;
 
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
@@ -248,7 +248,7 @@ router.post('/:id/link', authenticate, (req: Request, res: Response) => {
   const file = getFileById(id, tripId);
   if (!file) return res.status(404).json({ error: 'File not found' });
 
-  const links = createFileLink(id, { reservation_id, assignment_id, place_id });
+  const links = createFileLink(id, { reservation_id, assignment_id, place_id, budget_item_id });
   res.json({ success: true, links });
 });
 
