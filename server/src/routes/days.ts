@@ -26,6 +26,19 @@ router.post('/', authenticate, requireTripAccess, (req: Request, res: Response) 
   broadcast(tripId, 'day:created', { day }, req.headers['x-socket-id'] as string);
 });
 
+router.post('/:id/duplicate', authenticate, requireTripAccess, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))
+    return res.status(403).json({ error: 'No permission' });
+
+  const { tripId, id } = req.params;
+  const result = dayService.duplicateDay(id, tripId);
+  if (!result) return res.status(404).json({ error: 'Day not found' });
+
+  res.status(201).json({ day: result });
+  broadcast(tripId, 'day:created', { day: result }, req.headers['x-socket-id'] as string);
+});
+
 router.put('/:id', authenticate, requireTripAccess, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))

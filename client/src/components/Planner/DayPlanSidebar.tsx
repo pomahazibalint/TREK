@@ -4,10 +4,10 @@ declare global { interface Window { __dragData: DragDataPayload | null } }
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom'
-import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Bike, Footprints } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Bike, Footprints, Copy } from 'lucide-react'
 
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
-import { assignmentsApi, reservationsApi } from '../../api/client'
+import { assignmentsApi, reservationsApi, daysApi } from '../../api/client'
 import { downloadTripPDF } from '../PDF/TripPDF'
 import { calculateRoute, generateGoogleMapsUrl, optimizeRoute } from '../Map/RouteCalculator'
 import PlaceAvatar from '../shared/PlaceAvatar'
@@ -113,6 +113,23 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   const tripActions = useRef(useTripStore.getState()).current
   const can = useCanDo()
   const canEditDays = can('day_edit', trip)
+
+  const handleDuplicateDay = async (dayId: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      const result = await daysApi.duplicate(tripId, dayId)
+      const newDay = result.day
+      useTripStore.setState(state => {
+        if (state.days.some(d => d.id === newDay.id)) return {}
+        const assignments = newDay.assignments || []
+        return {
+          days: [...state.days, newDay],
+          assignments: { ...state.assignments, [String(newDay.id)]: assignments },
+        }
+      })
+      setExpandedDays(prev => { const s = new Set(prev); s.add(newDay.id); return s })
+    } catch {}
+  }
 
   const { noteUi, setNoteUi, noteInputRef, dayNotes, openAddNote: _openAddNote, openEditNote: _openEditNote, cancelNote, saveNote, deleteNote: _deleteNote, moveNote: _moveNote } = useDayNotes(tripId)
 
@@ -1066,6 +1083,15 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                   onMouseLeave={e => e.currentTarget.style.color = 'var(--text-faint)'}
                 >
                   <FileText size={16} strokeWidth={2} />
+                </button>}
+                {canEditDays && <button
+                  onClick={e => handleDuplicateDay(day.id, e)}
+                  title={t('dayplan.duplicateDay') || 'Duplicate day'}
+                  style={{ flexShrink: 0, background: 'none', border: 'none', padding: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-faint)' }}
+                  onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'var(--text-faint)'}
+                >
+                  <Copy size={15} strokeWidth={2} />
                 </button>}
                 <button
                   onClick={e => toggleDay(day.id, e)}

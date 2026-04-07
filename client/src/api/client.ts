@@ -92,6 +92,7 @@ export const daysApi = {
   create: (tripId: number | string, data: Record<string, unknown>) => apiClient.post(`/trips/${tripId}/days`, data).then(r => r.data),
   update: (tripId: number | string, dayId: number | string, data: Record<string, unknown>) => apiClient.put(`/trips/${tripId}/days/${dayId}`, data).then(r => r.data),
   delete: (tripId: number | string, dayId: number | string) => apiClient.delete(`/trips/${tripId}/days/${dayId}`).then(r => r.data),
+  duplicate: (tripId: number | string, dayId: number | string) => apiClient.post(`/trips/${tripId}/days/${dayId}/duplicate`).then(r => r.data),
 }
 
 export const placesApi = {

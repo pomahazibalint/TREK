@@ -159,6 +159,28 @@ export function deleteDay(id: string | number) {
   db.prepare('DELETE FROM days WHERE id = ?').run(id);
 }
 
+export function duplicateDay(sourceId: string | number, tripId: string | number) {
+  const source = db.prepare('SELECT * FROM days WHERE id = ? AND trip_id = ?').get(sourceId, tripId) as Day | undefined;
+  if (!source) return null;
+
+  const newDay = createDay(tripId, undefined, source.notes ?? undefined);
+  if (source.title) db.prepare('UPDATE days SET title = ? WHERE id = ?').run(source.title, newDay.id);
+
+  const sourceAssignments = db.prepare(
+    'SELECT * FROM day_assignments WHERE day_id = ? ORDER BY order_index ASC'
+  ).all(sourceId) as { place_id: number; order_index: number; notes: string | null; assignment_time: string | null; assignment_end_time: string | null }[];
+
+  const insertAssignment = db.prepare(
+    'INSERT INTO day_assignments (day_id, place_id, order_index, notes, assignment_time, assignment_end_time) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+  for (const a of sourceAssignments) {
+    insertAssignment.run(newDay.id, a.place_id, a.order_index, a.notes, a.assignment_time, a.assignment_end_time);
+  }
+
+  const finalDay = db.prepare('SELECT * FROM days WHERE id = ?').get(newDay.id) as Day;
+  return { ...finalDay, assignments: getAssignmentsForDay(newDay.id) };
+}
+
 // ---------------------------------------------------------------------------
 // Accommodation helpers
 // ---------------------------------------------------------------------------

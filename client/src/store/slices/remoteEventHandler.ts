@@ -111,9 +111,14 @@ export function handleRemoteEvent(set: SetState, event: WebSocketEvent): void {
       }
 
       // Days
-      case 'day:created':
-        if (state.days.some(d => d.id === (payload.day as Day).id)) return {}
-        return { days: [...state.days, payload.day as Day] }
+      case 'day:created': {
+        const newDay = payload.day as Day & { assignments?: any[] }
+        if (state.days.some(d => d.id === newDay.id)) return {}
+        return {
+          days: [...state.days, newDay],
+          assignments: { ...state.assignments, [String(newDay.id)]: newDay.assignments || [] },
+        }
+      }
       case 'day:updated':
         return {
           days: state.days.map(d => d.id === (payload.day as Day).id ? payload.day as Day : d),
