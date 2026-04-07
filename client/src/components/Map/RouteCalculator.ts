@@ -88,7 +88,8 @@ function pruneRouteCache(now: number): void {
 }
 
 /** Fetches a full route via OSRM and returns coordinates, per-leg segments, distance, and duration estimates.
- *  Results are cached client-side for 10 minutes to reduce OSRM API load. */
+ *  Results are cached client-side for 10 minutes to reduce OSRM API load.
+ *  Includes exponential backoff retry for transient network failures. */
 export async function calculateRoute(
   waypoints: Waypoint[],
   profile: TransportMode = 'driving',
@@ -109,17 +110,42 @@ export async function calculateRoute(
   const coords = waypoints.map((p) => `${p.lng},${p.lat}`).join(';')
   const url = `${OSRM_BASE}/${osrmProfile}/${coords}?overview=full&geometries=geojson&steps=false&annotations=distance,duration`
 
-  const response = await fetch(url, { signal })
-  if (!response.ok) {
-    throw new Error('Route could not be calculated')
+  // Retry transient network failures with exponential backoff (up to 3 attempts)
+  let lastError: Error | null = null
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetch(url, { signal })
+      if (!response.ok) {
+        throw new Error('Route could not be calculated')
+      }
+
+      const data = await response.json()
+      if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
+        throw new Error('No route found')
+      }
+      // Success — parse and cache
+      const result = parseRouteResponse(data, waypoints, profile)
+      pruneRouteCache(now)
+      routeCache.set(cacheKey, { result, fetchedAt: now })
+      return result
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+      // Don't retry on abort signals or HTTP errors
+      if (lastError.name === 'AbortError' || lastError.message === 'Route could not be calculated') {
+        throw lastError
+      }
+      // For transient network errors, wait before retrying (exponential backoff)
+      if (attempt < 2) {
+        const delay = Math.pow(2, attempt) * 100 // 100ms, 200ms, 400ms
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+    }
   }
+  // All retries exhausted
+  throw lastError || new Error('Failed to calculate route')
+}
 
-  const data = await response.json()
-
-  if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
-    throw new Error('No route found')
-  }
-
+function parseRouteResponse(data: any, waypoints: Waypoint[], profile: TransportMode): RouteResult {
   const route = data.routes[0]
   const coordinates: [number, number][] = route.geometry.coordinates.map(([lng, lat]: [number, number]) => [lat, lng])
 
@@ -153,7 +179,7 @@ export async function calculateRoute(
     }
   )
 
-  const result: RouteResult = {
+  return {
     coordinates,
     distance,
     duration,
@@ -163,11 +189,6 @@ export async function calculateRoute(
     drivingText: formatDuration(drivingDuration),
     segments,
   }
-
-  pruneRouteCache(now)
-  routeCache.set(cacheKey, { result, fetchedAt: now })
-
-  return result
 }
 
 /** Groups consecutive legs that share the same transport mode into batched OSRM calls.

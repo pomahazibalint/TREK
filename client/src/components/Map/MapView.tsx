@@ -523,6 +523,7 @@ export const MapView = memo(function MapView({
   hasInspector = false,
   hasDayDetail = false,
   elevationEnabled = true,
+  isRecalculating = false,
 }: {
   places?: any[]
   dayPlaces?: any[]
@@ -543,6 +544,7 @@ export const MapView = memo(function MapView({
   hasInspector?: boolean
   hasDayDetail?: boolean
   elevationEnabled?: boolean
+  isRecalculating?: boolean
 }) {
   // Dynamic padding: account for sidebars + bottom inspector + day detail panel
   const paddingOpts = useMemo(() => {
@@ -702,7 +704,7 @@ export const MapView = memo(function MapView({
         <>
           {routeSegments.length > 0 ? routeSegments.map((seg, i) => (
             <Polyline
-              key={`seg-${i}`}
+              key={`seg-${i}-${seg.mode}`}
               positions={seg.geometry}
               color={TRANSPORT_MODE_COLOR[seg.mode] ?? '#111827'}
               weight={3}
@@ -711,6 +713,7 @@ export const MapView = memo(function MapView({
             />
           )) : (
             <Polyline
+              key={`route-fallback-${route.length}`}
               positions={route}
               color="#111827"
               weight={3}
@@ -741,6 +744,14 @@ export const MapView = memo(function MapView({
           )
         } catch { return null }
       })}
+
+      {/* Route recalculation loading indicator */}
+      {isRecalculating && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1000] bg-white/90 rounded-full px-3 py-1 text-xs font-medium text-gray-600 shadow flex items-center gap-1.5 pointer-events-none">
+          <span className="animate-spin inline-block w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full" />
+          Recalculating…
+        </div>
+      )}
     </MapContainer>
     {elevationEnabled && routeInfo?.elevationProfile && routeInfo.elevationProfile.length > 1 && (
       <ElevationChart profile={routeInfo.elevationProfile} distance={routeInfo.distance} leftOffset={leftWidth} rightOffset={rightWidth} />

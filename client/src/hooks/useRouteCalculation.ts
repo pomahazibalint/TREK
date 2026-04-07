@@ -3,7 +3,7 @@ import { useSettingsStore } from '../store/settingsStore'
 import { useTripStore } from '../store/tripStore'
 import { calculateMultiModeRoute, fetchElevationForRoute, elevationCacheKey, getCachedElevation, setCachedElevation } from '../components/Map/RouteCalculator'
 import type { TripStoreState } from '../store/tripStore'
-import type { RouteSegment, RouteResult, TransportMode, Assignment } from '../types'
+import type { RouteSegment, RouteResult, TransportMode, Assignment, Waypoint } from '../types'
 
 /**
  * Manages route calculation state for a selected day. Extracts geo-coded waypoints from
@@ -20,38 +20,74 @@ export function useRouteCalculation(
   const [route, setRoute] = useState<[number, number][] | null>(null)
   const [routeInfo, setRouteInfo] = useState<RouteResult | null>(null)
   const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([])
+  const [isRecalculating, setIsRecalculating] = useState(false)
   const routeCalcEnabled = useSettingsStore((s) => s.settings.route_calculation) !== false
   const routeAbortRef = useRef<AbortController | null>(null)
+  const lastDayIdRef = useRef<number | null>(null)
+  // Track generation to know which calculation result is the most recent
+  const calculationGenRef = useRef(0)
+  // Track if a manual (forceMode) call is in progress to deprioritize reactive calls
+  const forceModeInFlightRef = useRef(false)
 
-  const updateRouteForDay = useCallback(async (dayId: number | null) => {
-    if (routeAbortRef.current) routeAbortRef.current.abort()
-    const freshState = useTripStore.getState()
-    const currentAssignments = freshState.assignments || {}
-    let da: Assignment[] = []
-    if (dayId) {
-      da = (currentAssignments[String(dayId)] || []).slice().sort((a, b) => a.order_index - b.order_index)
-    } else {
-      const sortedDays = (freshState.days || []).slice().sort((a, b) => a.order_index - b.order_index)
-      for (const d of sortedDays) {
-        const dayAssignments = (currentAssignments[String(d.id)] || []).slice().sort((a, b) => a.order_index - b.order_index)
-        da.push(...dayAssignments)
-      }
-    }
-    const places = da.map((a) => a.place).filter((p) => p?.lat && p?.lng)
-    if (places.length < 2) { setRoute(null); setRouteSegments([]); return }
-    const waypoints = places.map((p) => ({ lat: p.lat!, lng: p.lng! }))
-    if (!routeCalcEnabled) {
-      setRoute(waypoints.map((p) => [p.lat, p.lng]))
-      setRouteSegments([])
+  const updateRouteForDay = useCallback(async (dayId: number | null, forceMode?: TransportMode) => {
+    // If a forceMode call is in flight and this is a reactive call (no forceMode), skip it silently
+    if (!forceMode && forceModeInFlightRef.current) {
       return
     }
-    // Each leg uses the destination place's transport_mode; fall back to the day default
-    const legModes: TransportMode[] = places.slice(1).map((p) => (p.transport_mode || transportMode) as TransportMode)
-    const controller = new AbortController()
-    routeAbortRef.current = controller
+
+    const myGeneration = ++calculationGenRef.current
+    const isForceMode = !!forceMode
+    if (isForceMode) {
+      forceModeInFlightRef.current = true
+    }
+
+    setIsRecalculating(true)
     try {
+      const freshState = useTripStore.getState()
+      const currentAssignments = freshState.assignments || {}
+      let da: Assignment[] = []
+      if (dayId) {
+        da = (currentAssignments[String(dayId)] || []).slice().sort((a, b) => a.order_index - b.order_index)
+      } else {
+        const sortedDays = (freshState.days || []).slice().sort((a, b) => a.order_index - b.order_index)
+        for (const d of sortedDays) {
+          const dayAssignments = (currentAssignments[String(d.id)] || []).slice().sort((a, b) => a.order_index - b.order_index)
+          da.push(...dayAssignments)
+        }
+      }
+      const places = da.map((a) => a.place).filter((p) => p?.lat && p?.lng)
+      if (places.length < 2) {
+        if (myGeneration === calculationGenRef.current) {
+          setRoute(null)
+          setRouteSegments([])
+        }
+        return
+      }
+      const waypoints = places.map((p) => ({ lat: p.lat!, lng: p.lng! }))
+      if (!routeCalcEnabled) {
+        if (myGeneration === calculationGenRef.current) {
+          setRoute(waypoints.map((p) => [p.lat, p.lng]))
+          setRouteSegments([])
+        }
+        return
+      }
+      // When forceMode is provided (e.g., from handleTransportModeChange), use it for all legs.
+      // Otherwise, each leg uses its place's transport_mode; fall back to the day default.
+      const legModes: TransportMode[] = forceMode
+        ? places.slice(1).map(() => forceMode)
+        : places.slice(1).map((p) => (p.transport_mode || transportMode) as TransportMode)
+
+      // Abort on day change, or if a forceMode call is starting and this is a reactive call
+      if ((dayId !== lastDayIdRef.current || isForceMode) && routeAbortRef.current) {
+        routeAbortRef.current.abort()
+      }
+      lastDayIdRef.current = dayId
+      const controller = new AbortController()
+      routeAbortRef.current = controller
       const result = await calculateMultiModeRoute(waypoints, legModes, { signal: controller.signal })
-      if (!controller.signal.aborted) {
+
+      // Only use result if this is the most recent calculation
+      if (myGeneration === calculationGenRef.current && !controller.signal.aborted) {
         setRoute(result.coordinates)
         setRouteSegments(result.segments ?? [])
         setRouteInfo(result)
@@ -62,7 +98,7 @@ export function useRouteCalculation(
             setRouteInfo(prev => prev ? { ...prev, elevationProfile: cachedElev } : null)
           } else {
             fetchElevationForRoute(result.coordinates).then(elevationProfile => {
-              if (!controller.signal.aborted) {
+              if (!controller.signal.aborted && myGeneration === calculationGenRef.current) {
                 setCachedElevation(elevKey, elevationProfile)
                 setRouteInfo(prev => prev ? { ...prev, elevationProfile } : null)
               }
@@ -73,16 +109,34 @@ export function useRouteCalculation(
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
       // OSRM unavailable — fall back to straight lines so the map still shows something
-      setRoute(waypoints.map((p) => [p.lat, p.lng]))
-      setRouteSegments([])
-      setRouteInfo(null)
+      if (myGeneration === calculationGenRef.current) {
+        const freshState = useTripStore.getState()
+        const currentAssignments = freshState.assignments || {}
+        let da: Assignment[] = []
+        if (dayId) {
+          da = (currentAssignments[String(dayId)] || []).slice().sort((a, b) => a.order_index - b.order_index)
+        } else {
+          const sortedDays = (freshState.days || []).slice().sort((a, b) => a.order_index - b.order_index)
+          for (const d of sortedDays) {
+            const dayAssignments = (currentAssignments[String(d.id)] || []).slice().sort((a, b) => a.order_index - b.order_index)
+            da.push(...dayAssignments)
+          }
+        }
+        const places = da.map((a) => a.place).filter((p) => p?.lat && p?.lng)
+        const waypoints = places.map((p) => ({ lat: p.lat!, lng: p.lng! }))
+        setRoute(waypoints.map((p) => [p.lat, p.lng]))
+        setRouteSegments([])
+        setRouteInfo(null)
+      }
+    } finally {
+      if (isForceMode) {
+        forceModeInFlightRef.current = false
+      }
+      if (myGeneration === calculationGenRef.current) {
+        setIsRecalculating(false)
+      }
     }
-  // transportMode intentionally omitted from deps: it's only a fallback for places
-  // with no transport_mode, which never occurs (server defaults to 'walking').
-  // Including it would fire the effect prematurely before updatePlace API calls
-  // have updated the per-place transport_mode in the store.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeCalcEnabled, elevationEnabled])
+  }, [routeCalcEnabled, elevationEnabled, transportMode])
 
   // Recalculate when assignments change OR when transport mode changes
   const assignments = tripStore.assignments
@@ -92,5 +146,5 @@ export function useRouteCalculation(
     updateRouteForDay(selectedDayId)
   }, [selectedDayId, selectedDayId ? selectedDayAssignments : assignments, updateRouteForDay, days])
 
-  return { route, routeSegments, routeInfo, setRoute, setRouteInfo, updateRouteForDay }
+  return { route, routeSegments, routeInfo, setRoute, setRouteInfo, updateRouteForDay, isRecalculating }
 }

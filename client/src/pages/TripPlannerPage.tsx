@@ -242,15 +242,18 @@ export default function TripPlannerPage(): React.ReactElement | null {
     })
   }, [places, mapCategoryFilter, assignments, expandedDayIds])
 
-  const { route, routeSegments, routeInfo, setRoute, setRouteInfo, updateRouteForDay } = useRouteCalculation({ assignments, days } as any, selectedDayId, transportMode, enabledAddons.elevation)
+  const { route, routeSegments, routeInfo, setRoute, setRouteInfo, updateRouteForDay, isRecalculating } = useRouteCalculation({ assignments, days } as any, selectedDayId, transportMode, enabledAddons.elevation)
 
   const handleTransportModeChange = useCallback(async (mode) => {
     setTransportMode(mode)
     if (selectedDayId) {
+      // Immediately recalculate the route with the new mode (forceMode override)
+      // This provides instant visual feedback while API calls persist the changes in the background
+      updateRouteForDay(selectedDayId, mode)
       const dayAssignments = useTripStore.getState().assignments[String(selectedDayId)] || []
       const toUpdate = dayAssignments.filter(a => a.place?.lat && a.place?.lng)
-      await Promise.all(toUpdate.map(a => tripActions.updatePlace(tripId, a.place.id, { transport_mode: mode })))
-      updateRouteForDay(selectedDayId)
+      // Fire API calls as background updates (don't block on them)
+      Promise.all(toUpdate.map(a => tripActions.updatePlace(tripId, a.place.id, { transport_mode: mode }))).catch(() => {})
     }
   }, [selectedDayId, tripId, updateRouteForDay])
 
@@ -623,6 +626,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
               hasInspector={!!selectedPlace}
               hasDayDetail={!!showDayDetail && !selectedPlace}
               elevationEnabled={enabledAddons.elevation}
+              isRecalculating={isRecalculating}
             />
 
 
