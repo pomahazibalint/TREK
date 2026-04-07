@@ -244,6 +244,16 @@ export default function TripPlannerPage(): React.ReactElement | null {
 
   const { route, routeSegments, routeInfo, setRoute, setRouteInfo, updateRouteForDay } = useRouteCalculation({ assignments, days } as any, selectedDayId, transportMode, enabledAddons.elevation)
 
+  const handleTransportModeChange = useCallback(async (mode) => {
+    setTransportMode(mode)
+    if (selectedDayId) {
+      const dayAssignments = useTripStore.getState().assignments[String(selectedDayId)] || []
+      const toUpdate = dayAssignments.filter(a => a.place?.lat && a.place?.lng)
+      await Promise.all(toUpdate.map(a => tripActions.updatePlace(tripId, a.place.id, { transport_mode: mode })))
+      updateRouteForDay(selectedDayId)
+    }
+  }, [selectedDayId, tripId, updateRouteForDay])
+
   const handleSelectDay = useCallback((dayId, skipFit) => {
     const changed = dayId !== selectedDayId
     tripActions.setSelectedDay(dayId)
@@ -666,15 +676,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
                   onDeletePlace={(placeId) => handleDeletePlace(placeId)}
                   accommodations={tripAccommodations}
                   transportMode={transportMode}
-                  onTransportModeChange={(mode) => {
-                    setTransportMode(mode)
-                    if (selectedDayId) {
-                      const dayAssignments = assignments[String(selectedDayId)] || []
-                      dayAssignments.forEach(a => {
-                        if (a.place) tripActions.updatePlace(tripId, a.place.id, { transport_mode: mode })
-                      })
-                    }
-                  }}
+                  onTransportModeChange={handleTransportModeChange}
                   onNavigateToFiles={() => handleTabChange('dateien')}
                   onExpandedDaysChange={setExpandedDayIds}
                   pushUndo={pushUndo}

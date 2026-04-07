@@ -77,7 +77,12 @@ export function useRouteCalculation(
       setRouteSegments([])
       setRouteInfo(null)
     }
-  }, [routeCalcEnabled, transportMode, elevationEnabled])
+  // transportMode intentionally omitted from deps: it's only a fallback for places
+  // with no transport_mode, which never occurs (server defaults to 'walking').
+  // Including it would fire the effect prematurely before updatePlace API calls
+  // have updated the per-place transport_mode in the store.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeCalcEnabled, elevationEnabled])
 
   // Recalculate when assignments change OR when transport mode changes
   const assignments = tripStore.assignments
