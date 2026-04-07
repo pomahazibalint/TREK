@@ -226,6 +226,8 @@ export interface RouteSegment {
   drivingText: string
   distanceText: string
   distanceM: number
+  mode: TransportMode
+  geometry: [number, number][]
 }
 
 export interface RouteResult {

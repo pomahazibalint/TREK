@@ -13,6 +13,55 @@ function routeCacheKey(waypoints: Waypoint[], profile: TransportMode): string {
   return `${profile}:${waypoints.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|')}`
 }
 
+/**
+ * Splits a combined route geometry into per-leg slices by finding the closest
+ * point in the coordinate array to each intermediate waypoint.
+ * Searching forward from the previous split avoids backward matches and is O(n) total.
+ */
+function splitGeometryByWaypoints(
+  coords: [number, number][],
+  waypoints: Waypoint[]
+): [number, number][][] {
+  if (waypoints.length < 2) return [coords]
+  const splitIndices: number[] = [0]
+  let searchFrom = 0
+  for (let i = 1; i < waypoints.length - 1; i++) {
+    const wp = waypoints[i]
+    let minDist = Infinity, bestIdx = searchFrom
+    for (let j = searchFrom; j < coords.length; j++) {
+      const d = (coords[j][0] - wp.lat) ** 2 + (coords[j][1] - wp.lng) ** 2
+      if (d < minDist) { minDist = d; bestIdx = j }
+    }
+    splitIndices.push(bestIdx)
+    searchFrom = bestIdx
+  }
+  splitIndices.push(coords.length - 1)
+  return splitIndices.slice(0, -1).map((start, i) => coords.slice(start, splitIndices[i + 1] + 1))
+}
+
+/** Returns the geographic midpoint along a polyline by accumulated distance. */
+export function geometryMidpoint(coords: [number, number][]): [number, number] {
+  if (coords.length === 1) return coords[0]
+  if (coords.length === 2) return [(coords[0][0] + coords[1][0]) / 2, (coords[0][1] + coords[1][1]) / 2]
+  let total = 0
+  const segLengths: number[] = []
+  for (let i = 1; i < coords.length; i++) {
+    const d = Math.sqrt((coords[i][0] - coords[i - 1][0]) ** 2 + (coords[i][1] - coords[i - 1][1]) ** 2)
+    segLengths.push(d)
+    total += d
+  }
+  const half = total / 2
+  let walked = 0
+  for (let i = 0; i < segLengths.length; i++) {
+    if (walked + segLengths[i] >= half) {
+      const t = (half - walked) / segLengths[i]
+      return [coords[i][0] + t * (coords[i + 1][0] - coords[i][0]), coords[i][1] + t * (coords[i + 1][1] - coords[i][1])]
+    }
+    walked += segLengths[i]
+  }
+  return coords[coords.length - 1]
+}
+
 function pruneRouteCache(now: number): void {
   for (const [key, entry] of routeCache) {
     if (now - entry.fetchedAt > ROUTE_CACHE_TTL) routeCache.delete(key)
@@ -71,13 +120,15 @@ export async function calculateRoute(
   const walkingDuration = distance / (5000 / 3600)
   const drivingDuration: number = profile === 'driving' ? route.duration : distance / (50000 / 3600)
 
+  const legGeometries = splitGeometryByWaypoints(coordinates, waypoints)
   const segments: RouteSegment[] = (route.legs ?? []).map(
     (leg: { distance: number; duration: number }, i: number): RouteSegment => {
       const from: [number, number] = [waypoints[i].lat, waypoints[i].lng]
       const to: [number, number] = [waypoints[i + 1].lat, waypoints[i + 1].lng]
+      const geometry = legGeometries[i] ?? [from, to]
       const mid: [number, number] = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2]
       return {
-        mid, from, to,
+        mid, from, to, geometry, mode: profile,
         walkingText: formatDuration(leg.distance / (5000 / 3600)),
         drivingText: formatDuration(leg.duration),
         distanceText: formatDistance(leg.distance),

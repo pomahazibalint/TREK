@@ -9,8 +9,14 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import { mapsApi } from '../../api/client'
 import { getCategoryIcon, CATEGORY_ICON_MAP } from '../shared/categoryIcons'
 import ElevationChart from './ElevationChart'
-import type { RouteResult } from '../../types'
+import type { RouteResult, TransportMode } from '../../types'
 import { estimateTileCount, downloadTiles } from '../../utils/offlineTiles'
+
+const TRANSPORT_MODE_COLOR: Record<TransportMode, string> = {
+  walking: '#3b82f6',
+  cycling: '#22c55e',
+  driving: '#6b7280',
+}
 
 function categoryIconSvg(iconName: string | null | undefined, size: number): string {
   const IconComponent = (iconName && CATEGORY_ICON_MAP[iconName]) || CATEGORY_ICON_MAP['MapPin']
@@ -694,13 +700,24 @@ export const MapView = memo(function MapView({
 
       {route && route.length > 1 && (
         <>
-          <Polyline
-            positions={route}
-            color="#111827"
-            weight={3}
-            opacity={0.9}
-            dashArray="6, 5"
-          />
+          {routeSegments.length > 0 ? routeSegments.map((seg, i) => (
+            <Polyline
+              key={`seg-${i}`}
+              positions={seg.geometry}
+              color={TRANSPORT_MODE_COLOR[seg.mode] ?? '#111827'}
+              weight={3}
+              opacity={0.9}
+              dashArray={seg.mode === 'walking' ? '6, 5' : undefined}
+            />
+          )) : (
+            <Polyline
+              positions={route}
+              color="#111827"
+              weight={3}
+              opacity={0.9}
+              dashArray="6, 5"
+            />
+          )}
           {routeSegments.map((seg, i) => (
             <RouteLabel key={i} midpoint={seg.mid} walkingText={seg.walkingText} drivingText={seg.drivingText} distanceText={seg.distanceText} distanceM={seg.distanceM} />
           ))}
