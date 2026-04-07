@@ -596,6 +596,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
               dayPlaces={dayPlaces}
               route={route}
               routeSegments={routeSegments}
+              routeInfo={routeInfo}
               selectedPlaceId={selectedPlaceId}
               onMarkerClick={handleMarkerClick}
               onMapClick={handleMapClick}

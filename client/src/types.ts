@@ -234,6 +234,7 @@ export interface RouteResult {
   walkingText: string
   drivingText: string
   segments?: RouteSegment[]
+  elevationProfile?: number[]
 }
 
 export interface Waypoint {

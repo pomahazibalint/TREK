@@ -8,6 +8,8 @@ import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import { mapsApi } from '../../api/client'
 import { getCategoryIcon, CATEGORY_ICON_MAP } from '../shared/categoryIcons'
+import ElevationChart from './ElevationChart'
+import type { RouteResult } from '../../types'
 
 function categoryIconSvg(iconName: string | null | undefined, size: number): string {
   const IconComponent = (iconName && CATEGORY_ICON_MAP[iconName]) || CATEGORY_ICON_MAP['MapPin']
@@ -371,6 +373,7 @@ export const MapView = memo(function MapView({
   dayPlaces = [],
   route = null,
   routeSegments = [],
+  routeInfo = null,
   selectedPlaceId = null,
   onMarkerClick,
   onMapClick,
@@ -384,6 +387,25 @@ export const MapView = memo(function MapView({
   rightWidth = 0,
   hasInspector = false,
   hasDayDetail = false,
+}: {
+  places?: any[]
+  dayPlaces?: any[]
+  route?: [number, number][] | null
+  routeSegments?: any[]
+  routeInfo?: RouteResult | null
+  selectedPlaceId?: number | null
+  onMarkerClick?: (place: any) => void
+  onMapClick?: (lat: number, lng: number, zoom?: number) => void
+  onMapContextMenu?: ((lat: number, lng: number) => void) | null
+  center?: [number, number]
+  zoom?: number
+  tileUrl?: string
+  fitKey?: number
+  dayOrderMap?: Record<number, number>
+  leftWidth?: number
+  rightWidth?: number
+  hasInspector?: boolean
+  hasDayDetail?: boolean
 }) {
   // Dynamic padding: account for sidebars + bottom inspector + day detail panel
   const paddingOpts = useMemo(() => {
@@ -497,6 +519,7 @@ export const MapView = memo(function MapView({
   }), [places, selectedPlaceId, dayOrderMap, photoUrls, onMarkerClick, isTouchDevice])
 
   return (
+  <>
     <MapContainer
       id="trek-map"
       center={center}
@@ -570,5 +593,9 @@ export const MapView = memo(function MapView({
         } catch { return null }
       })}
     </MapContainer>
+    {routeInfo?.elevationProfile && routeInfo.elevationProfile.length > 1 && (
+      <ElevationChart profile={routeInfo.elevationProfile} distance={routeInfo.distance} />
+    )}
+  </>
   )
 })

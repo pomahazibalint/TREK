@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useSettingsStore } from '../store/settingsStore'
-import { calculateMultiModeRoute } from '../components/Map/RouteCalculator'
+import { calculateMultiModeRoute, fetchElevationForRoute } from '../components/Map/RouteCalculator'
 import type { TripStoreState } from '../store/tripStore'
 import type { RouteSegment, RouteResult, TransportMode, Assignment } from '../types'
 
@@ -54,12 +54,20 @@ export function useRouteCalculation(
       if (!controller.signal.aborted) {
         setRoute(result.coordinates)
         setRouteSegments(result.segments ?? [])
+        setRouteInfo(result)
+        // Fetch elevation in the background and update routeInfo when ready
+        fetchElevationForRoute(result.coordinates).then(elevationProfile => {
+          if (!controller.signal.aborted) {
+            setRouteInfo(prev => prev ? { ...prev, elevationProfile } : null)
+          }
+        }).catch(() => {/* elevation is optional */})
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
       // OSRM unavailable — fall back to straight lines so the map still shows something
       setRoute(waypoints.map((p) => [p.lat, p.lng]))
       setRouteSegments([])
+      setRouteInfo(null)
     }
   }, [routeCalcEnabled, transportMode])
 

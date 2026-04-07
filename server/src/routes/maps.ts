@@ -77,6 +77,23 @@ router.get('/reverse', authenticate, async (req: Request, res: Response) => {
 });
 
 // POST /resolve-url
+router.post('/elevation', authenticate, async (req: Request, res: Response) => {
+  const { locations } = req.body;
+  if (!Array.isArray(locations) || locations.length === 0) {
+    return res.status(400).json({ error: 'locations array is required' });
+  }
+  const locationStr = locations.map((l: { latitude: number; longitude: number }) => `${l.latitude},${l.longitude}`).join('|');
+  try {
+    const response = await fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${encodeURIComponent(locationStr)}`);
+    if (!response.ok) throw new Error(`Open-Topo-Data error: ${response.status}`);
+    const data = await response.json() as { results?: { elevation: number | null }[] };
+    res.json({ results: (data.results || []).map(r => ({ elevation: r.elevation ?? 0 })) });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Elevation fetch failed';
+    res.status(502).json({ error: message });
+  }
+});
+
 router.post('/resolve-url', authenticate, async (req: Request, res: Response) => {
   const { url } = req.body;
   if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });

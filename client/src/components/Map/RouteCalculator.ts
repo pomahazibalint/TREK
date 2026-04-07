@@ -1,4 +1,5 @@
 import type { RouteResult, RouteSegment, Waypoint, TransportMode } from '../../types'
+import { mapsApi } from '../../api/client'
 
 const OSRM_BASE = 'https://router.project-osrm.org/route/v1'
 
@@ -149,6 +150,24 @@ export async function calculateMultiModeRoute(
     walkingText: formatDuration(totalDistance / (5000 / 3600)),
     drivingText: formatDuration(totalDistance / (50000 / 3600)),
   }
+}
+
+/** Samples up to 100 evenly-spaced points from route coordinates and fetches their elevation. */
+export async function fetchElevationForRoute(coordinates: [number, number][]): Promise<number[]> {
+  if (coordinates.length === 0) return []
+  const MAX_POINTS = 100
+  const step = coordinates.length <= MAX_POINTS ? 1 : Math.floor(coordinates.length / MAX_POINTS)
+  const sampled: { latitude: number; longitude: number }[] = []
+  for (let i = 0; i < coordinates.length; i += step) {
+    sampled.push({ latitude: coordinates[i][0], longitude: coordinates[i][1] })
+  }
+  // Ensure last point is always included
+  const last = coordinates[coordinates.length - 1]
+  if (sampled[sampled.length - 1].latitude !== last[0] || sampled[sampled.length - 1].longitude !== last[1]) {
+    sampled.push({ latitude: last[0], longitude: last[1] })
+  }
+  const data = await mapsApi.elevation(sampled)
+  return (data.results as { elevation: number }[]).map(r => r.elevation)
 }
 
 export function generateGoogleMapsUrl(places: Waypoint[]): string | null {
