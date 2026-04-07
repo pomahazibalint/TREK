@@ -57,7 +57,7 @@ function totalVotes(poll) {
 // ── Create Poll Modal ────────────────────────────────────────────────────────
 interface CreatePollModalProps {
   onClose: () => void
-  onCreate: (data: { question: string; options: string[]; multi_choice: boolean }) => Promise<void>
+  onCreate: (data: { question: string; options: string[]; multi_choice: boolean; deadline?: string }) => Promise<void>
   t: (key: string) => string
 }
 
@@ -65,6 +65,7 @@ function CreatePollModal({ onClose, onCreate, t }: CreatePollModalProps) {
   const [question, setQuestion] = useState('')
   const [options, setOptions] = useState(['', ''])
   const [multiChoice, setMultiChoice] = useState(false)
+  const [deadline, setDeadline] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   const addOption = () => setOptions(prev => [...prev, ''])
@@ -78,7 +79,7 @@ function CreatePollModal({ onClose, onCreate, t }: CreatePollModalProps) {
     if (!canSubmit) return
     setSubmitting(true)
     try {
-      await onCreate({ question: question.trim(), options: options.filter(o => o.trim()), multiple_choice: multiChoice })
+      await onCreate({ question: question.trim(), options: options.filter(o => o.trim()), multi_choice: multiChoice, deadline: deadline ? new Date(deadline).toISOString() : undefined })
       onClose()
     } catch {} finally { setSubmitting(false) }
   }
@@ -127,6 +128,13 @@ function CreatePollModal({ onClose, onCreate, t }: CreatePollModalProps) {
             </div>
             <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: FONT }}>{t('collab.polls.multiChoice')}</span>
           </label>
+
+          {/* Deadline (optional) */}
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Close at (optional)</div>
+            <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)}
+              style={{ width: '100%', border: '1px solid var(--border-primary)', borderRadius: 10, padding: '8px 12px', fontSize: 13, background: 'var(--bg-input)', color: 'var(--text-primary)', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
+          </div>
 
           {/* Submit */}
           <button type="submit" disabled={!canSubmit} style={{

@@ -249,6 +249,9 @@ export function getPollWithVotes(pollId: number | bigint | string) {
 }
 
 export function listPolls(tripId: string | number) {
+  // Auto-close any polls whose deadline has passed
+  db.prepare(`UPDATE collab_polls SET closed = 1 WHERE trip_id = ? AND closed = 0 AND deadline IS NOT NULL AND deadline < datetime('now')`).run(tripId);
+
   const rows = db.prepare(`
     SELECT id FROM collab_polls WHERE trip_id = ? ORDER BY created_at DESC
   `).all(tripId) as { id: number }[];
@@ -271,6 +274,10 @@ export function votePoll(tripId: string | number, pollId: string | number, userI
   const poll = db.prepare('SELECT * FROM collab_polls WHERE id = ? AND trip_id = ?').get(pollId, tripId) as CollabPoll | undefined;
   if (!poll) return { error: 'not_found' };
   if (poll.closed) return { error: 'closed' };
+  if (poll.deadline && new Date(poll.deadline) < new Date()) {
+    db.prepare('UPDATE collab_polls SET closed = 1 WHERE id = ?').run(pollId);
+    return { error: 'closed' };
+  }
 
   const options = JSON.parse(poll.options);
   if (optionIndex < 0 || optionIndex >= options.length) {
