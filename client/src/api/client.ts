@@ -108,6 +108,10 @@ export const placesApi = {
   },
   importGoogleList: (tripId: number | string, url: string) =>
     apiClient.post(`/trips/${tripId}/places/import/google-list`, { url }).then(r => r.data),
+  importCsv: (tripId: number | string, file: File) => {
+    const fd = new FormData(); fd.append('file', file)
+    return apiClient.post(`/trips/${tripId}/places/import/csv`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data)
+  },
 }
 
 export const assignmentsApi = {

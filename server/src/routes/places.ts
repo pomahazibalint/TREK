@@ -13,11 +13,13 @@ import {
   updatePlace,
   deletePlace,
   importGpx,
+  importCsvPlaces,
   importGoogleList,
   searchPlaceImage,
 } from '../services/placeService';
 
 const gpxUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const router = express.Router({ mergeParams: true });
 
@@ -67,6 +69,27 @@ router.post('/import/gpx', authenticate, requireTripAccess, gpxUpload.single('fi
   }
 
   res.status(201).json({ places: created, count: created.length });
+  for (const place of created) {
+    broadcast(tripId, 'place:created', { place }, req.headers['x-socket-id'] as string);
+  }
+});
+
+// Import places from CSV file
+router.post('/import/csv', authenticate, requireTripAccess, csvUpload.single('file'), (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  if (!checkPermission('place_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))
+    return res.status(403).json({ error: 'No permission' });
+
+  const { tripId } = req.params;
+  const file = (req as any).file;
+  if (!file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const { created, errors } = importCsvPlaces(tripId, file.buffer.toString('utf-8'));
+  if (created.length === 0 && errors.length > 0) {
+    return res.status(400).json({ error: errors[0], errors });
+  }
+
+  res.status(201).json({ places: created, count: created.length, errors });
   for (const place of created) {
     broadcast(tripId, 'place:created', { place }, req.headers['x-socket-id'] as string);
   }

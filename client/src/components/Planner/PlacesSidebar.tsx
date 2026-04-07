@@ -40,6 +40,7 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
   const toast = useToast()
   const ctxMenu = useContextMenu()
   const gpxInputRef = useRef<HTMLInputElement>(null)
+  const csvInputRef = useRef<HTMLInputElement>(null)
   const trip = useTripStore((s) => s.trip)
   const loadTrip = useTripStore((s) => s.loadTrip)
   const can = useCanDo()
@@ -64,6 +65,28 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
       }
     } catch (err: any) {
       toast.error(err?.response?.data?.error || t('places.gpxError'))
+    }
+  }
+
+  const handleCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    try {
+      const result = await placesApi.importCsv(tripId, file)
+      await loadTrip(tripId)
+      toast.success(t('places.csvImported', { count: result.count }))
+      if (result.places?.length > 0) {
+        const importedIds: number[] = result.places.map((p: { id: number }) => p.id)
+        pushUndo?.(t('undo.importCsv'), async () => {
+          for (const id of importedIds) {
+            try { await placesApi.delete(tripId, id) } catch {}
+          }
+          await loadTrip(tripId)
+        })
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('places.csvError'))
     }
   }
 
@@ -146,6 +169,7 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
         </button>}
         {canEditPlaces && <>
         <input ref={gpxInputRef} type="file" accept=".gpx" style={{ display: 'none' }} onChange={handleGpxImport} />
+        <input ref={csvInputRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleCsvImport} />
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
           <button
             onClick={() => gpxInputRef.current?.click()}
@@ -158,6 +182,18 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
             }}
           >
             <Upload size={11} strokeWidth={2} /> {t('places.importGpx')}
+          </button>
+          <button
+            onClick={() => csvInputRef.current?.click()}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+              flex: 1, padding: '5px 12px', borderRadius: 8,
+              border: '1px dashed var(--border-primary)', background: 'none',
+              color: 'var(--text-faint)', fontSize: 11, fontWeight: 500,
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            <Upload size={11} strokeWidth={2} /> {t('places.importCsv')}
           </button>
           <button
             onClick={() => setGoogleListOpen(true)}

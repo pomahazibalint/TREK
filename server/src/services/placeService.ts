@@ -293,6 +293,51 @@ export function importGpx(tripId: string, fileBuffer: Buffer) {
 }
 
 // ---------------------------------------------------------------------------
+// Import CSV
+// ---------------------------------------------------------------------------
+
+export function importCsvPlaces(tripId: string, csvText: string): { created: any[]; errors: string[] } {
+  const lines = csvText.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return { created: [], errors: ['Empty CSV'] };
+
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+  const idx = (key: string) => headers.indexOf(key);
+
+  const created: any[] = [];
+  const errors: string[] = [];
+
+  const insertAll = db.transaction(() => {
+    for (let i = 1; i < lines.length; i++) {
+      // Naive CSV split: does not handle quoted commas — good enough for this use case
+      const cols = lines[i].split(',').map(c => c.trim());
+      const get = (key: string) => { const j = idx(key); return j >= 0 ? cols[j] || null : null; };
+      const name = get('name');
+      if (!name) { errors.push(`Row ${i + 1}: missing name`); continue; }
+      const latStr = get('lat'); const lngStr = get('lng');
+      const lat = latStr ? parseFloat(latStr) : null;
+      const lng = lngStr ? parseFloat(lngStr) : null;
+      if ((latStr && isNaN(lat!)) || (lngStr && isNaN(lng!))) {
+        errors.push(`Row ${i + 1}: invalid lat/lng`); continue;
+      }
+      const result = db.prepare(`
+        INSERT INTO places (trip_id, name, lat, lng, address, description, notes, website, phone, price, currency, transport_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'walking')
+      `).run(
+        tripId, name, lat, lng,
+        get('address'), get('description'), get('notes'),
+        get('website'), get('phone'),
+        get('price') ? parseFloat(get('price')!) : null,
+        get('currency'),
+      );
+      created.push(getPlaceWithTags(Number(result.lastInsertRowid)));
+    }
+  });
+  insertAll();
+
+  return { created, errors };
+}
+
+// ---------------------------------------------------------------------------
 // Import Google Maps list
 // ---------------------------------------------------------------------------
 
