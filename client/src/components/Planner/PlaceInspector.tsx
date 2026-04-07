@@ -128,13 +128,14 @@ interface PlaceInspectorProps {
   onUpdatePlace: (placeId: number, data: Partial<Place>) => void
   leftWidth?: number
   rightWidth?: number
+  hasElevation?: boolean
 }
 
 export default function PlaceInspector({
   place, categories, days, selectedDayId, selectedAssignmentId, assignments, reservations = [],
   onClose, onEdit, onDelete, onAssignToDay, onRemoveAssignment,
   files, onFileUpload, tripMembers = [], onSetParticipants, onUpdatePlace,
-  leftWidth = 0, rightWidth = 0,
+  leftWidth = 0, rightWidth = 0, hasElevation = false,
 }: PlaceInspectorProps) {
   const { t, locale, language } = useTranslation()
   const timeFormat = useSettingsStore(s => s.settings.time_format) || '24h'
@@ -205,7 +206,7 @@ export default function PlaceInspector({
     <div
       style={{
         position: 'absolute',
-        bottom: 20,
+        bottom: hasElevation ? 104 : 20,
         left: `calc(${leftWidth}px + (100% - ${leftWidth}px - ${rightWidth}px) / 2)`,
         transform: 'translateX(-50%)',
         width: `min(800px, calc(100% - ${leftWidth}px - ${rightWidth}px - 32px))`,

@@ -818,6 +818,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
                 onUpdatePlace={async (placeId, data) => { try { await tripActions.updatePlace(tripId, placeId, data) } catch (err: unknown) { toast.error(err instanceof Error ? err.message : 'Unknown error') } }}
                 leftWidth={(isMobile || window.innerWidth < 900) ? 0 : (leftCollapsed ? 0 : leftWidth)}
                 rightWidth={(isMobile || window.innerWidth < 900) ? 0 : (rightCollapsed ? 0 : rightWidth)}
+                hasElevation={enabledAddons.elevation && !!(routeInfo?.elevationProfile && routeInfo.elevationProfile.length > 1)}
               />
             )}
 
