@@ -97,7 +97,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
     toast.info(t('undo.done', { action: label ?? '' }))
   }, [undo, lastActionLabel, toast])
 
-  const [enabledAddons, setEnabledAddons] = useState<Record<string, boolean>>({ packing: true, budget: true, documents: true })
+  const [enabledAddons, setEnabledAddons] = useState<Record<string, boolean>>({ packing: true, budget: true, documents: true, elevation: true })
   const [tripAccommodations, setTripAccommodations] = useState<Accommodation[]>([])
   const [allowedFileTypes, setAllowedFileTypes] = useState<string | null>(null)
   const [tripMembers, setTripMembers] = useState<TripMember[]>([])
@@ -116,7 +116,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
       data.addons.forEach(a => { map[a.id] = true })
       // Check if any photo provider is enabled (for memories tab to show)
       const hasPhotoProviders = data.addons.some(a => a.type === 'photo_provider')
-      setEnabledAddons({ packing: !!map.packing, budget: !!map.budget, documents: !!map.documents, collab: !!map.collab, memories: hasPhotoProviders })
+      setEnabledAddons({ packing: !!map.packing, budget: !!map.budget, documents: !!map.documents, collab: !!map.collab, memories: hasPhotoProviders, elevation: !!map.elevation })
     }).catch(() => {})
     authApi.getAppConfig().then(config => {
       if (config.allowed_file_types) setAllowedFileTypes(config.allowed_file_types)
@@ -242,7 +242,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
     })
   }, [places, mapCategoryFilter, assignments, expandedDayIds])
 
-  const { route, routeSegments, routeInfo, setRoute, setRouteInfo, updateRouteForDay } = useRouteCalculation({ assignments, days } as any, selectedDayId, transportMode)
+  const { route, routeSegments, routeInfo, setRoute, setRouteInfo, updateRouteForDay } = useRouteCalculation({ assignments, days } as any, selectedDayId, transportMode, enabledAddons.elevation)
 
   const handleSelectDay = useCallback((dayId, skipFit) => {
     const changed = dayId !== selectedDayId
@@ -610,6 +610,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
               rightWidth={rightCollapsed ? 0 : rightWidth}
               hasInspector={!!selectedPlace}
               hasDayDetail={!!showDayDetail && !selectedPlace}
+              elevationEnabled={enabledAddons.elevation}
             />
 
 

@@ -156,13 +156,14 @@ export async function calculateMultiModeRoute(
 export async function fetchElevationForRoute(coordinates: [number, number][]): Promise<number[]> {
   if (coordinates.length === 0) return []
   const MAX_POINTS = 100
-  const step = coordinates.length <= MAX_POINTS ? 1 : Math.floor(coordinates.length / MAX_POINTS)
+  const last = coordinates[coordinates.length - 1]
+  const step = coordinates.length <= MAX_POINTS ? 1 : Math.ceil(coordinates.length / (MAX_POINTS - 1))
   const sampled: { latitude: number; longitude: number }[] = []
   for (let i = 0; i < coordinates.length; i += step) {
+    if (sampled.length >= MAX_POINTS - 1) break
     sampled.push({ latitude: coordinates[i][0], longitude: coordinates[i][1] })
   }
   // Ensure last point is always included
-  const last = coordinates[coordinates.length - 1]
   if (sampled[sampled.length - 1].latitude !== last[0] || sampled[sampled.length - 1].longitude !== last[1]) {
     sampled.push({ latitude: last[0], longitude: last[1] })
   }

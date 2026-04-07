@@ -505,6 +505,7 @@ export const MapView = memo(function MapView({
   rightWidth = 0,
   hasInspector = false,
   hasDayDetail = false,
+  elevationEnabled = true,
 }: {
   places?: any[]
   dayPlaces?: any[]
@@ -524,6 +525,7 @@ export const MapView = memo(function MapView({
   rightWidth?: number
   hasInspector?: boolean
   hasDayDetail?: boolean
+  elevationEnabled?: boolean
 }) {
   // Dynamic padding: account for sidebars + bottom inspector + day detail panel
   const paddingOpts = useMemo(() => {
@@ -712,8 +714,8 @@ export const MapView = memo(function MapView({
         } catch { return null }
       })}
     </MapContainer>
-    {routeInfo?.elevationProfile && routeInfo.elevationProfile.length > 1 && (
-      <ElevationChart profile={routeInfo.elevationProfile} distance={routeInfo.distance} />
+    {elevationEnabled && routeInfo?.elevationProfile && routeInfo.elevationProfile.length > 1 && (
+      <ElevationChart profile={routeInfo.elevationProfile} distance={routeInfo.distance} leftOffset={leftWidth} rightOffset={rightWidth} />
     )}
   </>
   )

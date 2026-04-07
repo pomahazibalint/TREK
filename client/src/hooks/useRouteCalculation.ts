@@ -13,7 +13,8 @@ import type { RouteSegment, RouteResult, TransportMode, Assignment } from '../ty
 export function useRouteCalculation(
   tripStore: TripStoreState,
   selectedDayId: number | null,
-  transportMode: TransportMode = 'walking'
+  transportMode: TransportMode = 'walking',
+  elevationEnabled = true
 ) {
   const [route, setRoute] = useState<[number, number][] | null>(null)
   const [routeInfo, setRouteInfo] = useState<RouteResult | null>(null)
@@ -56,11 +57,13 @@ export function useRouteCalculation(
         setRouteSegments(result.segments ?? [])
         setRouteInfo(result)
         // Fetch elevation in the background and update routeInfo when ready
-        fetchElevationForRoute(result.coordinates).then(elevationProfile => {
-          if (!controller.signal.aborted) {
-            setRouteInfo(prev => prev ? { ...prev, elevationProfile } : null)
-          }
-        }).catch(() => {/* elevation is optional */})
+        if (elevationEnabled) {
+          fetchElevationForRoute(result.coordinates).then(elevationProfile => {
+            if (!controller.signal.aborted) {
+              setRouteInfo(prev => prev ? { ...prev, elevationProfile } : null)
+            }
+          }).catch(() => {/* elevation is optional */})
+        }
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
@@ -69,7 +72,7 @@ export function useRouteCalculation(
       setRouteSegments([])
       setRouteInfo(null)
     }
-  }, [routeCalcEnabled, transportMode])
+  }, [routeCalcEnabled, transportMode, elevationEnabled])
 
   // Recalculate when assignments change OR when transport mode changes
   const assignments = tripStore.assignments

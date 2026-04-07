@@ -3,9 +3,11 @@ import React, { useMemo } from 'react'
 interface ElevationChartProps {
   profile: number[]
   distance: number // total route distance in meters
+  leftOffset?: number
+  rightOffset?: number
 }
 
-export default function ElevationChart({ profile, distance }: ElevationChartProps) {
+export default function ElevationChart({ profile, distance, leftOffset = 0, rightOffset = 0 }: ElevationChartProps) {
   const { points, minEl, maxEl } = useMemo(() => {
     if (!profile || profile.length < 2) return { points: '', minEl: 0, maxEl: 0 }
     const minEl = Math.min(...profile)
@@ -26,12 +28,20 @@ export default function ElevationChart({ profile, distance }: ElevationChartProp
 
   const distKm = (distance / 1000).toFixed(1)
 
+  // Add the 10px inset the sidebar containers use, so the chart sits between them rather than behind them
+  const GAP = 8
+  const left = leftOffset > 0 ? leftOffset + 10 + GAP : GAP
+  const right = rightOffset > 0 ? rightOffset + 10 + GAP : GAP
+
   return (
     <div style={{
-      position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 500,
-      background: 'var(--bg-card, rgba(255,255,255,0.95))',
-      backdropFilter: 'blur(8px)',
-      borderTop: '1px solid var(--border-faint)',
+      position: 'absolute', bottom: 10, left, right, zIndex: 500,
+      background: 'var(--sidebar-bg)',
+      backdropFilter: 'blur(24px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+      border: '1px solid var(--border-faint)',
+      borderRadius: 12,
+      boxShadow: 'var(--sidebar-shadow)',
       padding: '6px 12px 8px',
       fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif",
     }}>

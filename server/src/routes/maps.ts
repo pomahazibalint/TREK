@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
+import { isAddonEnabled } from '../services/adminService';
 import { AuthRequest } from '../types';
 import {
   searchPlaces,
@@ -78,13 +79,16 @@ router.get('/reverse', authenticate, async (req: Request, res: Response) => {
 
 // POST /resolve-url
 router.post('/elevation', authenticate, async (req: Request, res: Response) => {
+  if (!isAddonEnabled('elevation')) {
+    return res.status(403).json({ error: 'Elevation addon is disabled' });
+  }
   const { locations } = req.body;
   if (!Array.isArray(locations) || locations.length === 0) {
     return res.status(400).json({ error: 'locations array is required' });
   }
   const locationStr = locations.map((l: { latitude: number; longitude: number }) => `${l.latitude},${l.longitude}`).join('|');
   try {
-    const response = await fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${encodeURIComponent(locationStr)}`);
+    const response = await fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${locationStr}`);
     if (!response.ok) throw new Error(`Open-Topo-Data error: ${response.status}`);
     const data = await response.json() as { results?: { elevation: number | null }[] };
     res.json({ results: (data.results || []).map(r => ({ elevation: r.elevation ?? 0 })) });
