@@ -279,9 +279,11 @@ export function importGpx(tripId: string, fileBuffer: Buffer) {
     INSERT INTO places (trip_id, name, description, lat, lng, transport_mode, route_geometry)
     VALUES (?, ?, ?, ?, ?, 'walking', ?)
   `);
+  const existsStmt = db.prepare('SELECT id FROM places WHERE trip_id = ? AND name = ? AND lat = ? AND lng = ?');
   const created: any[] = [];
   const insertAll = db.transaction(() => {
     for (const wp of waypoints) {
+      if (existsStmt.get(tripId, wp.name, wp.lat, wp.lng)) continue;
       const result = insertStmt.run(tripId, wp.name, wp.description, wp.lat, wp.lng, wp.routeGeometry || null);
       const place = getPlaceWithTags(Number(result.lastInsertRowid));
       created.push(place);
@@ -305,6 +307,11 @@ export function importCsvPlaces(tripId: string, csvText: string): { created: any
 
   const created: any[] = [];
   const errors: string[] = [];
+  const csvExistsStmt = db.prepare('SELECT id FROM places WHERE trip_id = ? AND name = ? AND lat = ? AND lng = ?');
+  const csvInsertStmt = db.prepare(`
+    INSERT INTO places (trip_id, name, lat, lng, address, description, notes, website, phone, price, currency, transport_mode)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'walking')
+  `);
 
   const insertAll = db.transaction(() => {
     for (let i = 1; i < lines.length; i++) {
@@ -319,10 +326,8 @@ export function importCsvPlaces(tripId: string, csvText: string): { created: any
       if ((latStr && isNaN(lat!)) || (lngStr && isNaN(lng!))) {
         errors.push(`Row ${i + 1}: invalid lat/lng`); continue;
       }
-      const result = db.prepare(`
-        INSERT INTO places (trip_id, name, lat, lng, address, description, notes, website, phone, price, currency, transport_mode)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'walking')
-      `).run(
+      if (lat !== null && lng !== null && csvExistsStmt.get(tripId, name, lat, lng)) continue;
+      const result = csvInsertStmt.run(
         tripId, name, lat, lng,
         get('address'), get('description'), get('notes'),
         get('website'), get('phone'),
@@ -410,14 +415,16 @@ export async function importGoogleList(tripId: string, url: string) {
     return { error: 'No places with coordinates found in list', status: 400 };
   }
 
-  // Insert places into trip
+  // Insert places into trip, skipping duplicates by (name, lat, lng)
   const insertStmt = db.prepare(`
     INSERT INTO places (trip_id, name, lat, lng, notes, transport_mode)
     VALUES (?, ?, ?, ?, ?, 'walking')
   `);
+  const existsStmt = db.prepare('SELECT id FROM places WHERE trip_id = ? AND name = ? AND lat = ? AND lng = ?');
   const created: any[] = [];
   const insertAll = db.transaction(() => {
     for (const p of places) {
+      if (existsStmt.get(tripId, p.name, p.lat, p.lng)) continue;
       const result = insertStmt.run(tripId, p.name, p.lat, p.lng, p.notes);
       const place = getPlaceWithTags(Number(result.lastInsertRowid));
       created.push(place);
