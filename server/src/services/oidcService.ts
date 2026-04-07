@@ -269,10 +269,15 @@ export function findOrCreateUser(
   }
 
   if (!isFirstUser && !validInvite) {
-    const setting = db.prepare("SELECT value FROM app_settings WHERE key = 'allow_registration'").get() as
+    const allowRegSetting = db.prepare("SELECT value FROM app_settings WHERE key = 'allow_registration'").get() as
       | { value: string }
       | undefined;
-    if (setting?.value === 'false') {
+    const autoProvisionSetting = db.prepare("SELECT value FROM app_settings WHERE key = 'oidc_auto_provision'").get() as
+      | { value: string }
+      | undefined;
+    const allowReg = allowRegSetting?.value !== 'false';
+    const autoProvision = autoProvisionSetting?.value === 'true';
+    if (!allowReg && !autoProvision) {
       return { error: 'registration_disabled' };
     }
   }

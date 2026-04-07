@@ -244,6 +244,7 @@ export function getOidcSettings() {
     client_secret_set: !!secret,
     display_name: get('oidc_display_name'),
     oidc_only: get('oidc_only') === 'true',
+    oidc_auto_provision: get('oidc_auto_provision') === 'true',
     discovery_url: get('oidc_discovery_url'),
   };
 }
@@ -254,6 +255,7 @@ export function updateOidcSettings(data: {
   client_secret?: string;
   display_name?: string;
   oidc_only?: boolean;
+  oidc_auto_provision?: boolean;
   discovery_url?: string;
 }) {
   const set = (key: string, val: string) => db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)").run(key, val || '');
@@ -262,6 +264,7 @@ export function updateOidcSettings(data: {
   if (data.client_secret !== undefined) set('oidc_client_secret', maybe_encrypt_api_key(data.client_secret) ?? '');
   set('oidc_display_name', data.display_name ?? '');
   set('oidc_only', data.oidc_only ? 'true' : 'false');
+  set('oidc_auto_provision', data.oidc_auto_provision ? 'true' : 'false');
   set('oidc_discovery_url', data.discovery_url ?? '');
 }
 

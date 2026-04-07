@@ -46,6 +46,7 @@ interface OidcConfig {
   client_secret_set: boolean
   display_name: string
   oidc_only: boolean
+  oidc_auto_provision: boolean
   discovery_url: string
 }
 
@@ -191,7 +192,7 @@ export default function AdminPage(): React.ReactElement {
   useEffect(() => { adminApi.getBagTracking().then(d => setBagTrackingEnabled(d.enabled)).catch(() => {}) }, [])
 
   // OIDC config
-  const [oidcConfig, setOidcConfig] = useState<OidcConfig>({ issuer: '', client_id: '', client_secret: '', client_secret_set: false, display_name: '', oidc_only: false, discovery_url: '' })
+  const [oidcConfig, setOidcConfig] = useState<OidcConfig>({ issuer: '', client_id: '', client_secret: '', client_secret_set: false, display_name: '', oidc_only: false, oidc_auto_provision: false, discovery_url: '' })
   const [savingOidc, setSavingOidc] = useState<boolean>(false)
 
   // Registration toggle
@@ -1049,11 +1050,29 @@ export default function AdminPage(): React.ReactElement {
                     </button>
                   </div>
 
+                  {/* SSO auto-provisioning toggle */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Auto-provision users via SSO</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Allow new users to sign up via SSO even when registration is disabled</p>
+                    </div>
+                    <button
+                      onClick={() => setOidcConfig(c => ({ ...c, oidc_auto_provision: !c.oidc_auto_provision }))}
+                      className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ml-4"
+                      style={{ background: oidcConfig.oidc_auto_provision ? 'var(--text-primary)' : 'var(--border-primary)' }}
+                    >
+                      <span
+                        className="absolute left-0.5 h-5 w-5 rounded-full bg-white transition-transform duration-200"
+                        style={{ transform: oidcConfig.oidc_auto_provision ? 'translateX(20px)' : 'translateX(0)' }}
+                      />
+                    </button>
+                  </div>
+
                   <button
                     onClick={async () => {
                       setSavingOidc(true)
                       try {
-                        const payload: Record<string, unknown> = { issuer: oidcConfig.issuer, client_id: oidcConfig.client_id, display_name: oidcConfig.display_name, oidc_only: oidcConfig.oidc_only, discovery_url: oidcConfig.discovery_url }
+                        const payload: Record<string, unknown> = { issuer: oidcConfig.issuer, client_id: oidcConfig.client_id, display_name: oidcConfig.display_name, oidc_only: oidcConfig.oidc_only, oidc_auto_provision: oidcConfig.oidc_auto_provision, discovery_url: oidcConfig.discovery_url }
                         if (oidcConfig.client_secret) payload.client_secret = oidcConfig.client_secret
                         await adminApi.updateOidc(payload)
                         toast.success(t('admin.oidcSaved'))
