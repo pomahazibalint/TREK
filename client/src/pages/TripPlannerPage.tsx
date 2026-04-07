@@ -783,6 +783,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
                   onAccommodationChange={loadAccommodations}
                   leftWidth={isMobile ? 0 : (leftCollapsed ? 0 : leftWidth)}
                   rightWidth={isMobile ? 0 : (rightCollapsed ? 0 : rightWidth)}
+                  hasElevation={enabledAddons.elevation && !!(routeInfo?.elevationProfile && routeInfo.elevationProfile.length > 1)}
                 />
               )
             })()}

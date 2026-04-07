@@ -54,9 +54,10 @@ interface DayDetailPanelProps {
   onAccommodationChange: () => void
   leftWidth?: number
   rightWidth?: number
+  hasElevation?: boolean
 }
 
-export default function DayDetailPanel({ day, days, places, categories = [], tripId, assignments, reservations = [], lat, lng, onClose, onAccommodationChange, leftWidth = 0, rightWidth = 0 }: DayDetailPanelProps) {
+export default function DayDetailPanel({ day, days, places, categories = [], tripId, assignments, reservations = [], lat, lng, onClose, onAccommodationChange, leftWidth = 0, rightWidth = 0, hasElevation = false }: DayDetailPanelProps) {
   const { t, language, locale } = useTranslation()
   const can = useCanDo()
   const tripObj = useTripStore((s) => s.trip)
@@ -163,7 +164,7 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
   const font = { fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif" }
 
   return (
-    <div style={{ position: 'fixed', bottom: 20, left: `calc(${leftWidth}px + (100vw - ${leftWidth}px - ${rightWidth}px) / 2)`, transform: 'translateX(-50%)', width: `min(800px, calc(100vw - ${leftWidth}px - ${rightWidth}px - 32px))`, zIndex: 50, ...font }}>
+    <div style={{ position: 'fixed', bottom: hasElevation ? 104 : 20, left: `calc(${leftWidth}px + (100vw - ${leftWidth}px - ${rightWidth}px) / 2)`, transform: 'translateX(-50%)', width: `min(800px, calc(100vw - ${leftWidth}px - ${rightWidth}px - 32px))`, zIndex: 50, ...font }}>
       <div style={{
         background: 'var(--bg-elevated)',
         backdropFilter: 'blur(40px) saturate(180%)',
