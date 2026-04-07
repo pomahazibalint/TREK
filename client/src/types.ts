@@ -64,6 +64,7 @@ export interface Place {
   phone: string | null
   website: string | null
   notes: string | null
+  opening_hours: string[] | null
   created_at: string
 }
 

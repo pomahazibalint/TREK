@@ -29,6 +29,7 @@ interface PlaceFormData {
   duration_minutes: string
   google_place_id?: string
   osm_id?: string
+  opening_hours?: string[] | null
 }
 
 const DEFAULT_FORM: PlaceFormData = {
@@ -163,6 +164,7 @@ export default function PlaceFormModal({
       osm_id: result.osm_id || prev.osm_id,
       website: result.website || prev.website,
       phone: result.phone || prev.phone,
+      opening_hours: result.opening_hours || null,
     }))
     setMapsResults([])
     setMapsSearch('')

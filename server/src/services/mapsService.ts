@@ -307,7 +307,7 @@ export async function searchPlaces(userId: number, query: string, lang?: string)
     headers: {
       'Content-Type': 'application/json',
       'X-Goog-Api-Key': apiKey,
-      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.websiteUri,places.nationalPhoneNumber,places.types',
+      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.websiteUri,places.nationalPhoneNumber,places.types,places.regularOpeningHours',
     },
     body: JSON.stringify({ textQuery: query, languageCode: lang || 'en' }),
   });
@@ -329,6 +329,7 @@ export async function searchPlaces(userId: number, query: string, lang?: string)
     rating: p.rating || null,
     website: p.websiteUri || null,
     phone: p.nationalPhoneNumber || null,
+    opening_hours: p.regularOpeningHours?.weekdayDescriptions || null,
     source: 'google',
   }));
 

@@ -901,6 +901,10 @@ function runMigrations(db: Database.Database): void {
       try { db.exec('ALTER TABLE budget_items DROP COLUMN days'); } catch {}
       try { db.exec('ALTER TABLE budget_item_members DROP COLUMN paid'); } catch {}
     },
+    // Migration 77: Store opening hours on places for schedule warnings
+    () => {
+      try { db.exec('ALTER TABLE places ADD COLUMN opening_hours TEXT'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+    },
   ];
 
   if (currentVersion < migrations.length) {

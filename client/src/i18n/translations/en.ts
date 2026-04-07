@@ -1390,6 +1390,7 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'planner.keepPosition': 'Keep position during route optimization',
   'planner.dayDetails': 'Day details',
   'planner.dayN': 'Day {n}',
+  'planner.mayBeClosed': 'May be closed at this time',
 
   // Dashboard Stats
   'stats.countries': 'Countries',

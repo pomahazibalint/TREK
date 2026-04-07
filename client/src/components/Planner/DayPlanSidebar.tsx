@@ -233,6 +233,47 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
 
   const TRANSPORT_TYPES = new Set(['flight', 'train', 'bus', 'car', 'cruise'])
 
+  // Returns true when place_time falls outside the stored opening hours for that weekday.
+  // opening_hours is an array of 7 strings like "Monday: 9:00 AM – 10:00 PM"
+  const isOutsideOpeningHours = (placeTime: string, openingHours: string[], dayDate: string): boolean => {
+    try {
+      const d = new Date(dayDate + 'T00:00:00')
+      // Sunday=0 in JS; Google weekdayDescriptions[0] = Monday … [6] = Sunday
+      const jsDay = d.getDay()
+      const googleIdx = jsDay === 0 ? 6 : jsDay - 1
+      const entry = openingHours[googleIdx]
+      if (!entry) return false
+      const colonIdx = entry.indexOf(':')
+      if (colonIdx < 0) return false
+      const hoursStr = entry.slice(colonIdx + 2).trim()
+      if (hoursStr.toLowerCase().includes('closed')) return true
+      if (hoursStr.toLowerCase().includes('open 24')) return false
+      const dashIdx = hoursStr.indexOf('–')
+      if (dashIdx < 0) return false
+      const parseAMPM = (s: string): number => {
+        const clean = s.trim()
+        const pm = clean.toUpperCase().includes('PM')
+        const digits = clean.replace(/[^0-9:]/g, '')
+        const [hStr, mStr] = digits.split(':')
+        let h = parseInt(hStr, 10)
+        const m = parseInt(mStr || '0', 10)
+        if (pm && h !== 12) h += 12
+        if (!pm && h === 12) h = 0
+        return h * 60 + m
+      }
+      const [openStr, closeStr] = [hoursStr.slice(0, dashIdx), hoursStr.slice(dashIdx + 1)]
+      const openMin = parseAMPM(openStr)
+      const closeMin = parseAMPM(closeStr)
+      const [ph, pm2] = placeTime.split(':').map(Number)
+      const visitMin = ph * 60 + pm2
+      if (closeMin < openMin) {
+        // spans midnight
+        return visitMin < openMin && visitMin > closeMin
+      }
+      return visitMin < openMin || visitMin > closeMin
+    } catch { return false }
+  }
+
   // Determine if a reservation's end_time represents a different date (multi-day)
   const getEndDate = (r: Reservation) => {
     const endStr = r.reservation_end_time || ''
@@ -1326,6 +1367,11 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0, fontSize: 10, color: 'var(--text-faint)', fontWeight: 400, marginLeft: 6 }}>
                                     <Clock size={9} strokeWidth={2} />
                                     {formatTime(place.place_time, locale, timeFormat)}{place.end_time ? ` – ${formatTime(place.end_time, locale, timeFormat)}` : ''}
+                                    {place.opening_hours && day.date && isOutsideOpeningHours(place.place_time, place.opening_hours, day.date) && (
+                                      <span title={t('planner.mayBeClosed')} style={{ color: '#f97316', display: 'inline-flex', alignItems: 'center' }}>
+                                        <AlertTriangle size={9} strokeWidth={2.5} />
+                                      </span>
+                                    )}
                                   </span>
                                 )}
                               </div>

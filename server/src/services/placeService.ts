@@ -77,26 +77,27 @@ export function createPlace(
     place_time?: string; end_time?: string;
     duration_minutes?: number; notes?: string; image_url?: string;
     google_place_id?: string; osm_id?: string; website?: string; phone?: string;
-    transport_mode?: string; tags?: number[];
+    transport_mode?: string; tags?: number[]; opening_hours?: string[] | null;
   },
 ) {
   const {
     name, description, lat, lng, address, category_id, price, currency,
     place_time, end_time,
     duration_minutes, notes, image_url, google_place_id, osm_id, website, phone,
-    transport_mode, tags = [],
+    transport_mode, tags = [], opening_hours,
   } = body;
 
   const result = db.prepare(`
     INSERT INTO places (trip_id, name, description, lat, lng, address, category_id, price, currency,
       place_time, end_time,
-      duration_minutes, notes, image_url, google_place_id, osm_id, website, phone, transport_mode)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      duration_minutes, notes, image_url, google_place_id, osm_id, website, phone, transport_mode, opening_hours)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     tripId, name, description || null, lat || null, lng || null, address || null,
     category_id || null, price || null, currency || null,
     place_time || null, end_time || null, duration_minutes || 60, notes || null, image_url || null,
     google_place_id || null, osm_id || null, website || null, phone || null, transport_mode || 'walking',
+    opening_hours ? JSON.stringify(opening_hours) : null,
   );
 
   const placeId = result.lastInsertRowid;
