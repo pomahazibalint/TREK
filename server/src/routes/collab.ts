@@ -255,6 +255,31 @@ router.post('/messages', authenticate, validateStringLengths({ text: 5000 }), (r
   res.status(201).json({ message: result.message });
   broadcast(tripId, 'collab:message:created', { message: result.message }, req.headers['x-socket-id'] as string);
 
+  // Fire @mention in-app notifications
+  const mentions = [...text.matchAll(/@(\w+)/g)].map((m: RegExpMatchArray) => m[1]);
+  if (mentions.length > 0) {
+    import('../services/inAppNotifications').then(({ createNotificationForRecipient }) => {
+      const members = db.prepare(`
+        SELECT u.id, u.username FROM users u
+        WHERE u.id = (SELECT user_id FROM trips WHERE id = ?)
+        UNION
+        SELECT u.id, u.username FROM users u
+        JOIN trip_members tm ON tm.user_id = u.id WHERE tm.trip_id = ?
+      `).all(tripId, tripId) as { id: number; username: string }[];
+      for (const username of mentions) {
+        const mentioned = members.find(m => m.username === username);
+        if (mentioned && mentioned.id !== authReq.user.id) {
+          createNotificationForRecipient(mentioned.id, {
+            type: 'navigate',
+            title: `@${authReq.user.username || 'Someone'} mentioned you`,
+            body: text.length > 80 ? text.substring(0, 80) + '…' : text,
+            url: `/trips/${tripId}/collab`,
+          }).catch(() => {});
+        }
+      }
+    });
+  }
+
   // Notify trip members about new chat message
   import('../services/notificationService').then(({ send }) => {
     const tripInfo = db.prepare('SELECT title FROM trips WHERE id = ?').get(tripId) as { title: string } | undefined;

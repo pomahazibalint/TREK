@@ -213,23 +213,30 @@ function ReactionMenu({ x, y, onReact, onClose }: ReactionMenuProps) {
   )
 }
 
-/* ── Message Text with clickable URLs ── */
+/* ── Message Text with clickable URLs and @mention highlights ── */
+const MENTION_REGEX = /@(\w+)/g
+
 interface MessageTextProps {
   text: string
 }
 
 function MessageText({ text }: MessageTextProps) {
-  const parts = text.split(URL_REGEX)
-  const urls = text.match(URL_REGEX) || []
-  const result = []
-  parts.forEach((part, i) => {
-    if (part) result.push(part)
-    if (urls[i]) result.push(
-      <a key={i} href={urls[i]} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2, opacity: 0.85 }}>
-        {urls[i]}
-      </a>
-    )
-  })
+  const result: React.ReactNode[] = []
+  let last = 0
+  const combined = /https?:\/\/[^\s<>"']+|@\w+/g
+  let m: RegExpExecArray | null
+  let key = 0
+  while ((m = combined.exec(text)) !== null) {
+    if (m.index > last) result.push(text.slice(last, m.index))
+    const token = m[0]
+    if (token.startsWith('http')) {
+      result.push(<a key={key++} href={token} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2, opacity: 0.85 }}>{token}</a>)
+    } else {
+      result.push(<span key={key++} style={{ background: 'rgba(59,130,246,0.15)', color: '#3b82f6', borderRadius: 4, padding: '0 3px', fontWeight: 600 }}>{token}</span>)
+    }
+    last = m.index + token.length
+  }
+  if (last < text.length) result.push(text.slice(last))
   return <>{result}</>
 }
 
@@ -370,6 +377,8 @@ export default function CollabChat({ tripId, currentUser }: CollabChatProps) {
   const [showEmoji, setShowEmoji] = useState(false)
   const [reactMenu, setReactMenu] = useState(null) // { msgId, x, y }
   const [deletingIds, setDeletingIds] = useState(new Set())
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [tripMembers, setTripMembers] = useState<{ id: number; username: string }[]>([])
 
   const containerRef = useRef(null)
   const messagesRef = useRef(messages)
@@ -390,6 +399,16 @@ export default function CollabChat({ tripId, currentUser }: CollabChatProps) {
     if (!el) return
     isAtBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
   }, [])
+
+  /* ── load trip members for @mention ── */
+  useEffect(() => {
+    const store = useTripStore.getState()
+    const members = [
+      ...(store.tripMembers || []),
+      store.trip ? { id: store.trip.owner_id ?? 0, username: (store.trip as any).owner_username ?? '' } : null,
+    ].filter(Boolean).filter(m => m!.username) as { id: number; username: string }[]
+    setTripMembers(members)
+  }, [tripId])
 
   /* ── load messages ── */
   useEffect(() => {
@@ -443,9 +462,10 @@ export default function CollabChat({ tripId, currentUser }: CollabChatProps) {
     return () => removeListener(handler)
   }, [tripId, scrollToBottom])
 
-  /* ── auto-resize textarea ── */
+  /* ── auto-resize textarea + @mention detection ── */
   const handleTextChange = useCallback((e) => {
-    setText(e.target.value)
+    const val = e.target.value
+    setText(val)
     const ta = textareaRef.current
     if (ta) {
       ta.style.height = 'auto'
@@ -453,6 +473,10 @@ export default function CollabChat({ tripId, currentUser }: CollabChatProps) {
       ta.style.height = h + 'px'
       ta.style.overflowY = ta.scrollHeight > 100 ? 'auto' : 'hidden'
     }
+    const cursor = e.target.selectionStart
+    const beforeCursor = val.slice(0, cursor)
+    const mentionMatch = beforeCursor.match(/@(\w*)$/)
+    setMentionQuery(mentionMatch ? mentionMatch[1] : null)
   }, [])
 
   /* ── send ── */
@@ -474,9 +498,24 @@ export default function CollabChat({ tripId, currentUser }: CollabChatProps) {
     } catch {} finally { setSending(false) }
   }, [text, sending, replyTo, tripId, scrollToBottom])
 
+  const insertMention = useCallback((username: string) => {
+    const ta = textareaRef.current as HTMLTextAreaElement | null
+    if (!ta) return
+    const cursor = ta.selectionStart
+    const before = text.slice(0, cursor)
+    const after = text.slice(cursor)
+    const newBefore = before.replace(/@\w*$/, `@${username} `)
+    setText(newBefore + after)
+    setMentionQuery(null)
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(newBefore.length, newBefore.length) }, 0)
+  }, [text])
+
   const handleKeyDown = useCallback((e) => {
+    if (mentionQuery !== null) {
+      if (e.key === 'Escape') { setMentionQuery(null); return }
+    }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
-  }, [handleSend])
+  }, [handleSend, mentionQuery])
 
   const handleDelete = useCallback(async (msgId) => {
     const msg = messages.find(m => m.id === msgId)
@@ -796,22 +835,54 @@ export default function CollabChat({ tripId, currentUser }: CollabChatProps) {
             </button>
           )}
 
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            disabled={!canEdit}
-            style={{
-              flex: 1, resize: 'none', border: '1px solid var(--border-primary)', borderRadius: 20,
-              padding: '8px 14px', fontSize: 14, lineHeight: 1.4, fontFamily: 'inherit',
-              background: 'var(--bg-input)', color: 'var(--text-primary)', outline: 'none',
-              maxHeight: 100, overflowY: 'hidden',
-              opacity: canEdit ? 1 : 0.5,
-            }}
-            placeholder={t('collab.chat.placeholder')}
-            value={text}
-            onChange={handleTextChange}
-            onKeyDown={handleKeyDown}
-          />
+          <div style={{ flex: 1, position: 'relative' }}>
+            {mentionQuery !== null && (() => {
+              const filtered = tripMembers.filter(m =>
+                m.username.toLowerCase().startsWith(mentionQuery.toLowerCase())
+              )
+              if (filtered.length === 0) return null
+              return (
+                <div style={{
+                  position: 'absolute', bottom: '100%', left: 0, marginBottom: 4,
+                  background: 'var(--bg-primary)', border: '1px solid var(--border-primary)',
+                  borderRadius: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  minWidth: 160, maxHeight: 180, overflowY: 'auto', zIndex: 100,
+                }}>
+                  {filtered.map(m => (
+                    <button
+                      key={m.id}
+                      onMouseDown={(e) => { e.preventDefault(); insertMention(m.username) }}
+                      style={{
+                        display: 'block', width: '100%', textAlign: 'left',
+                        padding: '7px 12px', border: 'none', background: 'transparent',
+                        color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      @{m.username}
+                    </button>
+                  ))}
+                </div>
+              )
+            })()}
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              disabled={!canEdit}
+              style={{
+                width: '100%', resize: 'none', border: '1px solid var(--border-primary)', borderRadius: 20,
+                padding: '8px 14px', fontSize: 14, lineHeight: 1.4, fontFamily: 'inherit',
+                background: 'var(--bg-input)', color: 'var(--text-primary)', outline: 'none',
+                maxHeight: 100, overflowY: 'hidden',
+                opacity: canEdit ? 1 : 0.5, boxSizing: 'border-box',
+              }}
+              placeholder={t('collab.chat.placeholder')}
+              value={text}
+              onChange={handleTextChange}
+              onKeyDown={handleKeyDown}
+            />
+          </div>
 
           {/* Send */}
           {canEdit && (
