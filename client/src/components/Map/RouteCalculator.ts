@@ -141,7 +141,7 @@ export async function calculateRoute(
       const from: [number, number] = [waypoints[i].lat, waypoints[i].lng]
       const to: [number, number] = [waypoints[i + 1].lat, waypoints[i + 1].lng]
       const geometry = legGeometries[i] ?? [from, to]
-      const mid: [number, number] = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2]
+      const mid = geometryMidpoint(geometry)
       return {
         mid, from, to, geometry, mode: profile,
         walkingText: formatDuration(leg.distance / (5000 / 3600)),
