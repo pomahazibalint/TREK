@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useSettingsStore } from '../store/settingsStore'
-import { calculateMultiModeRoute, fetchElevationForRoute } from '../components/Map/RouteCalculator'
+import { calculateMultiModeRoute, fetchElevationForRoute, elevationCacheKey, getCachedElevation, setCachedElevation } from '../components/Map/RouteCalculator'
 import type { TripStoreState } from '../store/tripStore'
 import type { RouteSegment, RouteResult, TransportMode, Assignment } from '../types'
 
@@ -56,13 +56,19 @@ export function useRouteCalculation(
         setRoute(result.coordinates)
         setRouteSegments(result.segments ?? [])
         setRouteInfo(result)
-        // Fetch elevation in the background and update routeInfo when ready
         if (elevationEnabled) {
-          fetchElevationForRoute(result.coordinates).then(elevationProfile => {
-            if (!controller.signal.aborted) {
-              setRouteInfo(prev => prev ? { ...prev, elevationProfile } : null)
-            }
-          }).catch(() => {/* elevation is optional */})
+          const elevKey = elevationCacheKey(waypoints, legModes)
+          const cachedElev = getCachedElevation(elevKey)
+          if (cachedElev) {
+            setRouteInfo(prev => prev ? { ...prev, elevationProfile: cachedElev } : null)
+          } else {
+            fetchElevationForRoute(result.coordinates).then(elevationProfile => {
+              if (!controller.signal.aborted) {
+                setCachedElevation(elevKey, elevationProfile)
+                setRouteInfo(prev => prev ? { ...prev, elevationProfile } : null)
+              }
+            }).catch(() => {/* elevation is optional */})
+          }
         }
       }
     } catch (err: unknown) {

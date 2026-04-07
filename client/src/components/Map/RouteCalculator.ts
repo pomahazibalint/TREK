@@ -9,8 +9,23 @@ const ROUTE_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
 const ROUTE_CACHE_MAX = 200
 const ROUTE_CACHE_PRUNE_TARGET = 100
 
+// Elevation cache: survives route cache eviction, keyed by waypoints + all leg modes
+const elevationCache = new Map<string, number[]>()
+
 function routeCacheKey(waypoints: Waypoint[], profile: TransportMode): string {
   return `${profile}:${waypoints.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|')}`
+}
+
+export function elevationCacheKey(waypoints: Waypoint[], modes: TransportMode[]): string {
+  return `elev:${modes.join('+')}:${waypoints.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|')}`
+}
+
+export function getCachedElevation(key: string): number[] | undefined {
+  return elevationCache.get(key)
+}
+
+export function setCachedElevation(key: string, profile: number[]): void {
+  elevationCache.set(key, profile)
 }
 
 /**
