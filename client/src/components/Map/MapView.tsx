@@ -10,6 +10,7 @@ import { mapsApi } from '../../api/client'
 import { getCategoryIcon, CATEGORY_ICON_MAP } from '../shared/categoryIcons'
 import ElevationChart from './ElevationChart'
 import type { RouteResult } from '../../types'
+import { estimateTileCount, downloadTiles } from '../../utils/offlineTiles'
 
 function categoryIconSvg(iconName: string | null | undefined, size: number): string {
   const IconComponent = (iconName && CATEGORY_ICON_MAP[iconName]) || CATEGORY_ICON_MAP['MapPin']
@@ -223,6 +224,123 @@ function MapContextMenuHandler({ onContextMenu }: { onContextMenu: ((e: L.Leafle
     return () => map.off('contextmenu', onContextMenu)
   }, [map, onContextMenu])
   return null
+}
+
+// ── Offline tile downloader ──
+function OfflineTileDownloader({ tileUrl }: { tileUrl: string }) {
+  const map = useMap()
+  const [open, setOpen] = useState(false)
+  const [tileCount, setTileCount] = useState(0)
+  const [progress, setProgress] = useState(0)
+  const [total, setTotal] = useState(0)
+  const [done, setDone] = useState(false)
+  const abortRef = useRef<AbortController | null>(null)
+
+  const getBounds = () => {
+    const b = map.getBounds()
+    return { north: b.getNorth(), south: b.getSouth(), east: b.getEast(), west: b.getWest() }
+  }
+
+  const handleOpen = () => {
+    const bounds = getBounds()
+    setTileCount(estimateTileCount(bounds))
+    setProgress(0)
+    setTotal(0)
+    setDone(false)
+    setOpen(true)
+  }
+
+  const handleDownload = async () => {
+    const bounds = getBounds()
+    const count = estimateTileCount(bounds)
+    if (count > 2000) return
+    setTotal(count)
+    setProgress(0)
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+    await downloadTiles(tileUrl, bounds, (dl) => setProgress(dl), ctrl.signal)
+    setDone(true)
+  }
+
+  const handleClose = () => {
+    abortRef.current?.abort()
+    setOpen(false)
+  }
+
+  const approxMb = ((tileCount * 15) / 1024).toFixed(1)
+
+  return (
+    <>
+      <button
+        onClick={handleOpen}
+        title="Download area for offline use"
+        style={{
+          position: 'absolute', bottom: 80, right: 10, zIndex: 1000,
+          width: 34, height: 34, borderRadius: 8, border: '2px solid rgba(0,0,0,0.2)',
+          background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 1px 5px rgba(0,0,0,0.2)',
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', bottom: 120, right: 10, zIndex: 2000,
+          background: 'var(--bg-card, white)', borderRadius: 12,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.15)', border: '1px solid var(--border-faint)',
+          padding: '12px 14px', width: 220, fontSize: 12,
+          fontFamily: "-apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 13 }}>Offline map area</div>
+          {!total ? (
+            <>
+              <div style={{ color: 'var(--text-faint)', marginBottom: 8 }}>
+                ~{tileCount} tiles · ~{approxMb} MB
+              </div>
+              {tileCount > 2000 ? (
+                <div style={{ color: '#ef4444', fontSize: 11, marginBottom: 8 }}>
+                  Too many tiles. Zoom in first.
+                </div>
+              ) : (
+                <button
+                  onClick={handleDownload}
+                  style={{
+                    width: '100%', padding: '6px', borderRadius: 8, border: 'none',
+                    background: 'var(--accent, #6366f1)', color: 'var(--accent-text, white)',
+                    cursor: 'pointer', fontSize: 12, fontWeight: 500, marginBottom: 4,
+                  }}
+                >
+                  Download
+                </button>
+              )}
+            </>
+          ) : done ? (
+            <div style={{ color: '#16a34a', fontWeight: 500 }}>Downloaded ✓</div>
+          ) : (
+            <>
+              <div style={{ marginBottom: 4, color: 'var(--text-faint)' }}>{progress} / {total}</div>
+              <div style={{ background: 'var(--bg-tertiary)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+                <div style={{ width: `${total ? (progress / total) * 100 : 0}%`, height: '100%', background: 'var(--accent, #6366f1)', transition: 'width 0.1s' }} />
+              </div>
+            </>
+          )}
+          <button
+            onClick={handleClose}
+            style={{
+              marginTop: 8, width: '100%', padding: '4px', borderRadius: 6, border: '1px solid var(--border-faint)',
+              background: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--text-faint)',
+            }}
+          >
+            Close
+          </button>
+        </div>
+      )}
+    </>
+  )
 }
 
 // ── Route travel time label ──
@@ -544,6 +662,7 @@ export const MapView = memo(function MapView({
       <MapClickHandler onClick={onMapClick} />
       <MapContextMenuHandler onContextMenu={onMapContextMenu} />
       <LocationTracker />
+      <OfflineTileDownloader tileUrl={tileUrl} />
 
       <MarkerClusterGroup
         chunkedLoading
