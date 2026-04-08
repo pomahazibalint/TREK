@@ -76,6 +76,20 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
   const [hotelDayRange, setHotelDayRange] = useState({ start: day?.id, end: day?.id })
   const [hotelCategoryFilter, setHotelCategoryFilter] = useState('')
   const [hotelForm, setHotelForm] = useState({ check_in: '', check_out: '', confirmation: '', place_id: null })
+  const [startTime, setStartTime] = useState(day?.start_time ?? '09:00')
+  const [endTime, setEndTime] = useState(day?.end_time ?? '20:00')
+  const tripActions = useTripStore((s) => s)
+
+  useEffect(() => {
+    setStartTime(day?.start_time ?? '09:00')
+    setEndTime(day?.end_time ?? '20:00')
+  }, [day?.id])
+
+  const handleSaveDayTimes = async () => {
+    try {
+      await tripActions.updateDayTimes(tripId, day.id, startTime, endTime)
+    } catch {}
+  }
 
   useEffect(() => {
     if (!day?.date || !lat || !lng) { setWeather(null); return }
@@ -299,6 +313,44 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
               </div>
             )
           })()}
+
+          {/* Day start/end times */}
+          {canEditDays && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{t('day.startTime') || 'Start'}</div>
+                <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border-primary)' }}>
+                  <CustomTimePicker value={startTime} onChange={setStartTime} placeholder="09:00" />
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{t('day.endTime') || 'End'}</div>
+                <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border-primary)' }}>
+                  <CustomTimePicker value={endTime} onChange={setEndTime} placeholder="20:00" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {canEditDays && (startTime !== (day?.start_time ?? '09:00') || endTime !== (day?.end_time ?? '20:00')) && (
+            <button
+              onClick={handleSaveDayTimes}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                marginBottom: 10,
+                borderRadius: 10,
+                background: 'var(--accent)',
+                color: 'white',
+                border: 'none',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {t('common.save') || 'Save'}
+            </button>
+          )}
 
           {/* Divider before accommodation */}
           <div style={{ height: 1, background: 'var(--border-faint)', margin: '12px 0' }} />

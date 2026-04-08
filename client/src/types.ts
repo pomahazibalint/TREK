@@ -38,6 +38,8 @@ export interface Day {
   date: string
   title: string | null
   notes: string | null
+  start_time: string | null
+  end_time: string | null
   assignments: Assignment[]
   notes_items: DayNote[]
 }

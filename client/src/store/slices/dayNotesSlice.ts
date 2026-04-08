@@ -10,6 +10,7 @@ type GetState = StoreApi<TripStoreState>['getState']
 export interface DayNotesSlice {
   updateDayNotes: (tripId: number | string, dayId: number | string, notes: string) => Promise<void>
   updateDayTitle: (tripId: number | string, dayId: number | string, title: string) => Promise<void>
+  updateDayTimes: (tripId: number | string, dayId: number | string, start_time: string | null, end_time: string | null) => Promise<void>
   addDayNote: (tripId: number | string, dayId: number | string, data: Partial<DayNote>) => Promise<DayNote>
   updateDayNote: (tripId: number | string, dayId: number | string, id: number, data: Partial<DayNote>) => Promise<DayNote>
   deleteDayNote: (tripId: number | string, dayId: number | string, id: number) => Promise<void>
@@ -36,6 +37,17 @@ export const createDayNotesSlice = (set: SetState, get: GetState): DayNotesSlice
       }))
     } catch (err: unknown) {
       throw new Error(getApiErrorMessage(err, 'Error updating day name'))
+    }
+  },
+
+  updateDayTimes: async (tripId, dayId, start_time, end_time) => {
+    try {
+      await daysApi.update(tripId, dayId, { start_time, end_time })
+      set(state => ({
+        days: state.days.map(d => d.id === parseInt(String(dayId)) ? { ...d, start_time, end_time } : d)
+      }))
+    } catch (err: unknown) {
+      throw new Error(getApiErrorMessage(err, 'Error updating day times'))
     }
   },
 
