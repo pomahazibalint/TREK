@@ -73,9 +73,10 @@ export function useRouteCalculation(
       }
       // When forceMode is provided (e.g., from handleTransportModeChange), use it for all legs.
       // Otherwise, each leg uses its place's transport_mode; fall back to the day default.
+      // Use slice(0, -1) to get all places except the last (since N places have N-1 legs)
       const legModes: TransportMode[] = forceMode
-        ? places.slice(1).map(() => forceMode)
-        : places.slice(1).map((p) => (p.transport_mode || transportMode) as TransportMode)
+        ? places.slice(0, -1).map(() => forceMode)
+        : places.slice(0, -1).map((p) => (p.transport_mode || transportMode) as TransportMode)
 
       // Abort on day change, or if a forceMode call is starting and this is a reactive call
       if ((dayId !== lastDayIdRef.current || isForceMode) && routeAbortRef.current) {
@@ -136,9 +137,9 @@ export function useRouteCalculation(
         setIsRecalculating(false)
       }
     }
-  }, [routeCalcEnabled, elevationEnabled, transportMode])
+  }, [routeCalcEnabled, elevationEnabled])
 
-  // Recalculate when assignments change OR when transport mode changes
+  // Recalculate when assignments change (transport mode changes via forceMode callback)
   const assignments = tripStore.assignments
   const days = (tripStore as any).days
   const selectedDayAssignments = selectedDayId ? assignments?.[String(selectedDayId)] : null
