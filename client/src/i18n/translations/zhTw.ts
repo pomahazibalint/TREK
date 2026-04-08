@@ -775,6 +775,8 @@ const zhTw: Record<string, string> = {
   'dayplan.routeError': '路線計算失敗',
   'dayplan.toast.needTwoPlaces': '路線最佳化至少需要兩個地點',
   'dayplan.toast.routeOptimized': '路線已最佳化',
+  'dayplan.toast.routeOptimizedWithConflict': '路線已最佳化 – 部分地點已移動以符合時間限制。',
+  'dayplan.toast.routeExceedsDayEnd': '提示：最佳化後的路線超過了您設定的日終時間。',
   'dayplan.toast.noGeoPlaces': '未找到有座標的地點用於路線計算',
   'dayplan.confirmed': '已確認',
   'dayplan.pendingRes': '待確認',
@@ -1336,6 +1338,8 @@ const zhTw: Record<string, string> = {
   'day.checkIn': '入住',
   'day.checkOut': '退房',
   'day.confirmation': '確認號',
+  'day.startTime': '日開始時間',
+  'day.endTime': '日結束時間',
   'day.editAccommodation': '編輯住宿',
   'day.reservations': '預訂',
 

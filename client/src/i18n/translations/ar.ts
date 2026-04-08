@@ -798,6 +798,8 @@ const ar: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.routeError': 'فشل حساب المسار',
   'dayplan.toast.needTwoPlaces': 'يلزم مكانان على الأقل لتحسين المسار',
   'dayplan.toast.routeOptimized': 'تم تحسين المسار',
+  'dayplan.toast.routeOptimizedWithConflict': 'تم تحسين المسار - تم نقل بعض الأماكن لتتناسب مع قيود الوقت.',
+  'dayplan.toast.routeExceedsDayEnd': 'تنبيه: المسار المحسّن يتجاوز وقت نهاية اليوم المحدد.',
   'dayplan.toast.noGeoPlaces': 'لم يتم العثور على أماكن بإحداثيات لحساب المسار',
   'dayplan.confirmed': 'مؤكد',
   'dayplan.pendingRes': 'قيد الانتظار',
@@ -1386,6 +1388,8 @@ const ar: Record<string, string | { name: string; category: string }[]> = {
   'day.checkIn': 'تسجيل الوصول',
   'day.checkOut': 'تسجيل المغادرة',
   'day.confirmation': 'التأكيد',
+  'day.startTime': 'بداية اليوم',
+  'day.endTime': 'نهاية اليوم',
   'day.editAccommodation': 'تعديل الإقامة',
   'day.reservations': 'الحجوزات',
 

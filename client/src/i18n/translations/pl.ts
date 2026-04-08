@@ -765,6 +765,8 @@ const pl: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.routeError': 'Nie udało się obliczyć trasy',
   'dayplan.toast.needTwoPlaces': 'Potrzeba co najmniej dwóch miejsc, aby zoptymalizować trasę',
   'dayplan.toast.routeOptimized': 'Trasa została zoptymalizowana',
+  'dayplan.toast.routeOptimizedWithConflict': 'Trasa została zoptymalizowana – niektóre miejsca zostały przeniesione, aby pasować do ograniczeń czasowych.',
+  'dayplan.toast.routeExceedsDayEnd': 'Uwaga: zoptymalizowana trasa przekracza skonfigurowany czas końca dnia.',
   'dayplan.toast.noGeoPlaces': 'Nie znaleziono miejsc ze współrzędnymi do obliczenia trasy',
   'dayplan.confirmed': 'Potwierdzono',
   'dayplan.pendingRes': 'Oczekujące',
@@ -1338,6 +1340,8 @@ const pl: Record<string, string | { name: string; category: string }[]> = {
   'day.checkIn': 'Zameldowanie',
   'day.checkOut': 'Wymeldowanie',
   'day.confirmation': 'Potwierdzenie',
+  'day.startTime': 'Początek dnia',
+  'day.endTime': 'Koniec dnia',
   'day.editAccommodation': 'Edytuj zakwaterowanie',
   'day.reservations': 'Rezerwacje',
 

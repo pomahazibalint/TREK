@@ -795,6 +795,8 @@ const ru: Record<string, string> = {
   'dayplan.routeError': 'Не удалось рассчитать маршрут',
   'dayplan.toast.needTwoPlaces': 'Для оптимизации маршрута нужно минимум два места',
   'dayplan.toast.routeOptimized': 'Маршрут оптимизирован',
+  'dayplan.toast.routeOptimizedWithConflict': 'Маршрут оптимизирован – некоторые места были перемещены для соблюдения временных ограничений.',
+  'dayplan.toast.routeExceedsDayEnd': 'Внимание: оптимизированный маршрут превышает установленное время окончания дня.',
   'dayplan.toast.noGeoPlaces': 'Не найдено мест с координатами для расчёта маршрута',
   'dayplan.confirmed': 'Подтверждено',
   'dayplan.pendingRes': 'Ожидание',
@@ -1382,6 +1384,8 @@ const ru: Record<string, string> = {
   'day.checkIn': 'Заезд',
   'day.checkOut': 'Выезд',
   'day.confirmation': 'Подтверждение',
+  'day.startTime': 'Начало дня',
+  'day.endTime': 'Конец дня',
   'day.editAccommodation': 'Редактировать жильё',
   'day.reservations': 'Бронирования',
 

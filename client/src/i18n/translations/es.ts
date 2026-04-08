@@ -771,6 +771,8 @@ const es: Record<string, string> = {
   'dayplan.routeError': 'No se pudo calcular la ruta',
   'dayplan.toast.needTwoPlaces': 'Se necesitan al menos dos lugares para optimizar la ruta',
   'dayplan.toast.routeOptimized': 'Ruta optimizada',
+  'dayplan.toast.routeOptimizedWithConflict': 'Ruta optimizada – algunos lugares se han movido para ajustarse a las restricciones de tiempo.',
+  'dayplan.toast.routeExceedsDayEnd': 'Atención: la ruta optimizada supera la hora de fin de día configurada.',
   'dayplan.toast.noGeoPlaces': 'No se encontraron lugares con coordenadas para calcular la ruta',
   'dayplan.confirmed': 'Confirmado',
   'dayplan.pendingRes': 'Pendiente',
@@ -1335,6 +1337,8 @@ const es: Record<string, string> = {
   'day.checkIn': 'Check-in',
   'day.checkOut': 'Check-out',
   'day.confirmation': 'Confirmación',
+  'day.startTime': 'Inicio del día',
+  'day.endTime': 'Fin del día',
   'day.editAccommodation': 'Editar alojamiento',
   'day.reservations': 'Reservas',
 

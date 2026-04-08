@@ -796,6 +796,8 @@ const hu: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.routeError': 'Nem sikerült kiszámítani az útvonalat',
   'dayplan.toast.needTwoPlaces': 'Legalább két hely szükséges az útvonal-optimalizáláshoz',
   'dayplan.toast.routeOptimized': 'Útvonal optimalizálva',
+  'dayplan.toast.routeOptimizedWithConflict': 'Útvonal optimalizálva – néhány hely átkerült az időbeli korlátozások miatt.',
+  'dayplan.toast.routeExceedsDayEnd': 'Figyelmeztetés: az optimalizált útvonal meghaladja a nap végének beállított időpontját.',
   'dayplan.toast.noGeoPlaces': 'Nem találhatók koordinátákkal rendelkező helyek az útvonalszámításhoz',
   'dayplan.confirmed': 'Megerősítve',
   'dayplan.pendingRes': 'Függőben',
@@ -1383,6 +1385,8 @@ const hu: Record<string, string | { name: string; category: string }[]> = {
   'day.checkIn': 'Bejelentkezés',
   'day.checkOut': 'Kijelentkezés',
   'day.confirmation': 'Visszaigazolás',
+  'day.startTime': 'Nap kezdete',
+  'day.endTime': 'Nap vége',
   'day.editAccommodation': 'Szállás szerkesztése',
   'day.reservations': 'Foglalások',
 

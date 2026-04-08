@@ -795,6 +795,8 @@ const nl: Record<string, string> = {
   'dayplan.routeError': 'Route berekenen mislukt',
   'dayplan.toast.needTwoPlaces': 'Minimaal twee plaatsen nodig voor route-optimalisatie',
   'dayplan.toast.routeOptimized': 'Route geoptimaliseerd',
+  'dayplan.toast.routeOptimizedWithConflict': 'Route geoptimaliseerd – enkele plaatsen zijn verplaatst om binnen de tijdsbeperkingen te passen.',
+  'dayplan.toast.routeExceedsDayEnd': 'Waarschuwing: de geoptimaliseerde route overschrijdt uw ingestelde einde van de dag.',
   'dayplan.toast.noGeoPlaces': 'Geen plaatsen met coördinaten gevonden voor routeberekening',
   'dayplan.confirmed': 'Bevestigd',
   'dayplan.pendingRes': 'In behandeling',
@@ -1382,6 +1384,8 @@ const nl: Record<string, string> = {
   'day.checkIn': 'Check-in',
   'day.checkOut': 'Check-out',
   'day.confirmation': 'Bevestiging',
+  'day.startTime': 'Dagstart',
+  'day.endTime': 'Dageinde',
   'day.editAccommodation': 'Accommodatie bewerken',
   'day.reservations': 'Reserveringen',
 

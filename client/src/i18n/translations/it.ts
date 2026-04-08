@@ -796,6 +796,8 @@ const it: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.routeError': 'Impossibile calcolare il percorso',
   'dayplan.toast.needTwoPlaces': 'Servono almeno due luoghi per l\'ottimizzazione del percorso',
   'dayplan.toast.routeOptimized': 'Percorso ottimizzato',
+  'dayplan.toast.routeOptimizedWithConflict': 'Percorso ottimizzato – alcuni luoghi sono stati spostati per adattarsi ai vincoli orari.',
+  'dayplan.toast.routeExceedsDayEnd': 'Attenzione: il percorso ottimizzato supera l\'ora di fine giornata configurata.',
   'dayplan.toast.noGeoPlaces': 'Nessun luogo con coordinate trovato per il calcolo del percorso',
   'dayplan.confirmed': 'Confermata',
   'dayplan.pendingRes': 'In attesa',
@@ -1383,6 +1385,8 @@ const it: Record<string, string | { name: string; category: string }[]> = {
   'day.checkIn': 'Check-in',
   'day.checkOut': 'Check-out',
   'day.confirmation': 'Conferma',
+  'day.startTime': 'Inizio giornata',
+  'day.endTime': 'Fine giornata',
   'day.editAccommodation': 'Modifica alloggio',
   'day.reservations': 'Prenotazioni',
 

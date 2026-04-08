@@ -796,6 +796,8 @@ const cs: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.routeError': 'Nepodařilo se vypočítat trasu',
   'dayplan.toast.needTwoPlaces': 'Pro optimalizaci trasy jsou potřeba alespoň dvě místa',
   'dayplan.toast.routeOptimized': 'Trasa byla optimalizována',
+  'dayplan.toast.routeOptimizedWithConflict': 'Trasa byla optimalizována – některá místa byla přesunuta, aby vyhověla časovým omezením.',
+  'dayplan.toast.routeExceedsDayEnd': 'Upozornění: optimalizovaná trasa překračuje váš nakonfigurovaný čas konce dne.',
   'dayplan.toast.noGeoPlaces': 'Nebyla nalezena žádná místa se souřadnicemi pro výpočet trasy',
   'dayplan.confirmed': 'Potvrzeno',
   'dayplan.pendingRes': 'Čeká na potvrzení',
@@ -1384,6 +1386,8 @@ const cs: Record<string, string | { name: string; category: string }[]> = {
   'day.checkIn': 'Check-in',
   'day.checkOut': 'Check-out',
   'day.confirmation': 'Potvrzení',
+  'day.startTime': 'Začátek dne',
+  'day.endTime': 'Konec dne',
   'day.editAccommodation': 'Upravit ubytování',
   'day.reservations': 'Rezervace',
 

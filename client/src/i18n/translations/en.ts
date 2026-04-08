@@ -823,6 +823,8 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.routeError': 'Failed to calculate route',
   'dayplan.toast.needTwoPlaces': 'At least two places needed for route optimization',
   'dayplan.toast.routeOptimized': 'Route optimized',
+  'dayplan.toast.routeOptimizedWithConflict': 'Route optimized — some places were moved to fit within time constraints.',
+  'dayplan.toast.routeExceedsDayEnd': 'Heads up: the optimized route exceeds your configured day end time.',
   'dayplan.toast.noGeoPlaces': 'No places with coordinates found for route calculation',
   'dayplan.confirmed': 'Confirmed',
   'dayplan.pendingRes': 'Pending',
@@ -1425,6 +1427,8 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'day.checkIn': 'Check-in',
   'day.checkOut': 'Check-out',
   'day.confirmation': 'Confirmation',
+  'day.startTime': 'Day start',
+  'day.endTime': 'Day end',
   'day.editAccommodation': 'Edit accommodation',
   'day.reservations': 'Reservations',
 

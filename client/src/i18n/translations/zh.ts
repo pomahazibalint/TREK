@@ -795,6 +795,8 @@ const zh: Record<string, string> = {
   'dayplan.routeError': '路线计算失败',
   'dayplan.toast.needTwoPlaces': '路线优化至少需要两个地点',
   'dayplan.toast.routeOptimized': '路线已优化',
+  'dayplan.toast.routeOptimizedWithConflict': '路线已优化 – 部分地点已移动以符合时间限制。',
+  'dayplan.toast.routeExceedsDayEnd': '提示：优化后的路线超过了您配置的日终时间。',
   'dayplan.toast.noGeoPlaces': '未找到有坐标的地点用于路线计算',
   'dayplan.confirmed': '已确认',
   'dayplan.pendingRes': '待确认',
@@ -1382,6 +1384,8 @@ const zh: Record<string, string> = {
   'day.checkIn': '入住',
   'day.checkOut': '退房',
   'day.confirmation': '确认号',
+  'day.startTime': '开始时间',
+  'day.endTime': '结束时间',
   'day.editAccommodation': '编辑住宿',
   'day.reservations': '预订',
 
