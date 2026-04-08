@@ -98,7 +98,7 @@ export function getSharedTripData(token: string): Record<string, any> | null {
     const ph = dayIds.map(() => '?').join(',');
     const allAssignments = db.prepare(`
       SELECT da.*, p.id as place_id, p.name as place_name, p.description as place_description,
-        p.lat, p.lng, p.address, p.category_id, p.price, p.currency as place_currency,
+        p.lat, p.lng, p.address, p.category_id, p.price, p.currency as place_currency, p.price_level,
         COALESCE(da.assignment_time, p.place_time) as place_time,
         COALESCE(da.assignment_end_time, p.end_time) as end_time,
         p.duration_minutes, p.notes as place_notes, p.image_url, p.transport_mode,
