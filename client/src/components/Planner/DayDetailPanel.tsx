@@ -9,8 +9,10 @@ import { useCanDo } from '../../store/permissionsStore'
 import { useTripStore } from '../../store/tripStore'
 import CustomSelect from '../shared/CustomSelect'
 import CustomTimePicker from '../shared/CustomTimePicker'
+import PriceLevelBadge from '../shared/PriceLevelBadge'
 import { useSettingsStore } from '../../store/settingsStore'
 import { getLocaleForLanguage, useTranslation } from '../../i18n'
+import { dayAvgPriceLevel } from '../../utils/formatters'
 import type { Day, Place, Category, Reservation, AssignmentsMap } from '../../types'
 
 const WEATHER_ICON_MAP = {
@@ -196,7 +198,14 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
               {day.title || t('planner.dayN', { n: (days.indexOf(day) + 1) || '?' })}
             </div>
-            {formattedDate && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>{formattedDate}</div>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+              {formattedDate && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{formattedDate}</div>}
+              {(() => {
+                const avgLevel = dayAvgPriceLevel(day.id, assignments)
+                if (!avgLevel) return null
+                return <PriceLevelBadge level={avgLevel} variant="text" />
+              })()}
+            </div>
           </div>
           <button onClick={onClose} style={{ background: 'var(--bg-secondary)', border: 'none', borderRadius: 10, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             <X size={14} style={{ color: 'var(--text-muted)' }} />

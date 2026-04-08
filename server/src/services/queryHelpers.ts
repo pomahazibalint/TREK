@@ -73,6 +73,7 @@ function formatAssignmentWithPlace(a: AssignmentRow, tags: Partial<Tag>[], parti
       category_id: a.category_id,
       price: a.price,
       currency: a.place_currency,
+      price_level: a.price_level,
       place_time: a.place_time,
       end_time: a.end_time,
       duration_minutes: a.duration_minutes,
