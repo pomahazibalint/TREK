@@ -816,7 +816,10 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                             onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)'}
                             onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
                             <td style={td}>
-                              <InlineEditCell value={item.name} onSave={(v: string) => handleUpdateField(item.id, 'name', v)} placeholder={t('budget.table.name')} locale={locale} editTooltip={item.reservation_id ? t('budget.linkedToReservation') : t('budget.editTooltip')} readOnly={!canEdit || !!item.reservation_id} />
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
+                                <InlineEditCell value={item.name} onSave={(v: string) => handleUpdateField(item.id, 'name', v)} placeholder={t('budget.table.name')} locale={locale} editTooltip={item.reservation_id ? t('budget.linkedToReservation') : t('budget.editTooltip')} readOnly={!canEdit || !!item.reservation_id} />
+                              </div>
                             </td>
                             <td style={{ ...td, textAlign: 'center' }}>
                               <div>
