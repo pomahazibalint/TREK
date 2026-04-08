@@ -835,11 +835,13 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                               </div>
                             </td>
                             <td style={{ ...td, textAlign: 'center' }}>
-                              <div>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                                 <InlineEditCell value={item.total_price} type="number" decimals={currencyDecimals(item.currency)} onSave={(v: number) => handleUpdateField(item.id, 'total_price', v)} style={{ textAlign: 'center' }} locale={locale} editTooltip={t('budget.editTooltip')} readOnly={!canEdit} />
                                 {isForeign && (
-                                  <div style={{ fontSize: 10, color: 'var(--text-faint)', textAlign: 'center' }}>
-                                    {item.currency} → {fmtNum(displayRef, locale, currency)}
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '2px 8px', borderRadius: 12, background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                                    <span style={{ fontWeight: 500 }}>{item.currency}</span>
+                                    <span style={{ color: 'var(--text-faint)' }}>→</span>
+                                    <span style={{ fontWeight: 600 }}>{fmtNum(displayRef, locale, currency)}</span>
                                   </div>
                                 )}
                               </div>
