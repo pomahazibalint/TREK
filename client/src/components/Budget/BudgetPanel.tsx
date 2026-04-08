@@ -619,6 +619,7 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
   const [settlement, setSettlement] = useState<{ settlement_currency: string; balances: any[]; flows: any[] } | null>(null)
   const [settlementOpen, setSettlementOpen] = useState(false)
   const [modal, setModal] = useState<{ item: BudgetItem | null; category: string } | null>(null)
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
   const currency = trip?.currency || 'EUR'
   const canEdit = can('budget_edit', trip)
 
@@ -816,9 +817,14 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                             onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)'}
                             onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
                             <td style={td}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <div style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
-                                <InlineEditCell value={item.name} onSave={(v: string) => handleUpdateField(item.id, 'name', v)} placeholder={t('budget.table.name')} locale={locale} editTooltip={item.reservation_id ? t('budget.linkedToReservation') : t('budget.editTooltip')} readOnly={!canEdit || !!item.reservation_id} />
+                                <div style={{ flex: 1 }}>
+                                  <InlineEditCell value={item.name} onSave={(v: string) => handleUpdateField(item.id, 'name', v)} placeholder={t('budget.table.name')} locale={locale} editTooltip={item.reservation_id ? t('budget.linkedToReservation') : t('budget.editTooltip')} readOnly={!canEdit || !!item.reservation_id} />
+                                </div>
+                                <button onClick={() => setExpandedRows(prev => new Set(prev.has(item.id) ? [...prev].filter(id => id !== item.id) : [...prev, item.id]))} className="sm:hidden" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                                  {expandedRows.has(item.id) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                </button>
                               </div>
                             </td>
                             <td style={{ ...td, textAlign: 'center' }}>
@@ -886,6 +892,29 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                               )}
                             </td>
                           </tr>
+                          {expandedRows.has(item.id) && (
+                            <tr className="sm:hidden" style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-secondary)' }}>
+                              <td colSpan={6} style={{ padding: '8px 12px', fontSize: 12 }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  {item.expense_date && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{t('budget.table.date')}</span>
+                                      <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{item.expense_date}</span>
+                                    </div>
+                                  )}
+                                  {item.note && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                      <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{t('budget.table.note')}</span>
+                                      <span style={{ color: 'var(--text-secondary)' }}>{item.note}</span>
+                                    </div>
+                                  )}
+                                  {!item.expense_date && !item.note && (
+                                    <span style={{ color: 'var(--text-faint)', fontSize: 11, fontStyle: 'italic' }}>—</span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
                         )
                       })}
                     </tbody>
