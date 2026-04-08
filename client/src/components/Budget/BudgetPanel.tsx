@@ -50,15 +50,22 @@ const fmtNum = (v: number | null | undefined, locale: string, cur: string) => {
 function InlineEditCell({ value, onSave, type = 'text', style = {}, placeholder = '', decimals = 2, locale, editTooltip, readOnly = false }: any) {
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(value ?? '')
+  const [saved, setSaved] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { if (editing && inputRef.current) { inputRef.current.focus(); inputRef.current.select() } }, [editing])
+
+  useEffect(() => {
+    if (!saved) return
+    const timer = setTimeout(() => setSaved(false), 1200)
+    return () => clearTimeout(timer)
+  }, [saved])
 
   const save = () => {
     setEditing(false)
     let v: any = editValue
     if (type === 'number') { const p = parseFloat(String(editValue).replace(',', '.')); v = isNaN(p) ? null : p }
-    if (v !== value) onSave(v)
+    if (v !== value) { onSave(v); setSaved(true) }
   }
 
   if (editing) {
@@ -74,8 +81,8 @@ function InlineEditCell({ value, onSave, type = 'text', style = {}, placeholder 
 
   return (
     <div onClick={() => { if (readOnly) return; setEditValue(value ?? ''); setEditing(true) }} title={readOnly ? undefined : editTooltip}
-      style={{ cursor: readOnly ? 'default' : 'pointer', padding: '2px 4px', borderRadius: 4, minHeight: 22, display: 'flex', alignItems: 'center', transition: 'background 0.15s',
-        color: display ? 'var(--text-primary)' : 'var(--text-faint)', fontSize: 13, ...style }}
+      style={{ cursor: readOnly ? 'default' : 'pointer', padding: '2px 4px', borderRadius: 4, minHeight: 22, display: 'flex', alignItems: 'center', transition: 'background 0.15s, box-shadow 0.15s',
+        color: display ? 'var(--text-primary)' : 'var(--text-faint)', fontSize: 13, boxShadow: saved ? '0 0 0 1.5px #10b981' : 'none', ...style }}
       onMouseEnter={e => { if (!readOnly) (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)' }}
       onMouseLeave={e => { if (!readOnly) (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
       {display || placeholder || '-'}
