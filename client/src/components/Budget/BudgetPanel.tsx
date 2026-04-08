@@ -1,5 +1,5 @@
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import ReactDOM from 'react-dom'
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useTripStore } from '../../store/tripStore'
 import { useCanDo } from '../../store/permissionsStore'
 import { useTranslation } from '../../i18n'
@@ -626,7 +626,7 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
   const [settlement, setSettlement] = useState<{ settlement_currency: string; balances: any[]; flows: any[] } | null>(null)
   const [settlementOpen, setSettlementOpen] = useState(false)
   const [modal, setModal] = useState<{ item: BudgetItem | null; category: string } | null>(null)
-  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+  const [expandedRows, setExpandedRows] = useState<number[]>([])
   const currency = trip?.currency || 'EUR'
   const canEdit = can('budget_edit', trip)
 
@@ -741,7 +741,9 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
 
   return (
     <div style={{ fontFamily: "'Poppins', -apple-system, BlinkMacSystemFont, system-ui, sans-serif" }}>
-      <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
+      <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+.budget-expand-btn, .budget-detail-row { display: table-row; }
+@media (min-width: 640px) { .budget-expand-btn, .budget-detail-row { display: none !important; } }`}</style>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 16px 12px', flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -820,7 +822,8 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                         const isForeign = item.currency !== currency
                         const displayRef = item.total_price_ref ?? item.total_price
                         return (
-                          <tr key={item.id} style={{ transition: 'background 0.1s' }}
+                          <React.Fragment key={item.id}>
+                            <tr style={{ transition: 'background 0.1s' }}
                             onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)'}
                             onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
                             <td style={td}>
@@ -829,8 +832,8 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                                 <div style={{ flex: 1 }}>
                                   <InlineEditCell value={item.name} onSave={(v: string) => handleUpdateField(item.id, 'name', v)} placeholder={t('budget.table.name')} locale={locale} editTooltip={item.reservation_id ? t('budget.linkedToReservation') : t('budget.editTooltip')} readOnly={!canEdit || !!item.reservation_id} />
                                 </div>
-                                <button onClick={() => setExpandedRows(prev => new Set(prev.has(item.id) ? [...prev].filter(id => id !== item.id) : [...prev, item.id]))} className="sm:hidden" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                                  {expandedRows.has(item.id) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                <button onClick={() => setExpandedRows(prev => prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id])} className="budget-expand-btn" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-faint)', alignItems: 'center', flexShrink: 0 }}>
+                                  {expandedRows.includes(item.id) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                                 </button>
                               </div>
                             </td>
@@ -901,8 +904,8 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                               )}
                             </td>
                           </tr>
-                          {expandedRows.has(item.id) && (
-                            <tr className="sm:hidden" style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-secondary)' }}>
+                          {expandedRows.includes(item.id) && (
+                            <tr className="budget-detail-row" style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-secondary)' }}>
                               <td colSpan={6} style={{ padding: '8px 12px', fontSize: 12 }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                   {item.expense_date && (
@@ -924,6 +927,7 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                               </td>
                             </tr>
                           )}
+                          </React.Fragment>
                         )
                       })}
                     </tbody>
