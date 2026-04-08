@@ -12,6 +12,12 @@ const ROUTE_CACHE_PRUNE_TARGET = 100
 // Elevation cache: survives route cache eviction, keyed by waypoints + all leg modes
 const elevationCache = new Map<string, number[]>()
 
+// Distance matrix cache: NxN arrays of durations and distances from OSRM table API
+const matrixCache = new Map<string, { durations: number[][]; distances: number[][]; fetchedAt: number }>()
+const MATRIX_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
+
+export type DistanceMatrix = { durations: number[][]; distances: number[][] }
+
 function routeCacheKey(waypoints: Waypoint[], profile: TransportMode): string {
   return `${profile}:${waypoints.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|')}`
 }
@@ -271,33 +277,115 @@ export function generateGoogleMapsUrl(places: Waypoint[]): string | null {
   return `https://www.google.com/maps/dir/${stops}`
 }
 
-/** Reorders waypoints using a nearest-neighbor heuristic to minimize total Euclidean distance. */
-export function optimizeRoute(places: Waypoint[]): Waypoint[] {
+function matrixCacheKey(waypoints: Waypoint[], profile: TransportMode): string {
+  return `${profile}:${waypoints.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|')}`
+}
+
+export async function calculateDistanceMatrix(
+  waypoints: Waypoint[],
+  profile: TransportMode = 'driving',
+  { signal }: { signal?: AbortSignal } = {}
+): Promise<DistanceMatrix | null> {
+  if (!waypoints || waypoints.length < 2) return null
+
+  const now = Date.now()
+  const cacheKey = matrixCacheKey(waypoints, profile)
+  const cached = matrixCache.get(cacheKey)
+  if (cached && now - cached.fetchedAt < MATRIX_CACHE_TTL) {
+    return { durations: cached.durations, distances: cached.distances }
+  }
+
+  const osrmProfile = profile === 'walking' ? 'foot' : profile === 'cycling' ? 'bicycle' : 'car'
+  const coords = waypoints.map((p) => `${p.lng},${p.lat}`).join(';')
+  const url = `${OSRM_BASE}/table/v1/${osrmProfile}/${coords}?annotations=duration,distance`
+
+  try {
+    const response = await fetch(url, { signal })
+    if (!response.ok) return null
+
+    const data = await response.json()
+    if (data.code !== 'Ok' || !data.durations || !data.distances) return null
+
+    // Replace null entries with Infinity
+    const durations = (data.durations as (number | null)[][]).map(row =>
+      row.map(d => d === null ? Infinity : d)
+    )
+    const distances = (data.distances as (number | null)[][]).map(row =>
+      row.map(d => d === null ? Infinity : d)
+    )
+
+    matrixCache.set(cacheKey, { durations, distances, fetchedAt: now })
+    return { durations, distances }
+  } catch (err: unknown) {
+    return null
+  }
+}
+
+/** 2-opt local search: iteratively improves a tour by reversing segments. */
+function twoOpt(tour: number[], dist: (i: number, j: number) => number): number[] {
+  let improved = true
+  while (improved) {
+    improved = false
+    for (let i = 0; i < tour.length - 2; i++) {
+      for (let k = i + 2; k < tour.length; k++) {
+        const a = tour[i], b = tour[i + 1], c = tour[k], d = tour[(k + 1) % tour.length]
+        const oldDist = dist(a, b) + dist(c, d)
+        const newDist = dist(a, c) + dist(b, d)
+        if (newDist < oldDist) {
+          tour = [...tour.slice(0, i + 1), ...tour.slice(i + 1, k + 1).reverse(), ...tour.slice(k + 1)]
+          improved = true
+        }
+      }
+    }
+  }
+  return tour
+}
+
+/** Reorders waypoints using nearest-neighbor + 2-opt improvement. Optionally uses distance matrix. */
+export function optimizeRoute(
+  places: Waypoint[],
+  matrix?: DistanceMatrix | null,
+  startIndex = 0
+): Waypoint[] {
   const valid = places.filter((p) => p.lat && p.lng)
   if (valid.length <= 2) return places
 
-  const visited = new Set<number>()
-  const result: Waypoint[] = []
-  let current = valid[0]
-  visited.add(0)
-  result.push(current)
+  // Distance function: use matrix if available, else Euclidean
+  const dist = (i: number, j: number): number => {
+    if (!matrix) {
+      return Math.sqrt(
+        Math.pow(valid[i].lat - valid[j].lat, 2) + Math.pow(valid[i].lng - valid[j].lng, 2)
+      )
+    }
+    return matrix.distances[i][j]
+  }
 
-  while (result.length < valid.length) {
+  // Nearest-neighbor from startIndex
+  const visited = new Set<number>()
+  const tour: number[] = []
+  let current = startIndex
+  visited.add(current)
+  tour.push(current)
+
+  while (tour.length < valid.length) {
     let nearestIdx = -1
     let minDist = Infinity
     for (let i = 0; i < valid.length; i++) {
       if (visited.has(i)) continue
-      const d = Math.sqrt(
-        Math.pow(valid[i].lat - current.lat, 2) + Math.pow(valid[i].lng - current.lng, 2)
-      )
+      const d = dist(current, i)
       if (d < minDist) { minDist = d; nearestIdx = i }
     }
     if (nearestIdx === -1) break
     visited.add(nearestIdx)
-    current = valid[nearestIdx]
-    result.push(current)
+    current = nearestIdx
+    tour.push(current)
   }
-  return result
+
+  // Apply 2-opt improvement
+  const improved = twoOpt(tour, dist)
+
+  // Map indices back to places
+  return improved.map(i => valid[i])
 }
 
 
