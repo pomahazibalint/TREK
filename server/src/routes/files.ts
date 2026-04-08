@@ -31,6 +31,7 @@ import {
   createFileLink,
   deleteFileLink,
   getFileLinks,
+  validateFileUpload,
 } from '../services/fileService';
 
 const router = express.Router({ mergeParams: true });
@@ -56,20 +57,16 @@ const upload = multer({
   defParamCharset: 'utf8',
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    if (BLOCKED_EXTENSIONS.includes(ext) || file.mimetype.includes('svg')) {
+
+    // Quick extension check to reject obviously dangerous files early
+    if (BLOCKED_EXTENSIONS.includes(ext)) {
       const err: Error & { statusCode?: number } = new Error('File type not allowed');
       err.statusCode = 400;
       return cb(err);
     }
-    const allowed = getAllowedExtensions().split(',').map(e => e.trim().toLowerCase());
-    const fileExt = ext.replace('.', '');
-    if (allowed.includes(fileExt) || (allowed.includes('*') && !BLOCKED_EXTENSIONS.includes(ext))) {
-      cb(null, true);
-    } else {
-      const err: Error & { statusCode?: number } = new Error('File type not allowed');
-      err.statusCode = 400;
-      cb(err);
-    }
+
+    // Allow all files at this stage; full validation (MIME type + magic bytes) happens in route handler
+    cb(null, true);
   },
 });
 
@@ -122,6 +119,15 @@ router.post('/', authenticate, requireTripAccess, demoUploadBlock, upload.single
     return res.status(403).json({ error: 'No permission to upload files' });
 
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  // Validate file: check MIME type and magic bytes
+  const fileBuffer = fs.readFileSync(path.join(filesDir, req.file.filename));
+  const validation = validateFileUpload(req.file.originalname, req.file.mimetype, fileBuffer);
+  if (!validation.valid) {
+    // Delete the uploaded file since it failed validation
+    fs.unlinkSync(path.join(filesDir, req.file.filename));
+    return res.status(400).json({ error: validation.reason });
+  }
 
   const { place_id, description, reservation_id } = req.body;
   const created = createFile(tripId, req.file, authReq.user.id, { place_id, description, reservation_id });

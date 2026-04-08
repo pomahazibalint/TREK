@@ -12,8 +12,97 @@ import { TripFile } from '../types';
 
 export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 export const DEFAULT_ALLOWED_EXTENSIONS = 'jpg,jpeg,png,gif,webp,heic,pdf,doc,docx,xls,xlsx,txt,csv';
-export const BLOCKED_EXTENSIONS = ['.svg', '.html', '.htm', '.xml'];
+
+// Blocked extensions: executables, scripts, archives, and dangerous formats
+export const BLOCKED_EXTENSIONS = [
+  '.svg', '.html', '.htm', '.xml', '.js', '.ts', '.jsx', '.tsx',
+  '.exe', '.bat', '.cmd', '.ps1', '.com', '.scr', '.vbs', '.pif',
+  '.dll', '.sys', '.drv', '.ocx',
+  '.zip', '.rar', '.7z', '.iso', '.dmg', '.pkg',
+  '.jar', '.class', '.pyc', '.pyo', '.rb', '.sh', '.bash',
+];
+
+// MIME types allowed for upload (image, document, archive safe for viewing)
+export const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif',
+  'application/pdf',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain', 'text/csv', 'text/csv; charset=utf-8',
+]);
+
 export const filesDir = path.join(__dirname, '../../uploads/files');
+
+// Magic byte signatures for file type verification
+const MAGIC_BYTES: Record<string, Buffer[]> = {
+  'image/jpeg': [Buffer.from([0xFF, 0xD8, 0xFF])],
+  'image/png': [Buffer.from([0x89, 0x50, 0x4E, 0x47])],
+  'image/gif': [Buffer.from([0x47, 0x49, 0x46, 0x38])], // GIF87a or GIF89a
+  'image/webp': [Buffer.from([0x52, 0x49, 0x46, 0x46])], // RIFF (must verify WEBP signature)
+  'application/pdf': [Buffer.from([0x25, 0x50, 0x44, 0x46])], // %PDF
+  'text/plain': [], // No specific magic bytes for text
+  'text/csv': [], // No specific magic bytes for CSV
+};
+
+// ---------------------------------------------------------------------------
+// File Validation Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Verify file magic bytes (header signature) match the claimed MIME type.
+ * Returns true if file header matches expected signature, false otherwise.
+ */
+export function verifyFileMagicBytes(buffer: Buffer, mimeType: string): boolean {
+  const signatures = MAGIC_BYTES[mimeType];
+  if (!signatures || signatures.length === 0) {
+    // Text files have no magic bytes; allow if MIME type is text-based
+    return mimeType.startsWith('text/');
+  }
+
+  return signatures.some(sig => buffer.subarray(0, sig.length).equals(sig));
+}
+
+/**
+ * Check if a MIME type is in the allowed list.
+ */
+export function isAllowedMimeType(mimeType: string): boolean {
+  // Handle charset variants (e.g., "text/csv; charset=utf-8")
+  const baseMimeType = mimeType.split(';')[0].trim();
+  return ALLOWED_MIME_TYPES.has(baseMimeType);
+}
+
+/**
+ * Validate a file for upload: check extension, MIME type, and magic bytes.
+ * Returns { valid: true } or { valid: false, reason: string }
+ */
+export function validateFileUpload(
+  filename: string,
+  mimeType: string,
+  buffer?: Buffer
+): { valid: true } | { valid: false; reason: string } {
+  const ext = path.extname(filename).toLowerCase();
+
+  // Check blocked extensions
+  if (BLOCKED_EXTENSIONS.includes(ext)) {
+    return { valid: false, reason: `File type "${ext}" is not allowed` };
+  }
+
+  // Check against allowed MIME types
+  if (!isAllowedMimeType(mimeType)) {
+    return { valid: false, reason: 'File MIME type is not allowed' };
+  }
+
+  // Verify magic bytes for binary formats if buffer is provided
+  if (buffer && buffer.length > 0) {
+    if (mimeType.startsWith('image/') || mimeType === 'application/pdf') {
+      if (!verifyFileMagicBytes(buffer, mimeType)) {
+        return { valid: false, reason: 'File content does not match declared type' };
+      }
+    }
+  }
+
+  return { valid: true };
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
