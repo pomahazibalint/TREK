@@ -211,6 +211,7 @@ interface ArtikelZeileProps {
 function ArtikelZeile({ item, tripId, categories, onCategoryChange, bagTrackingEnabled, bags = [], onCreateBag, canEdit = true }: ArtikelZeileProps) {
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(item.name)
+  const [saved, setSaved] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [showCatPicker, setShowCatPicker] = useState(false)
   const [showBagPicker, setShowBagPicker] = useState(false)
@@ -220,11 +221,17 @@ function ArtikelZeile({ item, tripId, categories, onCategoryChange, bagTrackingE
   const toast = useToast()
   const { t } = useTranslation()
 
+  useEffect(() => {
+    if (!saved) return
+    const timer = setTimeout(() => setSaved(false), 1200)
+    return () => clearTimeout(timer)
+  }, [saved])
+
   const handleToggle = () => togglePackingItem(tripId, item.id, !item.checked)
 
   const handleSaveName = async () => {
     if (!editName.trim()) { setEditing(false); setEditName(item.name); return }
-    try { await updatePackingItem(tripId, item.id, { name: editName.trim() }); setEditing(false) }
+    try { await updatePackingItem(tripId, item.id, { name: editName.trim() }); setEditing(false); setSaved(true) }
     catch { toast.error(t('packing.toast.saveError')) }
   }
 
@@ -247,9 +254,10 @@ function ArtikelZeile({ item, tripId, categories, onCategoryChange, bagTrackingE
       onMouseLeave={() => { setHovered(false); setShowCatPicker(false); setShowBagPicker(false) }}
       style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '6px 10px', borderRadius: 10, position: 'relative',
-        background: hovered ? 'var(--bg-secondary)' : 'transparent',
-        transition: 'background 0.1s',
+        padding: '4px 8px', borderRadius: 10, position: 'relative',
+        background: item.checked ? 'rgba(16, 185, 129, 0.08)' : hovered ? 'var(--bg-secondary)' : 'transparent',
+        opacity: item.checked ? 0.6 : 1,
+        transition: 'background 0.1s, opacity 0.1s',
       }}
     >
       <button onClick={handleToggle} style={{
@@ -259,27 +267,31 @@ function ArtikelZeile({ item, tripId, categories, onCategoryChange, bagTrackingE
         {item.checked ? <CheckSquare size={18} /> : <Square size={18} />}
       </button>
 
-      {editing && canEdit ? (
-        <input
-          type="text" value={editName} autoFocus
-          onChange={e => setEditName(e.target.value)}
-          onBlur={handleSaveName}
-          onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') { setEditing(false); setEditName(item.name) } }}
-          style={{ flex: 1, fontSize: 13.5, padding: '2px 8px', borderRadius: 6, border: '1px solid var(--border-primary)', outline: 'none', fontFamily: 'inherit' }}
-        />
-      ) : (
-        <span
-          onClick={() => canEdit && !item.checked && setEditing(true)}
-          style={{
-            flex: 1, fontSize: 13.5,
-            cursor: !canEdit || item.checked ? 'default' : 'text',
-            color: item.checked ? 'var(--text-faint)' : 'var(--text-primary)',
-            textDecoration: item.checked ? 'line-through' : 'none',
-          }}
-        >
-          {item.name}
-        </span>
-      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+        <div style={{ width: 6, height: 6, borderRadius: 2, background: katColor(item.category || t('packing.defaultCategory'), categories), flexShrink: 0 }} />
+        {editing && canEdit ? (
+          <input
+            type="text" value={editName} autoFocus
+            onChange={e => setEditName(e.target.value)}
+            onBlur={handleSaveName}
+            onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') { setEditing(false); setEditName(item.name) } }}
+            style={{ flex: 1, fontSize: 13.5, padding: '2px 8px', borderRadius: 6, border: '1px solid var(--border-primary)', outline: 'none', fontFamily: 'inherit' }}
+          />
+        ) : (
+          <span
+            onClick={() => canEdit && !item.checked && setEditing(true)}
+            style={{
+              flex: 1, fontSize: 13.5, borderRadius: 4, padding: '2px 4px', transition: 'box-shadow 0.15s',
+              cursor: !canEdit || item.checked ? 'default' : 'text',
+              color: item.checked ? 'var(--text-faint)' : 'var(--text-primary)',
+              textDecoration: item.checked ? 'line-through' : 'none',
+              boxShadow: saved ? '0 0 0 1.5px #10b981' : 'none',
+            }}
+          >
+            {item.name}
+          </span>
+        )}
+      </div>
 
       {/* Quantity */}
       {canEdit && <QuantityInput value={item.quantity || 1} onSave={qty => updatePackingItem(tripId, item.id, { quantity: qty })} />}
@@ -462,12 +474,19 @@ function KategorieGruppe({ kategorie, items, tripId, allCategories, onRename, on
   const [offen, setOffen] = useState(true)
   const [editingName, setEditingName] = useState(false)
   const [editKatName, setEditKatName] = useState(kategorie)
+  const [catSaved, setCatSaved] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false)
   const [showAddItem, setShowAddItem] = useState(false)
   const [newItemName, setNewItemName] = useState('')
   const addItemRef = useRef<HTMLInputElement>(null)
   const assigneeDropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!catSaved) return
+    const timer = setTimeout(() => setCatSaved(false), 1200)
+    return () => clearTimeout(timer)
+  }, [catSaved])
   const { togglePackingItem } = useTripStore()
   const toast = useToast()
   const { t } = useTranslation()
@@ -484,12 +503,13 @@ function KategorieGruppe({ kategorie, items, tripId, allCategories, onRename, on
 
   const abgehakt = items.filter(i => i.checked).length
   const alleAbgehakt = abgehakt === items.length
+  const packed = items.filter(i => i.bag_id).length
   const dot = katColor(kategorie, allCategories)
 
   const handleSaveKatName = async () => {
     const neu = editKatName.trim()
     if (!neu || neu === kategorie) { setEditingName(false); setEditKatName(kategorie); return }
-    try { await onRename(kategorie, neu); setEditingName(false) }
+    try { await onRename(kategorie, neu); setEditingName(false); setCatSaved(true) }
     catch { toast.error(t('packing.toast.renameError')) }
   }
 
@@ -510,7 +530,7 @@ function KategorieGruppe({ kategorie, items, tripId, allCategories, onRename, on
 
   return (
     <div style={{ marginBottom: 6, background: 'var(--bg-card)', borderRadius: 14, border: '1px solid var(--border-secondary)', overflow: 'visible' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: offen ? '1px solid var(--border-secondary)' : 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderBottom: offen ? '1px solid var(--border-secondary)' : 'none' }}>
         <button onClick={() => setOffen(o => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'var(--text-faint)', flexShrink: 0 }}>
           {offen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         </button>
@@ -526,39 +546,52 @@ function KategorieGruppe({ kategorie, items, tripId, allCategories, onRename, on
             style={{ flex: 1, fontSize: 12.5, fontWeight: 600, border: 'none', borderBottom: '2px solid var(--text-primary)', outline: 'none', background: 'transparent', fontFamily: 'inherit', color: 'var(--text-primary)', padding: '0 2px' }}
           />
         ) : (
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', borderRadius: 4, padding: '2px 4px', transition: 'box-shadow 0.15s', boxShadow: catSaved ? '0 0 0 1.5px #10b981' : 'none' }}>
             {kategorie}
           </span>
         )}
 
         {/* Assignee chips */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 3, flex: 1, minWidth: 0, marginLeft: 4 }}>
-          {assignees.map(a => (
-            <div key={a.user_id} style={{ position: 'relative' }}
-              onClick={e => { e.stopPropagation(); if (canEdit) onSetAssignees(kategorie, assignees.filter(x => x.user_id !== a.user_id).map(x => x.user_id)) }}
-            >
-              <div className="assignee-chip"
-                style={{
-                  width: 22, height: 22, borderRadius: '50%', flexShrink: 0, cursor: canEdit ? 'pointer' : 'default',
-                  background: `hsl(${a.username.charCodeAt(0) * 37 % 360}, 55%, 55%)`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 10, fontWeight: 700, color: 'white', textTransform: 'uppercase',
-                  border: '2px solid var(--bg-card)', transition: 'opacity 0.15s',
-                }}
-              >
-                {a.username[0]}
-              </div>
-              <div className="assignee-tooltip" style={{
-                position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
-                marginTop: 6, padding: '3px 8px', borderRadius: 6, zIndex: 60,
-                background: 'var(--text-primary)', color: 'var(--bg-primary)',
-                fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
-                pointerEvents: 'none', opacity: 0, transition: 'opacity 0.15s',
-              }}>
-                {a.username}
-              </div>
-            </div>
-          ))}
+          {(() => {
+            const shown = assignees.slice(0, 4)
+            const overflow = assignees.length - shown.length
+            return (
+              <>
+                {shown.map(a => (
+                  <div key={a.user_id} style={{ position: 'relative' }}
+                    onClick={e => { e.stopPropagation(); if (canEdit) onSetAssignees(kategorie, assignees.filter(x => x.user_id !== a.user_id).map(x => x.user_id)) }}
+                  >
+                    <div className="assignee-chip"
+                      style={{
+                        width: 22, height: 22, borderRadius: '50%', flexShrink: 0, cursor: canEdit ? 'pointer' : 'default',
+                        background: `hsl(${a.username.charCodeAt(0) * 37 % 360}, 55%, 55%)`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 10, fontWeight: 700, color: 'white', textTransform: 'uppercase',
+                        border: '2px solid var(--bg-card)', transition: 'opacity 0.15s',
+                      }}
+                    >
+                      {a.username[0]}
+                    </div>
+                    <div className="assignee-tooltip" style={{
+                      position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
+                      marginTop: 6, padding: '3px 8px', borderRadius: 6, zIndex: 60,
+                      background: 'var(--text-primary)', color: 'var(--bg-primary)',
+                      fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
+                      pointerEvents: 'none', opacity: 0, transition: 'opacity 0.15s',
+                    }}>
+                      {a.username}
+                    </div>
+                  </div>
+                ))}
+                {overflow > 0 && (
+                  <div title={`${overflow} more assignee(s)`} style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: 'var(--text-faint)', border: '1.5px solid var(--border-secondary)', flexShrink: 0 }}>
+                    +{overflow}
+                  </div>
+                )}
+              </>
+            )
+          })()}
           {canEdit && (
           <div ref={assigneeDropdownRef} style={{ position: 'relative' }}>
             <button onClick={e => { e.stopPropagation(); setShowAssigneeDropdown(v => !v) }}
@@ -620,13 +653,20 @@ function KategorieGruppe({ kategorie, items, tripId, allCategories, onRename, on
           )}
         </div>
 
-        <span style={{
-          fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 99,
-          background: alleAbgehakt ? 'rgba(22,163,74,0.12)' : 'var(--bg-tertiary)',
-          color: alleAbgehakt ? '#16a34a' : 'var(--text-muted)',
-        }}>
-          {abgehakt}/{items.length}
-        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end' }}>
+          <span style={{
+            fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 99,
+            background: alleAbgehakt ? 'rgba(22,163,74,0.12)' : 'var(--bg-tertiary)',
+            color: alleAbgehakt ? '#16a34a' : 'var(--text-muted)',
+          }}>
+            {abgehakt}/{items.length} ({items.length > 0 ? Math.round((abgehakt / items.length) * 100) : 0}%)
+          </span>
+          {bagTrackingEnabled && (
+            <span style={{ fontSize: 10, color: 'var(--text-faint)', fontWeight: 500 }}>
+              {packed} packed
+            </span>
+          )}
+        </div>
 
         <div style={{ position: 'relative' }}>
           <button onClick={() => setShowMenu(m => !m)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', borderRadius: 6, display: 'flex', color: 'var(--text-faint)' }}
@@ -649,7 +689,7 @@ function KategorieGruppe({ kategorie, items, tripId, allCategories, onRename, on
       </div>
 
       {offen && (
-        <div style={{ padding: '4px 4px 6px' }}>
+        <div style={{ padding: '2px 2px 4px' }}>
           {items.map(item => (
             <ArtikelZeile key={item.id} item={item} tripId={tripId} categories={allCategories} onCategoryChange={() => {}} bagTrackingEnabled={bagTrackingEnabled} bags={bags} onCreateBag={onCreateBag} canEdit={canEdit} />
           ))}
