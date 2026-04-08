@@ -11,6 +11,7 @@ import { assignmentsApi, reservationsApi, daysApi } from '../../api/client'
 import { downloadTripPDF } from '../PDF/TripPDF'
 import { calculateRoute, generateGoogleMapsUrl, optimizeRoute, calculateDistanceMatrix, type DistanceMatrix } from '../Map/RouteCalculator'
 import PlaceAvatar from '../shared/PlaceAvatar'
+import PriceLevelBadge from '../shared/PriceLevelBadge'
 import { useContextMenu, ContextMenu } from '../shared/ContextMenu'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -21,7 +22,7 @@ import { useTripStore } from '../../store/tripStore'
 import { useCanDo } from '../../store/permissionsStore'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useTranslation } from '../../i18n'
-import { formatDate, formatTime, dayTotalCost, currencyDecimals } from '../../utils/formatters'
+import { formatDate, formatTime, dayTotalCost, dayAvgPriceLevel, currencyDecimals } from '../../utils/formatters'
 import { useDayNotes } from '../../hooks/useDayNotes'
 import type { Trip, Day, Place, Category, Assignment, Reservation, AssignmentsMap, RouteResult, Accommodation, TransportMode } from '../../types'
 
@@ -1332,6 +1333,11 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
                     {formattedDate && <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>{formattedDate}</span>}
                     {cost && <span style={{ fontSize: 11, color: '#059669' }}>{cost}</span>}
+                    {(() => {
+                      const avgLevel = dayAvgPriceLevel(day.id, assignments)
+                      if (!avgLevel) return null
+                      return <PriceLevelBadge level={avgLevel} variant="text" />
+                    })()}
                     {day.date && anyGeoPlace && <span style={{ width: 1, height: 10, background: 'var(--text-faint)', opacity: 0.3, flexShrink: 0 }} />}
                     {day.date && anyGeoPlace && (() => {
                       const wLat = loc?.place.lat ?? anyGeoPlace?.place?.lat ?? anyGeoPlace?.lat

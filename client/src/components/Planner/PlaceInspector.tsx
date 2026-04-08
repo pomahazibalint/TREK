@@ -4,6 +4,7 @@ import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { X, Clock, MapPin, ExternalLink, Phone, Euro, Edit2, Trash2, Plus, Minus, ChevronDown, ChevronUp, FileText, Upload, File, FileImage, Star, Navigation, Users, Mountain, TrendingUp } from 'lucide-react'
 import PlaceAvatar from '../shared/PlaceAvatar'
+import PriceLevelBadge from '../shared/PriceLevelBadge'
 import { mapsApi } from '../../api/client'
 import { useSettingsStore } from '../../store/settingsStore'
 import { getCategoryIcon } from '../shared/categoryIcons'
@@ -327,6 +328,16 @@ export default function PlaceInspector({
                     {shortReview && <span className="hidden md:inline" style={{ opacity: 0.6, fontWeight: 400, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}> · „{shortReview.text}"</span>}
                   </>}
                   color="var(--text-secondary)" bg="var(--bg-hover)"
+                />
+              )
+            })()}
+            {(place.price_level != null || googleDetails?.price_level != null) && (() => {
+              const level = place.price_level ?? googleDetails?.price_level
+              return (
+                <Chip
+                  icon={null}
+                  text={<PriceLevelBadge level={level} variant="text" />}
+                  color="#059669" bg="#ecfdf5"
                 />
               )
             })()}

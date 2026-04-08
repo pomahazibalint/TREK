@@ -56,6 +56,7 @@ export interface Place {
   icon: string | null
   price: number | null
   currency: string | null
+  price_level: number | null
   image_url: string | null
   google_place_id: string | null
   osm_id: string | null

@@ -918,6 +918,10 @@ function runMigrations(db: Database.Database): void {
     () => {
       try { db.exec('ALTER TABLE days ADD COLUMN end_time TEXT'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
     },
+    // Migration 81: Google Places price level
+    () => {
+      try { db.exec('ALTER TABLE places ADD COLUMN price_level INTEGER DEFAULT NULL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+    },
   ];
 
   if (currentVersion < migrations.length) {

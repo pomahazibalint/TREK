@@ -9,6 +9,7 @@ import { useToast } from '../shared/Toast'
 import { Search, Paperclip, X, AlertTriangle } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 import CustomTimePicker from '../shared/CustomTimePicker'
+import PriceLevelBadge from '../shared/PriceLevelBadge'
 import type { Place, Category, Assignment } from '../../types'
 
 interface PlaceFormData {
@@ -26,6 +27,7 @@ interface PlaceFormData {
   phone: string
   price: string
   currency: string
+  price_level?: number | null
   duration_minutes: string
   google_place_id?: string
   osm_id?: string
@@ -47,6 +49,7 @@ const DEFAULT_FORM: PlaceFormData = {
   phone: '',
   price: '',
   currency: '',
+  price_level: null,
   duration_minutes: '',
   google_place_id: '',
   osm_id: '',
@@ -102,6 +105,7 @@ export default function PlaceFormModal({
         phone: place.phone || '',
         price: place.price != null ? String(place.price) : '',
         currency: place.currency || '',
+        price_level: place.price_level ?? null,
         duration_minutes: place.duration_minutes != null ? String(place.duration_minutes) : '',
       })
     } else if (prefillCoords) {
@@ -164,6 +168,7 @@ export default function PlaceFormModal({
       osm_id: result.osm_id || prev.osm_id,
       website: result.website || prev.website,
       phone: result.phone || prev.phone,
+      price_level: result.price_level ?? prev.price_level,
       opening_hours: result.opening_hours || null,
     }))
     setMapsResults([])
@@ -426,7 +431,7 @@ export default function PlaceFormModal({
         {/* Price + Currency */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">{t('places.formPrice') || 'Price'}</label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2 items-center">
             <input
               type="number"
               min="0"
@@ -444,6 +449,12 @@ export default function PlaceFormModal({
               maxLength={3}
               className="form-input"
             />
+            {form.price_level != null && (
+              <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Google price level:</span>
+                <PriceLevelBadge level={form.price_level} variant="chip" />
+              </div>
+            )}
           </div>
         </div>
 

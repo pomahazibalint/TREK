@@ -38,3 +38,10 @@ export function dayTotalCost(dayId: number, assignments: AssignmentsMap, currenc
   const total = da.reduce((s, a) => s + (parseFloat(a.place?.price || '') || 0), 0)
   return total > 0 ? `${total.toFixed(0)} ${currency}` : null
 }
+
+export function dayAvgPriceLevel(dayId: number, assignments: AssignmentsMap): number | null {
+  const da = assignments[String(dayId)] || []
+  const levels = da.map(a => a.place?.price_level).filter(v => v != null) as number[]
+  if (levels.length === 0) return null
+  return levels.reduce((s, v) => s + v, 0) / levels.length
+}

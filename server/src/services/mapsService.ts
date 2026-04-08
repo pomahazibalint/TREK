@@ -27,6 +27,7 @@ interface GooglePlaceResult {
   formattedAddress?: string;
   location?: { latitude: number; longitude: number };
   rating?: number;
+  priceLevel?: number;
   websiteUri?: string;
   nationalPhoneNumber?: string;
   types?: string[];
@@ -39,6 +40,7 @@ interface GooglePlaceDetails extends GooglePlaceResult {
   editorialSummary?: { text: string };
   reviews?: { authorAttribution?: { displayName?: string; photoUri?: string }; rating?: number; text?: { text?: string }; relativePublishTimeDescription?: string }[];
   photos?: { name: string; authorAttributions?: { displayName?: string }[] }[];
+  priceLevel?: number;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -307,7 +309,7 @@ export async function searchPlaces(userId: number, query: string, lang?: string)
     headers: {
       'Content-Type': 'application/json',
       'X-Goog-Api-Key': apiKey,
-      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.websiteUri,places.nationalPhoneNumber,places.types,places.regularOpeningHours',
+      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.priceLevel,places.websiteUri,places.nationalPhoneNumber,places.types,places.regularOpeningHours',
     },
     body: JSON.stringify({ textQuery: query, languageCode: lang || 'en' }),
   });
@@ -327,6 +329,7 @@ export async function searchPlaces(userId: number, query: string, lang?: string)
     lat: p.location?.latitude || null,
     lng: p.location?.longitude || null,
     rating: p.rating || null,
+    price_level: p.priceLevel ?? null,
     website: p.websiteUri || null,
     phone: p.nationalPhoneNumber || null,
     opening_hours: p.regularOpeningHours?.weekdayDescriptions || null,
@@ -365,7 +368,7 @@ export async function getPlaceDetails(userId: number, placeId: string, lang?: st
     method: 'GET',
     headers: {
       'X-Goog-Api-Key': apiKey,
-      'X-Goog-FieldMask': 'id,displayName,formattedAddress,location,rating,userRatingCount,websiteUri,nationalPhoneNumber,regularOpeningHours,googleMapsUri,reviews,editorialSummary',
+      'X-Goog-FieldMask': 'id,displayName,formattedAddress,location,rating,priceLevel,userRatingCount,websiteUri,nationalPhoneNumber,regularOpeningHours,googleMapsUri,reviews,editorialSummary',
     },
   });
 
@@ -384,6 +387,7 @@ export async function getPlaceDetails(userId: number, placeId: string, lang?: st
     lat: data.location?.latitude || null,
     lng: data.location?.longitude || null,
     rating: data.rating || null,
+    price_level: data.priceLevel ?? null,
     rating_count: data.userRatingCount || null,
     website: data.websiteUri || null,
     phone: data.nationalPhoneNumber || null,
