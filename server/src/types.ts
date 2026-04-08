@@ -58,6 +58,7 @@ export interface Place {
   category_id?: number | null;
   price?: number | null;
   currency?: string | null;
+  price_level?: number | null;
   reservation_status?: string;
   reservation_notes?: string | null;
   reservation_datetime?: string | null;
@@ -70,6 +71,7 @@ export interface Place {
   osm_id?: string | null;
   website?: string | null;
   phone?: string | null;
+  opening_hours?: string[] | null;
   transport_mode?: string;
   created_at?: string;
   updated_at?: string;
