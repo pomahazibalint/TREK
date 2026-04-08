@@ -833,13 +833,27 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                             </td>
                             {hasMultipleMembers && (
                               <td className="hidden sm:table-cell" style={{ ...td, textAlign: 'center' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, flexWrap: 'wrap' }}>
-                                  {(item.members || []).filter(m => m.amount_owed_ref > 0).slice(0, 5).map(m => (
-                                    <AvatarChip key={m.user_id} label={m.username || ''} avatarUrl={m.avatar_url || null} size={20} />
-                                  ))}
-                                  {(item.members || []).filter(m => m.amount_owed_ref > 0).length === 0 && (
-                                    <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>—</span>
-                                  )}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, flexWrap: 'wrap' }}>
+                                  {(() => {
+                                    const activeMembers = (item.members || []).filter(m => m.amount_owed_ref > 0)
+                                    const shown = activeMembers.slice(0, 5)
+                                    const overflow = activeMembers.length - shown.length
+                                    return (
+                                      <>
+                                        {shown.map(m => (
+                                          <AvatarChip key={m.user_id} label={m.username || ''} avatarUrl={m.avatar_url || null} size={20} />
+                                        ))}
+                                        {overflow > 0 && (
+                                          <div title={`${overflow} more member(s)`} style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'var(--text-faint)', border: '1px solid var(--border-secondary)' }}>
+                                            +{overflow}
+                                          </div>
+                                        )}
+                                        {activeMembers.length === 0 && (
+                                          <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>—</span>
+                                        )}
+                                      </>
+                                    )
+                                  })()}
                                 </div>
                               </td>
                             )}
