@@ -9,7 +9,7 @@ import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLi
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
 import { assignmentsApi, reservationsApi, daysApi } from '../../api/client'
 import { downloadTripPDF } from '../PDF/TripPDF'
-import { calculateRoute, generateGoogleMapsUrl, optimizeRoute } from '../Map/RouteCalculator'
+import { calculateRoute, generateGoogleMapsUrl, optimizeRoute, calculateDistanceMatrix, type DistanceMatrix } from '../Map/RouteCalculator'
 import PlaceAvatar from '../shared/PlaceAvatar'
 import { useContextMenu, ContextMenu } from '../shared/ContextMenu'
 import Markdown from 'react-markdown'
@@ -49,6 +49,13 @@ const NOTE_ICONS = [
 ]
 const NOTE_ICON_MAP = Object.fromEntries(NOTE_ICONS.map(({ id, Icon }) => [id, Icon]))
 function getNoteIcon(iconId) { return NOTE_ICON_MAP[iconId] || FileText }
+
+function parseTime(t: string | null | undefined): number | null {
+  if (!t) return null
+  const [h, m] = t.split(':').map(Number)
+  if (isNaN(h) || isNaN(m)) return null
+  return h * 60 + m
+}
 
 const TYPE_ICONS = {
   flight: '✈️', hotel: '🏨', restaurant: '🍽️', train: '🚆',
@@ -144,6 +151,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   const [editingDayId, setEditingDayId] = useState(null)
   const [editTitle, setEditTitle] = useState('')
   const [isCalculating, setIsCalculating] = useState(false)
+  const [isOptimizing, setIsOptimizing] = useState(false)
   const [routeInfo, setRouteInfo] = useState(null)
   const [draggingId, setDraggingId] = useState(null)
   const [lockedIds, setLockedIds] = useState(new Set())
@@ -754,42 +762,259 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   }
 
   const handleOptimize = async () => {
-    if (!selectedDayId) return
+    if (!selectedDayId || isOptimizing) return
     const da = getDayAssignments(selectedDayId)
     if (da.length < 3) return
 
-    const prevIds = da.map(a => a.id)
+    setIsOptimizing(true)
+    try {
+      const selectedDay = days.find(d => d.id === selectedDayId)
+      const prevIds = da.map(a => a.id)
+      let conflictDetected = false
+      let overrunDetected = false
 
-    // Separate locked (stay at their index) and unlocked assignments
-    const locked = new Map() // index -> assignment
-    const unlocked = []
-    da.forEach((a, i) => {
-      if (lockedIds.has(a.id)) locked.set(i, a)
-      else unlocked.push(a)
-    })
+      // Separate assignments: locked, timed, untimed
+      const locked = new Map<number, Assignment>()
+      const timedUnlocked: Assignment[] = []
+      const untimedUnlocked: Assignment[] = []
+      da.forEach((a, i) => {
+        if (lockedIds.has(a.id)) {
+          locked.set(i, a)
+        } else if (a.place?.place_time) {
+          timedUnlocked.push(a)
+        } else {
+          untimedUnlocked.push(a)
+        }
+      })
 
-    // Optimize only unlocked assignments (work on assignments, not places)
-    const unlockedWithCoords = unlocked.filter(a => a.place?.lat && a.place?.lng)
-    const unlockedNoCoords = unlocked.filter(a => !a.place?.lat || !a.place?.lng)
-    const optimizedAssignments = unlockedWithCoords.length >= 2
-      ? optimizeRoute(unlockedWithCoords.map(a => ({ ...a.place, _assignmentId: a.id }))).map(p => unlockedWithCoords.find(a => a.id === p._assignmentId)).filter(Boolean)
-      : unlockedWithCoords
-    const optimizedQueue = [...optimizedAssignments, ...unlockedNoCoords]
+      // Build free waypoint list for matrix
+      const allFreeAssignments = [...timedUnlocked, ...untimedUnlocked]
+      const allFreeWithCoords = allFreeAssignments.filter(a => a.place?.lat && a.place?.lng)
+      if (allFreeWithCoords.length < 2) return
 
-    // Merge: locked stay at their index, fill gaps with optimized
-    const result = new Array(da.length)
-    locked.forEach((a, i) => { result[i] = a })
-    let qi = 0
-    for (let i = 0; i < result.length; i++) {
-      if (!result[i]) result[i] = optimizedQueue[qi++]
+      // Fetch distance matrix
+      const matrix = await calculateDistanceMatrix(allFreeWithCoords.map(a => a.place!), transportMode)
+
+      // Sort timed by place_time
+      timedUnlocked.sort((a, b) => {
+        const timeA = parseTime(a.place?.place_time)
+        const timeB = parseTime(b.place?.place_time)
+        return (timeA ?? 0) - (timeB ?? 0)
+      })
+
+      // Get day start/end times
+      const dayStartMin = parseTime(selectedDay?.start_time) ?? 540 // 9:00
+      const dayEndMin = parseTime(selectedDay?.end_time) ?? 1200 // 20:00
+
+      // Build time windows between timed anchors
+      interface TimeWindow {
+        startMin: number
+        endMin: number
+        anchorStart?: Assignment
+        anchorEnd?: Assignment
+      }
+      const windows: TimeWindow[] = []
+      if (timedUnlocked.length === 0) {
+        // No timed places: single window
+        windows.push({ startMin: dayStartMin, endMin: dayEndMin })
+      } else {
+        // First window: day start to first timed
+        windows.push({ startMin: dayStartMin, endMin: parseTime(timedUnlocked[0].place?.place_time) ?? dayStartMin, anchorEnd: timedUnlocked[0] })
+        // Middle windows: between timed places
+        for (let i = 0; i < timedUnlocked.length - 1; i++) {
+          const endTimeMin = parseTime(timedUnlocked[i].place?.end_time) ?? (parseTime(timedUnlocked[i].place?.place_time) ?? 0) + 60
+          windows.push({
+            startMin: endTimeMin,
+            endMin: parseTime(timedUnlocked[i + 1].place?.place_time) ?? dayEndMin,
+            anchorStart: timedUnlocked[i],
+            anchorEnd: timedUnlocked[i + 1],
+          })
+        }
+        // Last window: after last timed to day end
+        const lastEndMin = parseTime(timedUnlocked[timedUnlocked.length - 1].place?.end_time) ?? (parseTime(timedUnlocked[timedUnlocked.length - 1].place?.place_time) ?? 0) + 60
+        windows.push({
+          startMin: lastEndMin,
+          endMin: dayEndMin,
+          anchorStart: timedUnlocked[timedUnlocked.length - 1],
+        })
+      }
+
+      // Assign untimed to windows and optimize each
+      const windowAssignments: Assignment[][] = windows.map(() => [])
+      for (const untimed of untimedUnlocked.filter(a => a.place?.lat && a.place?.lng)) {
+        let bestWindowIdx = 0
+        let bestScore = Infinity
+        for (let i = 0; i < windows.length; i++) {
+          // Try to place in this window based on nearest anchor
+          const windowMid = (windows[i].startMin + windows[i].endMin) / 2
+          let score = Math.abs(windowMid - (parseTime(untimed.place?.place_time) ?? windowMid))
+          if (windows[i].anchorStart) {
+            const aidx = allFreeWithCoords.indexOf(windows[i].anchorStart!)
+            const uidx = allFreeWithCoords.indexOf(untimed)
+            if (aidx >= 0 && uidx >= 0 && matrix) {
+              score += matrix.durations[aidx][uidx] / 60 // travel time in minutes
+            }
+          }
+          if (score < bestScore) {
+            bestScore = score
+            bestWindowIdx = i
+          }
+        }
+        windowAssignments[bestWindowIdx].push(untimed)
+      }
+
+      // Feasibility check and redistribution per window
+      const visitTime = (a: Assignment): number => {
+        const start = parseTime(a.place?.place_time)
+        const end = parseTime(a.place?.end_time)
+        if (start != null && end != null) return end - start
+        return 60 // default 60 min
+      }
+
+      // Redistribute if needed (simplified: move worst fits forward)
+      for (let i = 0; i < windows.length; i++) {
+        const w = windows[i]
+        if (w.endMin === dayEndMin) continue // Skip infinity windows
+
+        let attempts = 0
+        while (attempts++ < 10 && windowAssignments[i].length > 0) {
+          const places = windowAssignments[i].filter(a => a.place?.lat && a.place?.lng)
+          if (places.length === 0) break
+
+          // Estimate travel time (simplified: use first place as proxy)
+          let totalNeeded = places.reduce((s, a) => s + visitTime(a), 0)
+          if (places.length > 1 && matrix) {
+            // Add some travel time estimate
+            totalNeeded += (places.length - 1) * 5 * 60 // rough estimate
+          }
+
+          const available = w.endMin - w.startMin
+          if (totalNeeded <= available) break
+
+          conflictDetected = true
+          // Move worst-fit (first) place to next window
+          if (i < windows.length - 1) {
+            const worst = windowAssignments[i].shift()!
+            windowAssignments[i + 1].unshift(worst)
+          } else {
+            break
+          }
+        }
+      }
+
+      // Optimize each window
+      const optimizedWindowAssignments: Assignment[][] = []
+      for (let i = 0; i < windows.length; i++) {
+        const windowPlaces = windowAssignments[i].filter(a => a.place?.lat && a.place?.lng)
+        if (windowPlaces.length <= 2) {
+          optimizedWindowAssignments.push(windowAssignments[i])
+          continue
+        }
+
+        // Find starting anchor index
+        let startIdx = 0
+        const w = windows[i]
+        if (w.anchorStart) {
+          const anchorIdx = allFreeWithCoords.indexOf(w.anchorStart)
+          if (anchorIdx >= 0) {
+            let minDist = Infinity
+            for (let j = 0; j < windowPlaces.length; j++) {
+              const placeIdx = allFreeWithCoords.indexOf(windowPlaces[j])
+              if (matrix && placeIdx >= 0) {
+                const d = matrix.distances[anchorIdx][placeIdx]
+                if (d < minDist) { minDist = d; startIdx = j }
+              } else {
+                const d = Math.sqrt(
+                  Math.pow((w.anchorStart.place?.lat ?? 0) - (windowPlaces[j].place?.lat ?? 0), 2) +
+                  Math.pow((w.anchorStart.place?.lng ?? 0) - (windowPlaces[j].place?.lng ?? 0), 2)
+                )
+                if (d < minDist) { minDist = d; startIdx = j }
+              }
+            }
+          }
+        }
+
+        // Create sub-matrix for just this window's places
+        const subMatrix: DistanceMatrix | null = matrix
+          ? {
+              durations: windowPlaces.map(a1 => windowPlaces.map(a2 => {
+                const idx1 = allFreeWithCoords.indexOf(a1)
+                const idx2 = allFreeWithCoords.indexOf(a2)
+                return idx1 >= 0 && idx2 >= 0 ? matrix.durations[idx1][idx2] : Infinity
+              })),
+              distances: windowPlaces.map(a1 => windowPlaces.map(a2 => {
+                const idx1 = allFreeWithCoords.indexOf(a1)
+                const idx2 = allFreeWithCoords.indexOf(a2)
+                return idx1 >= 0 && idx2 >= 0 ? matrix.distances[idx1][idx2] : Infinity
+              })),
+            }
+          : null
+
+        const optimized = optimizeRoute(windowPlaces, subMatrix, startIdx)
+        optimizedWindowAssignments.push([...timedUnlocked.filter(a => windowAssignments[i].includes(a)), ...optimized.filter(p => windowPlaces.includes(windowPlaces.find(wp => wp.place === p)))])
+      }
+
+      // Reconstruct full order: timed in order, with windows
+      const orderedQueue: Assignment[] = []
+      for (let i = 0; i < windows.length; i++) {
+        if (windows[i].anchorEnd && i === 0) {
+          orderedQueue.push(windows[i].anchorEnd!)
+        } else if (i > 0 && windows[i - 1].anchorEnd) {
+          orderedQueue.push(windows[i - 1].anchorEnd!)
+        }
+        orderedQueue.push(...optimizedWindowAssignments[i].filter(a => !a.place?.place_time))
+      }
+      if (timedUnlocked.length > 0 && !orderedQueue.includes(timedUnlocked[timedUnlocked.length - 1])) {
+        orderedQueue.push(timedUnlocked[timedUnlocked.length - 1])
+      }
+
+      // Build result with locked and optimized
+      const result = new Array(da.length)
+      locked.forEach((a, i) => { result[i] = a })
+      let qi = 0
+      for (let i = 0; i < result.length; i++) {
+        if (!result[i]) result[i] = (qi < orderedQueue.length ? orderedQueue[qi++] : allFreeAssignments[qi++ - orderedQueue.length])
+      }
+
+      // Check day end overrun
+      let currentTime = dayStartMin
+      for (const a of result) {
+        if (!a || !a.place) continue
+        const duration = visitTime(a)
+        currentTime += duration
+        if (a !== result[result.length - 1] && result.indexOf(a) < result.length - 1) {
+          // Add travel to next (rough estimate)
+          const nextAssignment = result[result.indexOf(a) + 1]
+          if (nextAssignment?.place?.lat && a.place?.lat && matrix) {
+            const idx1 = allFreeWithCoords.indexOf(a)
+            const idx2 = allFreeWithCoords.indexOf(nextAssignment)
+            if (idx1 >= 0 && idx2 >= 0) {
+              currentTime += matrix.durations[idx1][idx2]
+            }
+          }
+        }
+      }
+      if (currentTime > dayEndMin) overrunDetected = true
+
+      await onReorder(selectedDayId, result.map(a => a.id))
+      if (conflictDetected) {
+        toast.info(t('dayplan.toast.routeOptimizedWithConflict'))
+      } else {
+        toast.success(t('dayplan.toast.routeOptimized'))
+      }
+      if (overrunDetected) {
+        toast.warn(t('dayplan.toast.routeExceedsDayEnd'))
+      }
+
+      const capturedDayId = selectedDayId
+      pushUndo?.(t('undo.optimize'), async () => {
+        await tripActions.reorderAssignments(tripId, capturedDayId, prevIds)
+      })
+    } catch (err) {
+      console.error('Optimization failed:', err)
+    } finally {
+      setIsOptimizing(false)
     }
-
-    await onReorder(selectedDayId, result.map(a => a.id))
-    toast.success(t('dayplan.toast.routeOptimized'))
-    const capturedDayId = selectedDayId
-    pushUndo?.(t('undo.optimize'), async () => {
-      await tripActions.reorderAssignments(tripId, capturedDayId, prevIds)
-    })
   }
 
   const handleGoogleMaps = () => {
@@ -1707,13 +1932,14 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                       </div>
 
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={handleOptimize} style={{
+                        <button onClick={handleOptimize} disabled={isOptimizing} style={{
                           flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
                           padding: '6px 0', fontSize: 11, fontWeight: 500, borderRadius: 8, border: 'none',
-                          background: 'var(--bg-hover)', color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit',
+                          background: 'var(--bg-hover)', color: 'var(--text-secondary)', cursor: isOptimizing ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                          opacity: isOptimizing ? 0.6 : 1,
                         }}>
-                          <RotateCcw size={12} strokeWidth={2} />
-                          {t('dayplan.optimize')}
+                          <RotateCcw size={12} strokeWidth={2} style={{ animation: isOptimizing ? 'spin 1s linear infinite' : 'none' }} />
+                          {isOptimizing ? 'Optimizing…' : t('dayplan.optimize')}
                         </button>
                         <button onClick={handleGoogleMaps} style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
