@@ -49,8 +49,8 @@ router.put('/:id', authenticate, requireTripAccess, (req: Request, res: Response
   const current = dayService.getDay(id, tripId);
   if (!current) return res.status(404).json({ error: 'Day not found' });
 
-  const { notes, title } = req.body;
-  const day = dayService.updateDay(id, current, { notes, title });
+  const { notes, title, start_time, end_time } = req.body;
+  const day = dayService.updateDay(id, current, { notes, title, start_time, end_time });
   res.json({ day });
   broadcast(tripId, 'day:updated', { day }, req.headers['x-socket-id'] as string);
 });

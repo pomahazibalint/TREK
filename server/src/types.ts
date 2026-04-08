@@ -43,6 +43,8 @@ export interface Day {
   date?: string | null;
   notes?: string | null;
   title?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
 }
 
 export interface Place {

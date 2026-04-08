@@ -145,10 +145,12 @@ export function getDay(id: string | number, tripId: string | number) {
   return db.prepare('SELECT * FROM days WHERE id = ? AND trip_id = ?').get(id, tripId) as Day | undefined;
 }
 
-export function updateDay(id: string | number, current: Day, fields: { notes?: string; title?: string | null }) {
-  db.prepare('UPDATE days SET notes = ?, title = ? WHERE id = ?').run(
+export function updateDay(id: string | number, current: Day, fields: { notes?: string; title?: string | null; start_time?: string | null; end_time?: string | null }) {
+  db.prepare('UPDATE days SET notes = ?, title = ?, start_time = ?, end_time = ? WHERE id = ?').run(
     fields.notes || null,
     'title' in fields ? (fields.title ?? null) : current.title,
+    'start_time' in fields ? (fields.start_time ?? null) : current.start_time,
+    'end_time' in fields ? (fields.end_time ?? null) : current.end_time,
     id
   );
   const updatedDay = db.prepare('SELECT * FROM days WHERE id = ?').get(id) as Day;
