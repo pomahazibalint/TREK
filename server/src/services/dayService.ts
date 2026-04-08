@@ -13,7 +13,7 @@ export function verifyTripAccess(tripId: string | number, userId: number) {
 export function getAssignmentsForDay(dayId: number | string) {
   const assignments = db.prepare(`
     SELECT da.*, p.id as place_id, p.name as place_name, p.description as place_description,
-      p.lat, p.lng, p.address, p.category_id, p.price, p.currency as place_currency,
+      p.lat, p.lng, p.address, p.category_id, p.price, p.currency as place_currency, p.price_level,
       COALESCE(da.assignment_time, p.place_time) as place_time,
       COALESCE(da.assignment_end_time, p.end_time) as end_time,
       p.duration_minutes, p.notes as place_notes,
@@ -49,6 +49,7 @@ export function getAssignmentsForDay(dayId: number | string) {
         category_id: a.category_id,
         price: a.price,
         currency: a.place_currency,
+        price_level: a.price_level,
         place_time: a.place_time,
         end_time: a.end_time,
         duration_minutes: a.duration_minutes,
@@ -86,7 +87,7 @@ export function listDays(tripId: string | number) {
 
   const allAssignments = db.prepare(`
     SELECT da.*, p.id as place_id, p.name as place_name, p.description as place_description,
-      p.lat, p.lng, p.address, p.category_id, p.price, p.currency as place_currency,
+      p.lat, p.lng, p.address, p.category_id, p.price, p.currency as place_currency, p.price_level,
       COALESCE(da.assignment_time, p.place_time) as place_time,
       COALESCE(da.assignment_end_time, p.end_time) as end_time,
       p.duration_minutes, p.notes as place_notes,

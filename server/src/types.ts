@@ -288,6 +288,7 @@ export interface AssignmentRow extends DayAssignment {
   category_id: number | null;
   price: number | null;
   place_currency: string | null;
+  price_level: number | null;
   place_time: string | null;
   end_time: string | null;
   duration_minutes: number;
