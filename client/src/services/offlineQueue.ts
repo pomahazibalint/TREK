@@ -170,12 +170,16 @@ export async function clearQueue(): Promise<void> {
 
 /**
  * Replay all queued mutations.
+ * Expects the fetch function to handle credentials and headers properly (e.g., axios instance).
  * Returns count of successful replays.
  */
-export async function replayQueue(fetchFn: (endpoint: string, options: any) => Promise<Response>): Promise<{ success: number; failed: number }> {
+export async function replayQueue(fetchFn?: (input: string | Request, init?: RequestInit) => Promise<Response>): Promise<{ success: number; failed: number }> {
   const mutations = await getAllMutations()
   let success = 0
   let failed = 0
+
+  // Use global fetch if no custom fetchFn provided
+  const doFetch = fetchFn || window.fetch.bind(window)
 
   for (const mutation of mutations) {
     // Skip if too many retries
@@ -187,10 +191,14 @@ export async function replayQueue(fetchFn: (endpoint: string, options: any) => P
     }
 
     try {
-      const response = await fetchFn(mutation.endpoint, {
+      // Absolute URL for fetch: prepend /api if not present
+      const endpoint = mutation.endpoint.startsWith('/api') ? mutation.endpoint : `/api${mutation.endpoint}`
+
+      const response = await doFetch(endpoint, {
         method: mutation.method,
         headers: { 'Content-Type': 'application/json' },
         body: mutation.body ? JSON.stringify(mutation.body) : undefined,
+        credentials: 'include', // Important: include cookies for auth
       })
 
       if (response.ok) {
