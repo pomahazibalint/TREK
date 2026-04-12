@@ -1,6 +1,6 @@
 // Singleton WebSocket manager for real-time collaboration
 
-import { replayQueue } from '../services/offlineQueue.js'
+import { replayQueue, getAllMutations } from '../services/offlineQueue.js'
 
 type WebSocketListener = (event: Record<string, unknown>) => void
 type RefetchCallback = (tripId: string) => void
@@ -104,11 +104,15 @@ async function connectInternal(_isReconnect = false): Promise<void> {
 
     // Replay queued mutations first
     try {
-      const result = await replayQueue(fetch)
-      if (onQueueReplayedCallback) {
-        onQueueReplayedCallback(result)
+      const pending = await getAllMutations()
+      if (pending.length > 0) {
+        console.log(`[WebSocket] Replaying ${pending.length} queued mutations...`)
+        const result = await replayQueue(fetch)
+        if (onQueueReplayedCallback) {
+          onQueueReplayedCallback(result)
+        }
+        console.log('[WebSocket] Queue replay complete:', result)
       }
-      console.log('[WebSocket] Queue replay result:', result)
     } catch (err) {
       console.error('[WebSocket] Failed to replay queue:', err)
     }
