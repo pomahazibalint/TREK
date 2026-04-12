@@ -1,4 +1,6 @@
 import express, { Request, Response } from 'express';
+import multer from 'multer';
+import path from 'path';
 import { db } from '../db/database';
 import { authenticate } from '../middleware/auth';
 import { broadcast } from '../websocket';
@@ -13,8 +15,26 @@ import {
   updateReservation,
   deleteReservation,
 } from '../services/reservationService';
+import { parseBooking } from '../services/bookingParsers/index.js';
 
 const router = express.Router({ mergeParams: true });
+
+// Multer config for file upload (5 MB limit)
+const fileUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const allowedExts = ['.ics', '.csv', '.txt', '.eml', '.html', '.htm'];
+    const allowedMimes = ['text/plain', 'text/csv', 'text/calendar', 'text/html', 'message/rfc822'];
+
+    if (allowedExts.includes(ext) || allowedMimes.some(m => file.mimetype.includes(m))) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type not allowed. Accepted: ${allowedExts.join(', ')}`));
+    }
+  },
+});
 
 router.get('/', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
@@ -193,6 +213,62 @@ router.delete('/:id', authenticate, (req: Request, res: Response) => {
     const tripInfo = db.prepare('SELECT title FROM trips WHERE id = ?').get(tripId) as { title: string } | undefined;
     send({ event: 'booking_change', actorId: authReq.user.id, scope: 'trip', targetId: Number(tripId), params: { trip: tripInfo?.title || 'Untitled', actor: authReq.user.email, booking: reservation.title, type: reservation.type || 'booking', tripId: String(tripId) } }).catch(() => {});
   });
+});
+
+// ── Booking import endpoints ──
+
+router.post('/parse', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { tripId } = req.params;
+  const { text } = req.body;
+
+  const trip = verifyTripAccess(tripId, authReq.user.id);
+  if (!trip) return res.status(404).json({ error: 'Trip not found' });
+
+  if (!text || typeof text !== 'string' || text.trim().length === 0) {
+    return res.status(400).json({ error: 'Text is required' });
+  }
+
+  try {
+    const results = parseBooking(text.trim());
+    res.json({ results });
+  } catch (err: unknown) {
+    console.error('[ReservationImport] Parse error:', err);
+    res.status(400).json({ error: 'Failed to parse booking confirmation' });
+  }
+});
+
+router.post('/parse-file', authenticate, fileUpload.single('file'), (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { tripId } = req.params;
+  const file = (req as any).file;
+
+  const trip = verifyTripAccess(tripId, authReq.user.id);
+  if (!trip) return res.status(404).json({ error: 'Trip not found' });
+
+  if (!file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  try {
+    // Read file content as text
+    let content = file.buffer.toString('utf-8');
+
+    // For .eml files (email), try to extract plain text body
+    if (file.originalname.endsWith('.eml')) {
+      // Simple extraction: find the boundary and extract the first text/plain part
+      const textMatch = content.match(/Content-Type: text\/plain[\s\S]*?\n\n([\s\S]*?)(?=--|\Z)/);
+      if (textMatch) {
+        content = textMatch[1];
+      }
+    }
+
+    const results = parseBooking(content, file.mimetype);
+    res.json({ results });
+  } catch (err: unknown) {
+    console.error('[ReservationImport] File parse error:', err);
+    res.status(400).json({ error: 'Failed to parse booking file' });
+  }
 });
 
 export default router;

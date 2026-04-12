@@ -8,9 +8,10 @@ import { useTranslation } from '../../i18n'
 import {
   Plane, Hotel, Utensils, Train, Car, Ship, Ticket, FileText, MapPin,
   Calendar, Hash, CheckCircle2, Circle, Pencil, Trash2, Plus, ChevronDown, ChevronRight, Users,
-  ExternalLink, BookMarked, Lightbulb, Link2, Clock,
+  ExternalLink, BookMarked, Lightbulb, Link2, Clock, Upload,
 } from 'lucide-react'
 import { getAuthUrl } from '../../api/authUrl'
+import BookingImportModal, { ParsedBooking } from './BookingImportModal'
 import type { Reservation, Day, TripFile, AssignmentsMap } from '../../types'
 
 interface AssignmentLookupEntry {
@@ -352,12 +353,38 @@ export default function ReservationsPanel({ tripId, reservations, days, assignme
   const trip = useTripStore((s) => s.trip)
   const canEdit = can('reservation_edit', trip)
   const [showHint, setShowHint] = useState(() => !localStorage.getItem('hideReservationHint'))
+  const [showImportModal, setShowImportModal] = useState(false)
+  const { showToast } = useToast()
 
   const assignmentLookup = useMemo(() => buildAssignmentLookup(days, assignments), [days, assignments])
 
   const allPending = reservations.filter(r => r.status !== 'confirmed')
   const allConfirmed = reservations.filter(r => r.status === 'confirmed')
   const total = reservations.length
+
+  const handleSaveImportedBooking = async (booking: ParsedBooking) => {
+    try {
+      // Use the existing onAdd to create the reservation, but pre-populate with import data
+      // The onAdd typically opens ReservationModal, so we'll call onAdd with the import data
+      // For now, create the reservation directly via store
+      const createReservation = useTripStore.getState().addReservation
+      await createReservation(tripId, {
+        title: booking.title,
+        type: booking.type,
+        confirmation_number: booking.confirmation_number,
+        reservation_time: booking.reservation_time,
+        reservation_end_time: booking.reservation_end_time,
+        location: booking.location,
+        notes: booking.notes,
+        metadata: booking.metadata,
+        status: 'pending',
+      })
+      setShowImportModal(false)
+      showToast(`${booking.title} imported successfully`, 'success')
+    } catch (err) {
+      showToast('Failed to import booking', 'error')
+    }
+  }
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif" }}>
@@ -370,13 +397,22 @@ export default function ReservationsPanel({ tripId, reservations, days, assignme
           </p>
         </div>
         {canEdit && (
-          <button onClick={onAdd} style={{
-            display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 99,
-            border: 'none', background: 'var(--accent)', color: 'var(--accent-text)',
-            fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-          }}>
-            <Plus size={13} /> <span className="hidden sm:inline">{t('reservations.addManual')}</span>
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setShowImportModal(true)} style={{
+              display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 99,
+              border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-secondary)',
+              fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+            }} title="Import booking from email or file">
+              <Upload size={13} /> <span className="hidden sm:inline">Import</span>
+            </button>
+            <button onClick={onAdd} style={{
+              display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 99,
+              border: 'none', background: 'var(--accent)', color: 'var(--accent-text)',
+              fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+            }}>
+              <Plus size={13} /> <span className="hidden sm:inline">{t('reservations.addManual')}</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -407,6 +443,14 @@ export default function ReservationsPanel({ tripId, reservations, days, assignme
           </>
         )}
       </div>
+
+      {/* Booking Import Modal */}
+      <BookingImportModal
+        tripId={String(tripId)}
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSave={handleSaveImportedBooking}
+      />
     </div>
   )
 }
