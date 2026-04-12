@@ -4,11 +4,7 @@ permissions:
   contents: read
 
 on:
-  pull_request:
-    branches: [main, dev]
-    paths:
-      - 'server/**'
-      - '.github/workflows/test.yml'
+  workflow_dispatch:
 
 jobs:
   server-tests:

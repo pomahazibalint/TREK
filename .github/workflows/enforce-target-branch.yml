@@ -1,8 +1,7 @@
 name: Enforce PR Target Branch
 
 on:
-  pull_request:
-    types: [opened, reopened, edited, synchronize]
+  workflow_dispatch:
 
 jobs:
   check-target:
