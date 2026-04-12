@@ -82,48 +82,63 @@ function scheduleReconnect(): void {
 }
 
 async function connectInternal(_isReconnect = false): Promise<void> {
-  if (connecting) return
+  console.log('[WebSocket] connectInternal called, isReconnect =', _isReconnect, 'connecting =', connecting)
+  if (connecting) {
+    console.log('[WebSocket] Already connecting, returning')
+    return
+  }
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+    console.log('[WebSocket] Socket already open or connecting, returning')
     return
   }
 
   connecting = true
+  console.log('[WebSocket] Fetching WS token...')
   const wsToken = await fetchWsToken()
   connecting = false
 
   if (!wsToken) {
+    console.warn('[WebSocket] Failed to get WS token')
     if (shouldReconnect) scheduleReconnect()
     return
   }
 
   const url = getWsUrl(wsToken)
+  console.log('[WebSocket] Creating WebSocket connection to', url)
   socket = new WebSocket(url)
 
   socket.onopen = async () => {
+    console.log('[WebSocket] Connection opened, replaying offline queue...')
     reconnectDelay = 1000
 
     // Replay queued mutations first
     try {
       const pending = await getAllMutations()
+      console.log('[WebSocket] Found', pending.length, 'pending mutations')
       if (pending.length > 0) {
-        console.log(`[WebSocket] Replaying ${pending.length} queued mutations...`)
-        const result = await replayQueue(fetch)
+        console.log(`[WebSocket] Starting replay of ${pending.length} queued mutations...`)
+        const result = await replayQueue()
+        console.log('[WebSocket] Queue replay complete:', result)
         if (onQueueReplayedCallback) {
+          console.log('[WebSocket] Calling onQueueReplayedCallback with result:', result)
           onQueueReplayedCallback(result)
         }
-        console.log('[WebSocket] Queue replay complete:', result)
+      } else {
+        console.log('[WebSocket] No pending mutations to replay')
       }
     } catch (err) {
       console.error('[WebSocket] Failed to replay queue:', err)
     }
 
     if (activeTrips.size > 0) {
+      console.log('[WebSocket] Re-joining', activeTrips.size, 'active trips')
       activeTrips.forEach(tripId => {
         if (socket && socket.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify({ type: 'join', tripId }))
         }
       })
       if (refetchCallback) {
+        console.log('[WebSocket] Refetching trip data for', activeTrips.size, 'trips')
         activeTrips.forEach(tripId => {
           try { refetchCallback!(tripId) } catch (err: unknown) {
             console.error('Failed to refetch trip data on reconnect:', err)
@@ -136,18 +151,22 @@ async function connectInternal(_isReconnect = false): Promise<void> {
   socket.onmessage = handleMessage
 
   socket.onclose = () => {
+    console.log('[WebSocket] Connection closed')
     socket = null
     if (shouldReconnect) {
+      console.log('[WebSocket] Scheduling reconnect with delay:', reconnectDelay)
       scheduleReconnect()
     }
   }
 
-  socket.onerror = () => {
+  socket.onerror = (event) => {
+    console.error('[WebSocket] Socket error:', event)
     // onclose will fire after onerror, reconnect handled there
   }
 }
 
 export function connect(): void {
+  console.log('[WebSocket] Initiating connection')
   shouldReconnect = true
   reconnectDelay = 1000
   if (reconnectTimer) {
@@ -159,10 +178,12 @@ export function connect(): void {
   if (!onlineListenersAttached) {
     onlineListenersAttached = true
     window.addEventListener('online', () => {
+      console.log('[WebSocket] Online event detected, attempting reconnect')
       reconnectDelay = 1000
       connectInternal(false)
     })
     window.addEventListener('offline', () => {
+      console.log('[WebSocket] Offline event detected')
       // No action needed — WS close will fire naturally, reconnect handled there
     })
   }
