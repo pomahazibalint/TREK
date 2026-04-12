@@ -13,6 +13,7 @@ let shouldReconnect = false
 let refetchCallback: RefetchCallback | null = null
 let mySocketId: string | null = null
 let connecting = false
+let onlineListenersAttached = false
 
 export function getSocketId(): string | null {
   return mySocketId
@@ -129,6 +130,19 @@ export function connect(): void {
     clearTimeout(reconnectTimer)
     reconnectTimer = null
   }
+
+  // Attach online/offline event listeners once
+  if (!onlineListenersAttached) {
+    onlineListenersAttached = true
+    window.addEventListener('online', () => {
+      reconnectDelay = 1000
+      connectInternal(false)
+    })
+    window.addEventListener('offline', () => {
+      // No action needed — WS close will fire naturally, reconnect handled there
+    })
+  }
+
   connectInternal(false)
 }
 

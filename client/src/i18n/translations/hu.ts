@@ -50,6 +50,7 @@ const hu: Record<string, string | { name: string; category: string }[]> = {
   'nav.darkMode': 'Sötét mód',
   'nav.autoMode': 'Automatikus mód',
   'nav.administrator': 'Adminisztrátor',
+  'nav.offline': 'Offline',
 
   // Irányítópult
   'dashboard.title': 'Utazásaim',
