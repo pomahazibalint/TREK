@@ -5,9 +5,10 @@ import { useAuthStore } from '../../store/authStore'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useAddonStore } from '../../store/addonStore'
 import { useTranslation } from '../../i18n'
-import { Plane, LogOut, Settings, ChevronDown, Shield, ArrowLeft, Users, Moon, Sun, Monitor, CalendarDays, Briefcase, Globe, WifiOff } from 'lucide-react'
+import { Plane, LogOut, Settings, ChevronDown, Shield, ArrowLeft, Users, Moon, Sun, Monitor, CalendarDays, Briefcase, Globe, WifiOff, AlertCircle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import InAppNotificationBell from './InAppNotificationBell.tsx'
+import { getAllMutations } from '../../services/offlineQueue'
 
 const ADDON_ICONS: Record<string, LucideIcon> = { CalendarDays, Briefcase, Globe }
 
@@ -36,6 +37,7 @@ export default function Navbar({ tripTitle, tripId, onBack, showBack, onShare }:
   const [userMenuOpen, setUserMenuOpen] = useState<boolean>(false)
   const [appVersion, setAppVersion] = useState<string | null>(null)
   const [online, setOnline] = useState<boolean>(navigator.onLine)
+  const [pendingCount, setPendingCount] = useState<number>(0)
   const darkMode = settings.dark_mode
   const dark = darkMode === true || darkMode === 'dark' || (darkMode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)
 
@@ -61,6 +63,17 @@ export default function Navbar({ tripTitle, tripId, onBack, showBack, onShare }:
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
     }
+  }, [])
+
+  // Check for pending mutations periodically
+  useEffect(() => {
+    const checkPending = async () => {
+      const mutations = await getAllMutations()
+      setPendingCount(mutations.length)
+    }
+    checkPending()
+    const interval = setInterval(checkPending, 2000) // Check every 2 seconds
+    return () => clearInterval(interval)
   }, [])
 
   const handleLogout = () => {
@@ -176,11 +189,17 @@ export default function Navbar({ tripTitle, tripId, onBack, showBack, onShare }:
         {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
       </button>
 
-      {/* Offline indicator */}
+      {/* Offline/pending indicators */}
       {!online && (
         <span className="flex items-center gap-1 text-xs font-medium text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full flex-shrink-0" title="Currently offline">
           <WifiOff size={12} />
           <span className="hidden sm:inline">{t('nav.offline')}</span>
+        </span>
+      )}
+      {pendingCount > 0 && (
+        <span className="flex items-center gap-1 text-xs font-medium text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30 px-2 py-0.5 rounded-full flex-shrink-0" title={`${pendingCount} pending change(s) waiting to sync`}>
+          <AlertCircle size={12} />
+          <span className="hidden sm:inline">{pendingCount} pending</span>
         </span>
       )}
 
