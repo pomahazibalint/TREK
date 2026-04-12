@@ -3,6 +3,7 @@ import type { StoreApi } from 'zustand'
 import type { TripStoreState } from '../tripStore'
 import type { PackingItem } from '../../types'
 import { getApiErrorMessage } from '../../types'
+import { isNetworkError } from '../../utils/errorUtils'
 
 type SetState = StoreApi<TripStoreState>['setState']
 type GetState = StoreApi<TripStoreState>['getState']
@@ -43,7 +44,9 @@ export const createPackingSlice = (set: SetState, get: GetState): PackingSlice =
     try {
       await packingApi.delete(tripId, id)
     } catch (err: unknown) {
-      set({ packingItems: prev })
+      if (!isNetworkError(err)) {
+        set({ packingItems: prev })
+      }
       throw new Error(getApiErrorMessage(err, 'Error deleting item'))
     }
   },
@@ -56,12 +59,14 @@ export const createPackingSlice = (set: SetState, get: GetState): PackingSlice =
     }))
     try {
       await packingApi.update(tripId, id, { checked })
-    } catch {
-      set(state => ({
-        packingItems: state.packingItems.map(item =>
-          item.id === id ? { ...item, checked: checked ? 0 : 1 } : item
-        )
-      }))
+    } catch (err: unknown) {
+      if (!isNetworkError(err)) {
+        set(state => ({
+          packingItems: state.packingItems.map(item =>
+            item.id === id ? { ...item, checked: checked ? 0 : 1 } : item
+          )
+        }))
+      }
     }
   },
 })

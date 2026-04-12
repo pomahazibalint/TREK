@@ -3,6 +3,7 @@ import type { StoreApi } from 'zustand'
 import type { TripStoreState } from '../tripStore'
 import type { Reservation } from '../../types'
 import { getApiErrorMessage } from '../../types'
+import { isNetworkError } from '../../utils/errorUtils'
 
 type SetState = StoreApi<TripStoreState>['setState']
 type GetState = StoreApi<TripStoreState>['getState']
@@ -57,8 +58,11 @@ export const createReservationsSlice = (set: SetState, get: GetState): Reservati
     }))
     try {
       await reservationsApi.update(tripId, id, { status: newStatus })
-    } catch {
-      set({ reservations: prev })
+    } catch (err: unknown) {
+      // Only revert on server errors, not network errors (which will be queued and retried)
+      if (!isNetworkError(err)) {
+        set({ reservations: prev })
+      }
     }
   },
 

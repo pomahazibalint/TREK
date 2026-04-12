@@ -3,6 +3,7 @@ import type { StoreApi } from 'zustand'
 import type { TripStoreState } from '../tripStore'
 import type { BudgetItem, BudgetMember } from '../../types'
 import { getApiErrorMessage } from '../../types'
+import { isNetworkError } from '../../utils/errorUtils'
 
 type SetState = StoreApi<TripStoreState>['setState']
 type GetState = StoreApi<TripStoreState>['getState']
@@ -66,7 +67,9 @@ export const createBudgetSlice = (set: SetState, get: GetState): BudgetSlice => 
     try {
       await budgetApi.delete(tripId, id)
     } catch (err: unknown) {
-      set({ budgetItems: prev })
+      if (!isNetworkError(err)) {
+        set({ budgetItems: prev })
+      }
       throw new Error(getApiErrorMessage(err, 'Error deleting budget item'))
     }
   },

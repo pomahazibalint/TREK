@@ -3,6 +3,7 @@ import type { StoreApi } from 'zustand'
 import type { TripStoreState } from '../tripStore'
 import type { Assignment, AssignmentsMap } from '../../types'
 import { getApiErrorMessage } from '../../types'
+import { isNetworkError } from '../../utils/errorUtils'
 
 type SetState = StoreApi<TripStoreState>['setState']
 type GetState = StoreApi<TripStoreState>['getState']
@@ -102,7 +103,10 @@ export const createAssignmentsSlice = (set: SetState, get: GetState): Assignment
     try {
       await assignmentsApi.delete(tripId, dayId, assignmentId)
     } catch (err: unknown) {
-      set({ assignments: prevAssignments })
+      // Only revert on server errors, not network errors (which will be queued and retried)
+      if (!isNetworkError(err)) {
+        set({ assignments: prevAssignments })
+      }
       throw new Error(getApiErrorMessage(err, 'Error removing assignment'))
     }
   },
@@ -125,7 +129,10 @@ export const createAssignmentsSlice = (set: SetState, get: GetState): Assignment
     try {
       await assignmentsApi.reorder(tripId, dayId, orderedIds)
     } catch (err: unknown) {
-      set({ assignments: prevAssignments })
+      // Only revert on server errors, not network errors (which will be queued and retried)
+      if (!isNetworkError(err)) {
+        set({ assignments: prevAssignments })
+      }
       throw new Error(getApiErrorMessage(err, 'Error reordering'))
     }
   },
@@ -157,7 +164,10 @@ export const createAssignmentsSlice = (set: SetState, get: GetState): Assignment
         await assignmentsApi.reorder(tripId, toDayId, newToItems.map(a => a.id))
       }
     } catch (err: unknown) {
-      set({ assignments: prevAssignments })
+      // Only revert on server errors, not network errors (which will be queued and retried)
+      if (!isNetworkError(err)) {
+        set({ assignments: prevAssignments })
+      }
       throw new Error(getApiErrorMessage(err, 'Error moving assignment'))
     }
   },

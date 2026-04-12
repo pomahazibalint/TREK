@@ -3,6 +3,7 @@ import type { StoreApi } from 'zustand'
 import type { TripStoreState } from '../tripStore'
 import type { DayNote } from '../../types'
 import { getApiErrorMessage } from '../../types'
+import { isNetworkError } from '../../utils/errorUtils'
 
 type SetState = StoreApi<TripStoreState>['setState']
 type GetState = StoreApi<TripStoreState>['getState']
@@ -106,7 +107,9 @@ export const createDayNotesSlice = (set: SetState, get: GetState): DayNotesSlice
     try {
       await dayNotesApi.delete(tripId, dayId, id)
     } catch (err: unknown) {
-      set({ dayNotes: prev })
+      if (!isNetworkError(err)) {
+        set({ dayNotes: prev })
+      }
       throw new Error(getApiErrorMessage(err, 'Error deleting note'))
     }
   },

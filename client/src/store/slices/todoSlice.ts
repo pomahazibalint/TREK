@@ -3,6 +3,7 @@ import type { StoreApi } from 'zustand'
 import type { TripStoreState } from '../tripStore'
 import type { TodoItem } from '../../types'
 import { getApiErrorMessage } from '../../types'
+import { isNetworkError } from '../../utils/errorUtils'
 
 type SetState = StoreApi<TripStoreState>['setState']
 type GetState = StoreApi<TripStoreState>['getState']
@@ -43,7 +44,9 @@ export const createTodoSlice = (set: SetState, get: GetState): TodoSlice => ({
     try {
       await todoApi.delete(tripId, id)
     } catch (err: unknown) {
-      set({ todoItems: prev })
+      if (!isNetworkError(err)) {
+        set({ todoItems: prev })
+      }
       throw new Error(getApiErrorMessage(err, 'Error deleting todo'))
     }
   },
@@ -56,12 +59,14 @@ export const createTodoSlice = (set: SetState, get: GetState): TodoSlice => ({
     }))
     try {
       await todoApi.update(tripId, id, { checked })
-    } catch {
-      set(state => ({
-        todoItems: state.todoItems.map(item =>
-          item.id === id ? { ...item, checked: checked ? 0 : 1 } : item
-        )
-      }))
+    } catch (err: unknown) {
+      if (!isNetworkError(err)) {
+        set(state => ({
+          todoItems: state.todoItems.map(item =>
+            item.id === id ? { ...item, checked: checked ? 0 : 1 } : item
+          )
+        }))
+      }
     }
   },
 })
