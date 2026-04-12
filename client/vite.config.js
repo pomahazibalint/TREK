@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
-import { BackgroundSyncPlugin } from 'workbox-background-sync'
 
 export default defineConfig({
   plugins: [
@@ -14,20 +13,6 @@ export default defineConfig({
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api/, /^\/uploads/, /^\/mcp/],
         runtimeCaching: [
-          {
-            // Mutations to trip endpoints — queue offline requests for replay when back online
-            urlPattern: ({ request, url }) =>
-              /\/api\/trips\/\d+\//.test(url.pathname) &&
-              ['POST', 'PUT', 'DELETE'].includes(request.method),
-            handler: 'NetworkOnly',
-            options: {
-              plugins: [
-                new BackgroundSyncPlugin('trek-mutations', {
-                  maxRetentionTime: 24 * 60, // 24 hours
-                }),
-              ],
-            },
-          },
           {
             // Carto map tiles (default provider)
             urlPattern: /^https:\/\/[a-d]\.basemaps\.cartocdn\.com\/.*/i,
