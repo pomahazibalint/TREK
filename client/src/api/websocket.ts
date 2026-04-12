@@ -179,12 +179,24 @@ export function connect(): void {
     onlineListenersAttached = true
     window.addEventListener('online', () => {
       console.log('[WebSocket] Online event detected, attempting reconnect')
+      // Close stale socket if it exists
+      if (socket) {
+        console.log('[WebSocket] Closing stale socket before reconnect')
+        socket.onclose = null  // Prevent reconnect scheduling
+        socket.close()
+        socket = null
+      }
       reconnectDelay = 1000
       connectInternal(false)
     })
     window.addEventListener('offline', () => {
-      console.log('[WebSocket] Offline event detected')
-      // No action needed — WS close will fire naturally, reconnect handled there
+      console.log('[WebSocket] Offline event detected, closing WebSocket')
+      // Force close socket when going offline — it won't close naturally when network is down
+      if (socket) {
+        socket.onclose = null  // Prevent reconnect scheduling
+        socket.close()
+        socket = null
+      }
     })
   }
 
