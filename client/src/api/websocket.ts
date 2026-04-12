@@ -82,14 +82,19 @@ function scheduleReconnect(): void {
 }
 
 async function connectInternal(_isReconnect = false): Promise<void> {
-  console.log('[WebSocket] connectInternal called, isReconnect =', _isReconnect, 'connecting =', connecting)
+  console.log('[WebSocket] connectInternal called, isReconnect =', _isReconnect, 'connecting =', connecting, 'socket =', socket ? `readyState:${socket.readyState}` : 'null')
   if (connecting) {
     console.log('[WebSocket] Already connecting, returning')
     return
   }
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-    console.log('[WebSocket] Socket already open or connecting, returning')
+    console.log('[WebSocket] Socket already open/connecting, readyState =', socket.readyState)
     return
+  }
+  // Clear any closed socket reference
+  if (socket && (socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING)) {
+    console.log('[WebSocket] Clearing closed socket, readyState =', socket.readyState)
+    socket = null
   }
 
   connecting = true
