@@ -284,9 +284,12 @@ function matrixCacheKey(waypoints: Waypoint[], profile: TransportMode): string {
 export async function calculateDistanceMatrix(
   waypoints: Waypoint[],
   profile: TransportMode = 'driving',
-  { signal }: { signal?: AbortSignal } = {}
+  { signal, isOnline = true }: { signal?: AbortSignal; isOnline?: boolean } = {}
 ): Promise<DistanceMatrix | null> {
   if (!waypoints || waypoints.length < 2) return null
+
+  // Skip OSRM calls when offline — return null to use Euclidean fallback
+  if (!isOnline) return null
 
   const now = Date.now()
   const cacheKey = matrixCacheKey(waypoints, profile)

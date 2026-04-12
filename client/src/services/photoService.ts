@@ -75,13 +75,23 @@ export function fetchPhoto(
   lat?: number,
   lng?: number,
   name?: string,
-  callback?: (entry: PhotoEntry) => void
+  callback?: (entry: PhotoEntry) => void,
+  isOnline: boolean = navigator.onLine
 ) {
   const cached = cache.get(cacheKey)
   if (cached) { callback?.(cached); return }
 
   if (inFlight.has(cacheKey)) {
     if (callback) onPhotoLoaded(cacheKey, callback)
+    return
+  }
+
+  // Skip API calls when offline — cache empty result so we don't retry
+  if (!isOnline) {
+    const entry: PhotoEntry = { photoUrl: null, thumbDataUrl: null }
+    cache.set(cacheKey, entry)
+    callback?.(entry)
+    notify(cacheKey, entry)
     return
   }
 

@@ -153,6 +153,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   const [editTitle, setEditTitle] = useState('')
   const [isCalculating, setIsCalculating] = useState(false)
   const [isOptimizing, setIsOptimizing] = useState(false)
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [routeInfo, setRouteInfo] = useState(null)
   const [draggingId, setDraggingId] = useState(null)
   const [lockedIds, setLockedIds] = useState(new Set())
@@ -177,6 +178,18 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   const inputRef = useRef(null)
   const dragDataRef = useRef(null)
   const initedTransportIds = useRef(new Set<number>()) // Speichert Drag-Daten als Backup (dataTransfer geht bei Re-Render verloren)
+
+  // Track online/offline state
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   const currency = trip?.currency || 'EUR'
 
@@ -793,8 +806,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
       const allFreeWithCoords = allFreeAssignments.filter(a => a.place?.lat && a.place?.lng)
       if (allFreeWithCoords.length < 2) return
 
-      // Fetch distance matrix
-      const matrix = await calculateDistanceMatrix(allFreeWithCoords.map(a => a.place!), transportMode)
+      // Fetch distance matrix (skipped when offline)
+      const matrix = await calculateDistanceMatrix(allFreeWithCoords.map(a => a.place!), transportMode, { isOnline })
 
       // Sort timed by place_time
       timedUnlocked.sort((a, b) => {

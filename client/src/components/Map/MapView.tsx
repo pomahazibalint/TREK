@@ -559,6 +559,19 @@ export const MapView = memo(function MapView({
 
   // photoUrls: only base64 thumbs for smooth map zoom
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>(getAllThumbs)
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+
+  // Track online/offline state
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   // Fetch photos via shared service — subscribe to thumb (base64) availability
   const placeIds = useMemo(() => places.map(p => p.id).join(','), [places])
@@ -589,13 +602,13 @@ export const MapView = memo(function MapView({
       if (!cached && !isLoading(cacheKey)) {
         const photoId = place.google_place_id || place.osm_id
         if (photoId || (place.lat && place.lng)) {
-          fetchPhoto(cacheKey, photoId || `coords:${place.lat}:${place.lng}`, place.lat, place.lng, place.name)
+          fetchPhoto(cacheKey, photoId || `coords:${place.lat}:${place.lng}`, place.lat, place.lng, place.name, undefined, isOnline)
         }
       }
     }
 
     return () => cleanups.forEach(fn => fn())
-  }, [placeIds])
+  }, [placeIds, isOnline])
 
   const clusterIconCreateFunction = useCallback((cluster) => {
     const count = cluster.getChildCount()

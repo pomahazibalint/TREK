@@ -21,6 +21,7 @@ export function useRouteCalculation(
   const [routeInfo, setRouteInfo] = useState<RouteResult | null>(null)
   const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([])
   const [isRecalculating, setIsRecalculating] = useState(false)
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
   const routeCalcEnabled = useSettingsStore((s) => s.settings.route_calculation) !== false
   const routeAbortRef = useRef<AbortController | null>(null)
   const lastDayIdRef = useRef<number | null>(null)
@@ -28,6 +29,18 @@ export function useRouteCalculation(
   const calculationGenRef = useRef(0)
   // Track if a manual (forceMode) call is in progress to deprioritize reactive calls
   const forceModeInFlightRef = useRef(false)
+
+  // Track online/offline state
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   const updateRouteForDay = useCallback(async (dayId: number | null, forceMode?: TransportMode) => {
     // If a forceMode call is in flight and this is a reactive call (no forceMode), skip it silently
@@ -64,10 +77,12 @@ export function useRouteCalculation(
         return
       }
       const waypoints = places.map((p) => ({ lat: p.lat!, lng: p.lng! }))
-      if (!routeCalcEnabled) {
+      if (!routeCalcEnabled || !isOnline) {
+        // Skip OSRM calculation if disabled or offline — just use straight lines
         if (myGeneration === calculationGenRef.current) {
           setRoute(waypoints.map((p) => [p.lat, p.lng]))
           setRouteSegments([])
+          setRouteInfo(null)
         }
         return
       }
@@ -137,15 +152,16 @@ export function useRouteCalculation(
         setIsRecalculating(false)
       }
     }
-  }, [routeCalcEnabled, elevationEnabled])
+  }, [routeCalcEnabled, elevationEnabled, isOnline])
 
   // Recalculate when assignments change (transport mode changes via forceMode callback)
+  // Also recalculate when going back online to fetch actual routes instead of straight lines
   const assignments = tripStore.assignments
   const days = (tripStore as any).days
   const selectedDayAssignments = selectedDayId ? assignments?.[String(selectedDayId)] : null
   useEffect(() => {
     updateRouteForDay(selectedDayId)
-  }, [selectedDayId, selectedDayId ? selectedDayAssignments : assignments, updateRouteForDay, days])
+  }, [selectedDayId, selectedDayId ? selectedDayAssignments : assignments, updateRouteForDay, days, isOnline])
 
   return { route, routeSegments, routeInfo, setRoute, setRouteInfo, updateRouteForDay, isRecalculating }
 }

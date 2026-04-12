@@ -17,7 +17,20 @@ interface PlaceAvatarProps {
 export default React.memo(function PlaceAvatar({ place, size = 32, category }: PlaceAvatarProps) {
   const [photoSrc, setPhotoSrc] = useState<string | null>(place.image_url || null)
   const [visible, setVisible] = useState(false)
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
   const ref = useRef<HTMLDivElement>(null)
+
+  // Track online/offline state
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   // Observe visibility — fetch photo only when avatar enters viewport
   useEffect(() => {
@@ -56,10 +69,11 @@ export default React.memo(function PlaceAvatar({ place, size = 32, category }: P
     }
 
     fetchPhoto(cacheKey, photoId || `coords:${place.lat}:${place.lng}`, place.lat, place.lng, place.name,
-      entry => { setPhotoSrc(entry.thumbDataUrl || entry.photoUrl) }
+      entry => { setPhotoSrc(entry.thumbDataUrl || entry.photoUrl) },
+      isOnline
     )
     return onThumbReady(cacheKey, thumb => setPhotoSrc(thumb))
-  }, [visible, place.id, place.image_url, place.google_place_id, place.osm_id])
+  }, [visible, place.id, place.image_url, place.google_place_id, place.osm_id, isOnline])
 
   const bgColor = category?.color || '#6366f1'
   const IconComp = getCategoryIcon(category?.icon)
