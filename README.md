@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://discord.gg/J27gr9GH"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
+  <a href="https://discord.gg/NhZBDSd4qW"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg" alt="License: AGPL v3" /></a>
   <a href="https://hub.docker.com/r/mauriceboe/trek"><img src="https://img.shields.io/docker/pulls/mauriceboe/trek" alt="Docker Pulls" /></a>
   <a href="https://github.com/mauriceboe/TREK"><img src="https://img.shields.io/github/stars/mauriceboe/TREK" alt="GitHub Stars" /></a>
@@ -96,6 +96,18 @@
 - **Weather**: Open-Meteo API (free, no key required)
 - **Icons**: lucide-react
 
+## Helm (Kubernetes)
+
+A hosted Helm repository is available:
+
+```sh
+helm repo add trek https://mauriceboe.github.io/TREK
+helm repo update
+helm install trek trek/trek
+```
+
+See [`charts/README.md`](charts/README.md) for configuration options.
+
 ## Quick Start
 
 ```bash
@@ -143,9 +155,9 @@ services:
       - TZ=${TZ:-UTC} # Timezone for logs, reminders and scheduled tasks (e.g. Europe/Berlin)
       - LOG_LEVEL=${LOG_LEVEL:-info} # info = concise user actions; debug = verbose admin-level details
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-} # Comma-separated origins for CORS and email notification links
-      - FORCE_HTTPS=true # Redirect HTTP to HTTPS when behind a TLS-terminating proxy
-      # - COOKIE_SECURE=false # Uncomment if accessing over plain HTTP (no HTTPS). Not recommended for production.
-      - TRUST_PROXY=1 # Number of trusted proxies for X-Forwarded-For
+      # - FORCE_HTTPS=true # Optional. Enables HTTPS redirect, HSTS, CSP upgrade-insecure-requests, and secure cookies behind a TLS proxy
+      # - COOKIE_SECURE=false # Escape hatch: force session cookies over plain HTTP even in production. Not recommended.
+      # - TRUST_PROXY=1 # Trusted proxy count for X-Forwarded-For / X-Forwarded-Proto. Required for FORCE_HTTPS to work.
       # - ALLOW_INTERNAL_NETWORK=true # Uncomment if Immich or other services are on your local network (RFC-1918 IPs)
       - APP_URL=${APP_URL:-} # Base URL of this instance — required when OIDC is enabled; must match the redirect URI registered with your IdP; Also used as the base URL for email notifications and other external links
       # - OIDC_ISSUER=https://auth.example.com # OpenID Connect provider URL
@@ -173,6 +185,14 @@ services:
       retries: 3
       start_period: 15s
 ```
+
+This example is aimed at reverse-proxy deployments where nginx, Caddy, Traefik, or a similar proxy terminates TLS in front of TREK. The three HTTPS-related variables work together:
+
+- **`FORCE_HTTPS`** is 100% optional. When set to `true` it does four things: adds an HTTP-to-HTTPS 301 redirect, sends an HSTS header (`max-age=31536000`), adds the CSP `upgrade-insecure-requests` directive, and forces the session cookie `secure` flag on. It only makes sense behind a TLS-terminating proxy.
+- **`TRUST_PROXY`** tells Express how many proxies sit in front of TREK so it can read the real client IP from `X-Forwarded-For` and the protocol from `X-Forwarded-Proto`. Without it, `FORCE_HTTPS` redirects will loop because Express never sees the request as secure. In production (`NODE_ENV=production`) this defaults to `1` automatically; in development it is off unless explicitly set.
+- **`COOKIE_SECURE`** is normally auto-derived — the session cookie is marked `secure` whenever `NODE_ENV=production` or `FORCE_HTTPS=true`. Setting `COOKIE_SECURE=false` is an escape hatch that disables the `secure` flag even in production (e.g. testing over plain HTTP on a LAN). Do not disable it in real deployments.
+
+If you access TREK directly on `http://<host>:3000` with no reverse proxy, leave `FORCE_HTTPS` unset (or remove it) and remove `TRUST_PROXY` to avoid redirect loops to a non-existent HTTPS endpoint.
 
 ```bash
 docker compose up -d
@@ -283,9 +303,9 @@ trek.yourdomain.com {
 | `TZ` | Timezone for logs, reminders and cron jobs (e.g. `Europe/Berlin`) | `UTC` |
 | `LOG_LEVEL` | `info` = concise user actions, `debug` = verbose details | `info` |
 | `ALLOWED_ORIGINS` | Comma-separated origins for CORS and email links | same-origin |
-| `FORCE_HTTPS` | Redirect HTTP to HTTPS behind a TLS-terminating proxy | `false` |
-| `COOKIE_SECURE` | Set to `false` to allow session cookies over plain HTTP (e.g. accessing via IP without HTTPS). Defaults to `true` in production. **Not recommended to disable in production.** | `true` |
-| `TRUST_PROXY` | Number of trusted reverse proxies for `X-Forwarded-For` | `1` |
+| `FORCE_HTTPS` | Optional. When `true`: 301-redirects HTTP to HTTPS, sends HSTS (`max-age=31536000`), adds CSP `upgrade-insecure-requests`, and forces the session cookie `secure` flag. Only useful behind a TLS-terminating reverse proxy. Requires `TRUST_PROXY` to be set so Express can detect the forwarded protocol. | `false` |
+| `COOKIE_SECURE` | Controls the `secure` flag on the `trek_session` cookie. Auto-derived: secure is on when `NODE_ENV=production` **or** `FORCE_HTTPS=true`. Set to `false` as an escape hatch to allow session cookies over plain HTTP (e.g. LAN testing without TLS). **Not recommended to disable in production.** | auto (`true` in production) |
+| `TRUST_PROXY` | Number of trusted reverse proxies. Tells Express to read client IP from `X-Forwarded-For` and protocol from `X-Forwarded-Proto`. Activates automatically in production (defaults to `1`); off in development unless explicitly set. Must be set for `FORCE_HTTPS` redirects to work correctly. | `1` (when active) |
 | `ALLOW_INTERNAL_NETWORK` | Allow outbound requests to private/RFC-1918 IP addresses. Set to `true` if Immich or other integrated services are hosted on your local network. Loopback (`127.x`) and link-local/metadata addresses (`169.254.x`) are always blocked regardless of this setting. | `false` |
 | `APP_URL` | Public base URL of this instance (e.g. `https://trek.example.com`). Required when OIDC is enabled — must match the redirect URI registered with your IdP. Also used as the base URL for external links in email notifications. | — |
 | **OIDC / SSO** | | |
