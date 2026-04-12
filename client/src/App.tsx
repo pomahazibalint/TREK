@@ -2,6 +2,7 @@ import React, { useEffect, ReactNode } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { useSettingsStore } from './store/settingsStore'
+import { initOfflineQueue, clearQueue } from './services/offlineQueue'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import TripPlannerPage from './pages/TripPlannerPage'
@@ -82,6 +83,9 @@ export default function App() {
   const { loadSettings } = useSettingsStore()
 
   useEffect(() => {
+    // Initialize offline queue
+    initOfflineQueue().catch(err => console.error('Failed to initialize offline queue:', err))
+
     if (!location.pathname.startsWith('/shared/') && !location.pathname.startsWith('/login')) {
       loadUser()
     }
@@ -123,6 +127,9 @@ export default function App() {
   useEffect(() => {
     if (isAuthenticated) {
       loadSettings()
+    } else {
+      // Clear queue on logout
+      clearQueue().catch(err => console.error('Failed to clear offline queue:', err))
     }
   }, [isAuthenticated])
 

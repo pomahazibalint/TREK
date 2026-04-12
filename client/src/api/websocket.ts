@@ -1,7 +1,10 @@
 // Singleton WebSocket manager for real-time collaboration
 
+import { replayQueue } from '../services/offlineQueue.js'
+
 type WebSocketListener = (event: Record<string, unknown>) => void
 type RefetchCallback = (tripId: string) => void
+type OnQueueReplayedCallback = (result: { success: number; failed: number }) => void
 
 let socket: WebSocket | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -14,6 +17,7 @@ let refetchCallback: RefetchCallback | null = null
 let mySocketId: string | null = null
 let connecting = false
 let onlineListenersAttached = false
+let onQueueReplayedCallback: OnQueueReplayedCallback | null = null
 
 export function getSocketId(): string | null {
   return mySocketId
@@ -21,6 +25,10 @@ export function getSocketId(): string | null {
 
 export function setRefetchCallback(fn: RefetchCallback | null): void {
   refetchCallback = fn
+}
+
+export function setOnQueueReplayedCallback(fn: OnQueueReplayedCallback | null): void {
+  onQueueReplayedCallback = fn
 }
 
 function getWsUrl(wsToken: string): string {
@@ -91,8 +99,20 @@ async function connectInternal(_isReconnect = false): Promise<void> {
   const url = getWsUrl(wsToken)
   socket = new WebSocket(url)
 
-  socket.onopen = () => {
+  socket.onopen = async () => {
     reconnectDelay = 1000
+
+    // Replay queued mutations first
+    try {
+      const result = await replayQueue(fetch)
+      if (onQueueReplayedCallback) {
+        onQueueReplayedCallback(result)
+      }
+      console.log('[WebSocket] Queue replay result:', result)
+    } catch (err) {
+      console.error('[WebSocket] Failed to replay queue:', err)
+    }
+
     if (activeTrips.size > 0) {
       activeTrips.forEach(tripId => {
         if (socket && socket.readyState === WebSocket.OPEN) {
