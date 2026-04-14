@@ -8,7 +8,6 @@ import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLi
 
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
 import { assignmentsApi, reservationsApi, daysApi } from '../../api/client'
-import { downloadTripPDF } from '../PDF/TripPDF'
 import { calculateRoute, generateGoogleMapsUrl, optimizeRoute, calculateDistanceMatrix, type DistanceMatrix } from '../Map/RouteCalculator'
 import PlaceAvatar from '../shared/PlaceAvatar'
 import PriceLevelBadge from '../shared/PriceLevelBadge'
@@ -1117,6 +1116,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                   notes.map(n => ({ ...n, day_id: Number(dayId) }))
                 )
                 try {
+                  const { downloadTripPDF } = await import('../PDF/TripPDF')
                   await downloadTripPDF({ trip, days, places, assignments, categories, dayNotes: flatNotes, reservations, t, locale })
                 } catch (e) {
                   console.error('PDF error:', e)
