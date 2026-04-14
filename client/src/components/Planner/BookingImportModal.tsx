@@ -157,7 +157,7 @@ export default function BookingImportModal({ tripId, isOpen, onClose, onSave }: 
               {/* File tab */}
               {activeTab === 'file' && (
                 <div className="space-y-4">
-                  <div className="border-2 border-dashed rounded-lg p-8 text-center" style={{ borderColor: 'var(--border-secondary)', background: 'var(--bg-secondary)' }}>
+                  <div className="relative border-2 border-dashed rounded-lg p-8 text-center" style={{ borderColor: 'var(--border-secondary)', background: 'var(--bg-secondary)' }}>
                     <Upload size={32} className="mx-auto mb-2" style={{ color: 'var(--text-muted)' }} />
                     <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>
                       {selectedFile ? selectedFile.name : 'Drag & drop or click to select file'}
@@ -169,7 +169,7 @@ export default function BookingImportModal({ tripId, isOpen, onClose, onSave }: 
                       type="file"
                       onChange={e => setSelectedFile(e.target.files?.[0] || null)}
                       accept=".ics,.csv,.txt,.eml,.html,.htm"
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer rounded-lg"
                     />
                   </div>
                   {error && (
