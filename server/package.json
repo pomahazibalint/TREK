@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
-    "archiver": "^6.0.1",
+    "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^12.8.0",
     "cookie-parser": "^1.4.7",
@@ -28,7 +28,7 @@
     "node-cron": "^4.2.1",
     "undici": "^7.0.0",
     "nodemailer": "^8.0.4",
-    "otplib": "^12.0.1",
+    "otplib": "^13.4.0",
     "qrcode": "^1.5.4",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
