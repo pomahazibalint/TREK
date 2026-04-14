@@ -1,23 +1,24 @@
-import React, { useEffect, ReactNode } from 'react'
+import React, { useEffect, ReactNode, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { useSettingsStore } from './store/settingsStore'
 import { initOfflineQueue, clearQueue } from './services/offlineQueue'
-import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-import TripPlannerPage from './pages/TripPlannerPage'
-import FilesPage from './pages/FilesPage'
-import AdminPage from './pages/AdminPage'
-import SettingsPage from './pages/SettingsPage'
-import VacayPage from './pages/VacayPage'
-import AtlasPage from './pages/AtlasPage'
-import SharedTripPage from './pages/SharedTripPage'
-import InAppNotificationsPage from './pages/InAppNotificationsPage.tsx'
 import { ToastContainer } from './components/shared/Toast'
 import { TranslationProvider, useTranslation } from './i18n'
 import { authApi } from './api/client'
 import { usePermissionsStore, PermissionLevel } from './store/permissionsStore'
 import { useInAppNotificationListener } from './hooks/useInAppNotificationListener.ts'
+
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const TripPlannerPage = lazy(() => import('./pages/TripPlannerPage'))
+const FilesPage = lazy(() => import('./pages/FilesPage'))
+const AdminPage = lazy(() => import('./pages/AdminPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const VacayPage = lazy(() => import('./pages/VacayPage'))
+const AtlasPage = lazy(() => import('./pages/AtlasPage'))
+const SharedTripPage = lazy(() => import('./pages/SharedTripPage'))
+const InAppNotificationsPage = lazy(() => import('./pages/InAppNotificationsPage'))
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -165,6 +166,11 @@ export default function App() {
   return (
     <TranslationProvider>
       <ToastContainer />
+      <Suspense fallback={
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+          <div className="w-10 h-10 border-4 border-slate-200 border-t-slate-900 dark:border-slate-700 dark:border-t-slate-300 rounded-full animate-spin" />
+        </div>
+      }>
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
@@ -236,6 +242,7 @@ export default function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </TranslationProvider>
   )
 }
