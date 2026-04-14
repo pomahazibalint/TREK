@@ -5,7 +5,6 @@ import { useSettingsStore } from './store/settingsStore'
 import { initOfflineQueue, clearQueue } from './services/offlineQueue'
 import { ToastContainer } from './components/shared/Toast'
 import { TranslationProvider, useTranslation } from './i18n'
-import { authApi } from './api/client'
 import { usePermissionsStore, PermissionLevel } from './store/permissionsStore'
 import { useInAppNotificationListener } from './hooks/useInAppNotificationListener.ts'
 
@@ -90,7 +89,7 @@ export default function App() {
     if (!location.pathname.startsWith('/shared/') && !location.pathname.startsWith('/login')) {
       loadUser()
     }
-    authApi.getAppConfig().then(async (config: { demo_mode?: boolean; dev_mode?: boolean; has_maps_key?: boolean; version?: string; timezone?: string; require_mfa?: boolean; trip_reminders_enabled?: boolean; permissions?: Record<string, PermissionLevel> }) => {
+    import('./api/authApi').then(({ authApi }) => authApi.getAppConfig()).then(async (config: { demo_mode?: boolean; dev_mode?: boolean; has_maps_key?: boolean; version?: string; timezone?: string; require_mfa?: boolean; trip_reminders_enabled?: boolean; permissions?: Record<string, PermissionLevel> }) => {
       if (config?.demo_mode) setDemoMode(true)
       if (config?.dev_mode) setDevMode(true)
       if (config?.has_maps_key !== undefined) setHasMapsKey(config.has_maps_key)
