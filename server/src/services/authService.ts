@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
-import { authenticator } from 'otplib';
+import { generateSecret as otpGenerateSecret, generateURI as otpGenerateURI, verifySync as otpVerifySync } from 'otplib';
 import QRCode from 'qrcode';
 import { randomBytes, createHash } from 'crypto';
 import { db } from '../db/database';
@@ -21,7 +21,7 @@ import { User } from '../types';
 // Constants
 // ---------------------------------------------------------------------------
 
-authenticator.options = { window: 1 };
+const OTP_WINDOW = 1;
 
 const MFA_SETUP_TTL_MS = 15 * 60 * 1000;
 const mfaSetupPending = new Map<number, { secret: string; exp: number }>();
@@ -808,9 +808,9 @@ export function setupMfa(userId: number, userEmail: string): { error?: string; s
   }
   let secret: string, otpauth_url: string;
   try {
-    secret = authenticator.generateSecret();
+    secret = otpGenerateSecret();
     mfaSetupPending.set(userId, { secret, exp: Date.now() + MFA_SETUP_TTL_MS });
-    otpauth_url = authenticator.keyuri(userEmail, 'TREK', secret);
+    otpauth_url = otpGenerateURI({ secret, label: userEmail, issuer: 'TREK' });
   } catch (err) {
     console.error('[MFA] Setup error:', err);
     return { error: 'MFA setup failed', status: 500 };
@@ -827,7 +827,7 @@ export function enableMfa(userId: number, code?: string): { error?: string; stat
     return { error: 'No MFA setup in progress. Start the setup again.', status: 400 };
   }
   const tokenStr = String(code).replace(/\s/g, '');
-  const ok = authenticator.verify({ token: tokenStr, secret: pending });
+  const ok = otpVerifySync({ token: tokenStr, secret: pending, window: OTP_WINDOW }).valid;
   if (!ok) {
     return { error: 'Invalid verification code', status: 401 };
   }
@@ -868,7 +868,7 @@ export function disableMfa(
   }
   const secret = decryptMfaSecret(user.mfa_secret);
   const tokenStr = String(code).replace(/\s/g, '');
-  const ok = authenticator.verify({ token: tokenStr, secret });
+  const ok = otpVerifySync({ token: tokenStr, secret, window: OTP_WINDOW }).valid;
   if (!ok) {
     return { error: 'Invalid verification code', status: 401 };
   }
@@ -904,7 +904,7 @@ export function verifyMfaLogin(body: {
     }
     const secret = decryptMfaSecret(user.mfa_secret);
     const tokenStr = String(code).trim();
-    const okTotp = authenticator.verify({ token: tokenStr.replace(/\s/g, ''), secret });
+    const okTotp = otpVerifySync({ token: tokenStr.replace(/\s/g, ''), secret, window: OTP_WINDOW }).valid;
     if (!okTotp) {
       const hashes = parseBackupCodeHashes(user.mfa_backup_codes);
       const candidateHash = hashBackupCode(tokenStr);
