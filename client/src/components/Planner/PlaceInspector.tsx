@@ -427,17 +427,27 @@ export default function PlaceInspector({
                   )
                 })()}
 
-                {/* Participants */}
+                {/* Participants — read-only; editing is in the place edit modal */}
                 {showParticipants && (
-                  <ParticipantsBox
-                    tripMembers={tripMembers}
-                    participantIds={participantIds}
-                    allJoined={allJoined}
-                    onSetParticipants={onSetParticipants}
-                    selectedAssignmentId={selectedAssignmentId}
-                    selectedDayId={selectedDayId}
-                    t={t}
-                  />
+                  <div style={{ borderRadius: 12, border: '1px solid var(--border-faint)', padding: '8px 10px' }}>
+                    <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Users size={10} /> {t('inspector.participants')}
+                    </div>
+                    {allJoined ? (
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>{t('places.everyoneGoing') || 'Everyone'}</span>
+                    ) : (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {tripMembers.filter(m => participantIds.includes(m.id)).map(member => (
+                          <div key={member.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 7px 2px 3px', borderRadius: 99, border: '1.5px solid var(--accent)', background: 'var(--bg-hover)', fontSize: 10, fontWeight: 500, color: 'var(--text-primary)' }}>
+                            <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 700, color: 'var(--text-muted)', overflow: 'hidden', flexShrink: 0 }}>
+                              {(member.avatar_url || member.avatar) ? <img src={member.avatar_url || `/uploads/avatars/${member.avatar}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : member.username?.[0]?.toUpperCase()}
+                            </div>
+                            {member.username}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )

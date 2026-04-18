@@ -6,7 +6,8 @@ import { useAuthStore } from '../../store/authStore'
 import { useCanDo } from '../../store/permissionsStore'
 import { useTripStore } from '../../store/tripStore'
 import { useToast } from '../shared/Toast'
-import { Search, Paperclip, X, AlertTriangle } from 'lucide-react'
+import { Search, Paperclip, X, AlertTriangle, Users } from 'lucide-react'
+import { assignmentsApi } from '../../api/client'
 import { useTranslation } from '../../i18n'
 import CustomTimePicker from '../shared/CustomTimePicker'
 import PriceLevelBadge from '../shared/PriceLevelBadge'
@@ -34,6 +35,14 @@ interface PlaceFormData {
   opening_hours?: string[] | null
 }
 
+const CURRENCIES = [
+  'EUR', 'USD', 'GBP', 'JPY', 'CHF', 'CZK', 'PLN', 'SEK', 'NOK', 'DKK',
+  'TRY', 'THB', 'AUD', 'CAD', 'NZD', 'BRL', 'MXN', 'INR', 'IDR', 'MYR',
+  'PHP', 'SGD', 'KRW', 'CNY', 'HKD', 'TWD', 'ZAR', 'AED', 'SAR', 'ILS',
+  'EGP', 'MAD', 'HUF', 'RON', 'BGN', 'ISK', 'UAH', 'BDT', 'LKR', 'VND',
+  'CLP', 'COP', 'PEN', 'ARS',
+]
+
 const DEFAULT_FORM: PlaceFormData = {
   name: '',
   description: '',
@@ -55,6 +64,8 @@ const DEFAULT_FORM: PlaceFormData = {
   osm_id: '',
 }
 
+interface TripMember { id: number; username: string; avatar_url?: string | null; avatar?: string | null }
+
 interface PlaceFormModalProps {
   isOpen: boolean
   onClose: () => void
@@ -66,11 +77,14 @@ interface PlaceFormModalProps {
   onCategoryCreated: (category: Category) => void
   assignmentId: number | null
   dayAssignments?: Assignment[]
+  tripMembers?: TripMember[]
+  onSetParticipants?: (assignmentId: number, dayId: number, participantIds: number[]) => void
 }
 
 export default function PlaceFormModal({
   isOpen, onClose, onSave, place, prefillCoords, tripId, categories,
   onCategoryCreated, assignmentId, dayAssignments = [],
+  tripMembers = [], onSetParticipants,
 }: PlaceFormModalProps) {
   const [form, setForm] = useState(DEFAULT_FORM)
   const [mapsSearch, setMapsSearch] = useState('')
@@ -80,6 +94,9 @@ export default function PlaceFormModal({
   const [showNewCategory, setShowNewCategory] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [pendingFiles, setPendingFiles] = useState([])
+  const [participantIds, setParticipantIds] = useState<number[]>([])
+  const [draftEntryId, setDraftEntryId] = useState<number | null>(null)
+  const [draftEntryIsConverted, setDraftEntryIsConverted] = useState(false)
   const fileRef = useRef(null)
   const toast = useToast()
   const { t, language } = useTranslation()
@@ -120,6 +137,21 @@ export default function PlaceFormModal({
       setForm(DEFAULT_FORM)
     }
     setPendingFiles([])
+    const curAssignment = assignmentId ? dayAssignments.find(a => a.id === assignmentId) : null
+    setParticipantIds((curAssignment as any)?.participants?.map((p: any) => p.user_id) || [])
+
+    // In assignment context: load draft entry price instead of place.price
+    const draftId = (curAssignment as any)?.draft_budget_entry_id ?? null
+    setDraftEntryId(draftId)
+    setDraftEntryIsConverted((curAssignment as any)?.budget_entry_is_draft === 0)
+    if (assignmentId && draftId) {
+      const draftPrice = (curAssignment as any)?.budget_entry_price
+      const draftCurrency = (curAssignment as any)?.budget_entry_currency
+      if (draftPrice != null) setForm(f => ({ ...f, price: String(draftPrice), currency: draftCurrency || f.currency }))
+    } else if (assignmentId && !draftId) {
+      // No draft yet — clear price field so user starts fresh per-visit
+      setForm(f => ({ ...f, price: '' }))
+    }
   }, [place, prefillCoords, isOpen])
 
   const handleChange = (field, value) => {
@@ -212,6 +244,25 @@ export default function PlaceFormModal({
     }
   }
 
+  const handleToggleParticipant = (userId: number) => {
+    if (!onSetParticipants || !assignmentId) return
+    const curAssignment = dayAssignments.find(a => a.id === assignmentId)
+    if (!curAssignment) return
+    const isAllGoing = participantIds.length === 0
+    let newIds: number[]
+    if (isAllGoing) {
+      newIds = tripMembers.filter(m => m.id !== userId).map(m => m.id)
+    } else if (participantIds.includes(userId)) {
+      newIds = participantIds.filter(id => id !== userId)
+      if (newIds.length === 0) return // keep at least one
+    } else {
+      newIds = [...participantIds, userId]
+      if (newIds.length >= tripMembers.length) newIds = []
+    }
+    setParticipantIds(newIds)
+    onSetParticipants(assignmentId, curAssignment.day_id, newIds)
+  }
+
   const hasTimeError = place && form.place_time && form.end_time && form.place_time.length >= 5 && form.end_time.length >= 5 && form.end_time <= form.place_time
 
   const handleSubmit = async (e) => {
@@ -222,12 +273,30 @@ export default function PlaceFormModal({
     }
     setIsSaving(true)
     try {
+      const priceVal = form.price !== '' ? parseFloat(form.price) : null
+
+      // In assignment context: route price to draft entry, not place
+      if (assignmentId && !draftEntryIsConverted) {
+        const draftResult = await assignmentsApi.setDraftPrice(tripId, assignmentId, priceVal, form.currency || null)
+        // Patch the assignment in the store immediately without waiting for WebSocket
+        useTripStore.setState(state => {
+          const newAssignments: typeof state.assignments = {}
+          for (const [dayKey, list] of Object.entries(state.assignments)) {
+            newAssignments[dayKey] = list.map(a => a.id === assignmentId ? { ...a, ...draftResult } : a)
+          }
+          return { assignments: newAssignments }
+        })
+        setDraftEntryId(draftResult.draft_budget_entry_id)
+        setDraftEntryIsConverted(draftResult.budget_entry_is_draft === 0)
+      }
+
       await onSave({
         ...form,
         lat: form.lat ? parseFloat(form.lat) : null,
         lng: form.lng ? parseFloat(form.lng) : null,
         category_id: form.category_id || null,
-        price: form.price !== '' ? parseFloat(form.price) : null,
+        // Don't write price to place when in assignment context
+        price: assignmentId ? null : priceVal,
         duration_minutes: form.duration_minutes !== '' ? parseInt(form.duration_minutes, 10) : null,
         _pendingFiles: pendingFiles.length > 0 ? pendingFiles : undefined,
       })
@@ -430,7 +499,9 @@ export default function PlaceFormModal({
 
         {/* Price + Currency */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">{t('places.formPrice') || 'Price'}</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {assignmentId ? (t('places.formPriceVisit') || 'Price (this visit)') : (t('places.formPrice') || 'Price')}
+          </label>
           <div className="grid grid-cols-3 gap-2 items-center">
             <input
               type="number"
@@ -441,14 +512,13 @@ export default function PlaceFormModal({
               placeholder="0.00"
               className="form-input col-span-2"
             />
-            <input
-              type="text"
-              value={form.currency}
-              onChange={e => handleChange('currency', e.target.value.toUpperCase())}
-              placeholder="EUR"
-              maxLength={3}
+            <select
+              value={form.currency || tripObj?.currency || 'EUR'}
+              onChange={e => handleChange('currency', e.target.value)}
               className="form-input"
-            />
+            >
+              {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
             {form.price_level != null && (
               <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Google price level:</span>
@@ -492,6 +562,44 @@ export default function PlaceFormModal({
             ))}
           </div>
         </div>
+
+        {/* Participants */}
+        {assignmentId && tripMembers.length > 1 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Users size={14} /> {t('places.whoIsGoing') || "Who's going?"}
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {tripMembers.map(member => {
+                const active = participantIds.length === 0 || participantIds.includes(member.id)
+                return (
+                  <button
+                    key={member.id}
+                    type="button"
+                    onClick={() => handleToggleParticipant(member.id)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all"
+                    style={{
+                      background: active ? 'var(--bg-hover)' : 'transparent',
+                      borderColor: active ? 'var(--accent)' : 'var(--border-primary)',
+                      color: active ? 'var(--text-primary)' : 'var(--text-faint)',
+                      opacity: active ? 1 : 0.5,
+                    }}
+                  >
+                    <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 700, color: 'var(--text-muted)', overflow: 'hidden', flexShrink: 0 }}>
+                      {(member.avatar_url || member.avatar)
+                        ? <img src={member.avatar_url || `/uploads/avatars/${member.avatar}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                        : member.username?.[0]?.toUpperCase()}
+                    </div>
+                    {member.username}
+                  </button>
+                )
+              })}
+            </div>
+            {participantIds.length === 0 && (
+              <p className="text-xs mt-1.5" style={{ color: 'var(--text-faint)' }}>{t('places.everyoneGoing') || 'Everyone is going — tap to exclude someone'}</p>
+            )}
+          </div>
+        )}
 
         {/* File Attachments */}
         {canUploadFiles && (

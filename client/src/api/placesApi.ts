@@ -29,4 +29,5 @@ export const assignmentsApi = {
   getParticipants: (tripId: number | string, id: number) => apiClient.get(`/trips/${tripId}/assignments/${id}/participants`).then(r => r.data),
   setParticipants: (tripId: number | string, id: number, userIds: number[]) => apiClient.put(`/trips/${tripId}/assignments/${id}/participants`, { user_ids: userIds }).then(r => r.data),
   updateTime: (tripId: number | string, id: number, times: Record<string, unknown>) => apiClient.put(`/trips/${tripId}/assignments/${id}/time`, times).then(r => r.data),
+  setDraftPrice: (tripId: number | string, id: number, price: number | null, currency: string | null) => apiClient.put(`/trips/${tripId}/assignments/${id}/draft-price`, { price, currency }).then(r => r.data),
 }
