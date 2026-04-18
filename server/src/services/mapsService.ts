@@ -417,13 +417,13 @@ export async function getPlacePhoto(
   lat: number,
   lng: number,
   name?: string,
-): Promise<{ photoUrl: string; attribution: string | null }> {
+): Promise<{ photoUrl: string | null; attribution: string | null }> {
   // Check cache first
   const cached = photoCache.get(placeId);
   if (cached) {
     const ttl = cached.error ? ERROR_TTL : PHOTO_TTL;
     if (Date.now() - cached.fetchedAt < ttl) {
-      if (cached.error) throw Object.assign(new Error('(Cache) No photo available'), { status: 404 });
+      if (cached.error) return { photoUrl: null, attribution: null };
       return { photoUrl: cached.photoUrl, attribution: cached.attribution };
     }
     photoCache.delete(placeId);
@@ -445,7 +445,8 @@ export async function getPlacePhoto(
         }
       } catch { /* fall through */ }
     }
-    throw Object.assign(new Error('(Wikimedia) No photo available'), { status: 404 });
+    photoCache.set(placeId, { photoUrl: '', attribution: null, fetchedAt: Date.now(), error: true });
+    return { photoUrl: null, attribution: null };
   }
 
   // Google Photos — check DB before hitting the API (survives server restarts)
@@ -468,12 +469,12 @@ export async function getPlacePhoto(
   if (!detailsRes.ok) {
     console.error('Google Places photo details error:', details.error?.message || detailsRes.status);
     photoCache.set(placeId, { photoUrl: '', attribution: null, fetchedAt: Date.now(), error: true });
-    throw Object.assign(new Error('(Google Places) Photo could not be retrieved'), { status: 404 });
+    return { photoUrl: null, attribution: null };
   }
 
   if (!details.photos?.length) {
     photoCache.set(placeId, { photoUrl: '', attribution: null, fetchedAt: Date.now(), error: true });
-    throw Object.assign(new Error('(Google Places) No photo available'), { status: 404 });
+    return { photoUrl: null, attribution: null };
   }
 
   const photo = details.photos[0];
@@ -489,7 +490,7 @@ export async function getPlacePhoto(
 
   if (!photoUrl) {
     photoCache.set(placeId, { photoUrl: '', attribution, fetchedAt: Date.now(), error: true });
-    throw Object.assign(new Error('(Google Places) Photo URL not available'), { status: 404 });
+    return { photoUrl: null, attribution: null };
   }
 
   photoCache.set(placeId, { photoUrl, attribution, fetchedAt: Date.now() });
