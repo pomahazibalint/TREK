@@ -193,13 +193,14 @@ export async function getWeather(
       }
     }
 
-    // Climate / archive fallback (far-future dates)
-    if (diffDays > -1) {
+    // Archive fallback: actual historical data for past dates, last-year climate for far-future dates
+    if (diffDays > -366) {
       const month = targetDate.getMonth() + 1;
       const day = targetDate.getDate();
-      const refYear = targetDate.getFullYear() - 1;
-      const startDate = new Date(refYear, month - 1, day - 2);
-      const endDate = new Date(refYear, month - 1, day + 2);
+      const isPast = diffDays < -1;
+      const refYear = isPast ? targetDate.getFullYear() : targetDate.getFullYear() - 1;
+      const startDate = isPast ? targetDate : new Date(refYear, month - 1, day - 2);
+      const endDate = isPast ? targetDate : new Date(refYear, month - 1, day + 2);
       const startStr = startDate.toISOString().slice(0, 10);
       const endStr = endDate.toISOString().slice(0, 10);
 
