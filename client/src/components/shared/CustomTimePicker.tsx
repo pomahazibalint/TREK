@@ -153,8 +153,17 @@ export default function CustomTimePicker({ value, onChange, placeholder = '00:00
       {open && ReactDOM.createPortal(
         <div ref={dropRef} style={{
           position: 'fixed',
-          top: (() => { const r = ref.current?.getBoundingClientRect(); return r ? r.bottom + 4 : 0 })(),
-          left: (() => { const r = ref.current?.getBoundingClientRect(); return r ? r.left : 0 })(),
+          ...(() => {
+            const r = ref.current?.getBoundingClientRect()
+            if (!r) return { top: 0, left: 0 }
+            const dropH = 140, dropW = 180
+            const above = window.innerHeight - r.bottom < dropH + 8
+            const overRight = r.left + dropW > window.innerWidth - 8
+            return {
+              top: above ? r.top - dropH - 4 : r.bottom + 4,
+              left: overRight ? Math.max(8, r.right - dropW) : r.left,
+            }
+          })(),
           zIndex: 99999,
           background: 'var(--bg-card)', border: '1px solid var(--border-primary)',
           borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.12)',

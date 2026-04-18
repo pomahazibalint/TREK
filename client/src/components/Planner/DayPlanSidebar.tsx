@@ -10,6 +10,7 @@ const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Tr
 import { assignmentsApi, reservationsApi, daysApi } from '../../api/client'
 import { calculateRoute, generateGoogleMapsUrl, optimizeRoute, calculateDistanceMatrix, type DistanceMatrix } from '../Map/RouteCalculator'
 import PlaceAvatar from '../shared/PlaceAvatar'
+import DayDetailPanel from './DayDetailPanel'
 import PriceLevelBadge from '../shared/PriceLevelBadge'
 import { useContextMenu, ContextMenu } from '../shared/ContextMenu'
 import Markdown from 'react-markdown'
@@ -74,7 +75,8 @@ interface DayPlanSidebarProps {
   selectedAssignmentId: number | null
   onSelectDay: (dayId: number | null) => void
   onPlaceClick: (placeId: number) => void
-  onDayDetail: (day: Day) => void
+  onDayDetail?: (day: Day) => void
+  onAccommodationChange?: () => void
   accommodations?: Accommodation[]
   onReorder: (dayId: number, orderedIds: number[]) => void
   onUpdateDayTitle: (dayId: number, title: string) => void
@@ -99,7 +101,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   tripId,
   trip, days, places, categories, assignments,
   selectedDayId, selectedPlaceId, selectedAssignmentId,
-  onSelectDay, onPlaceClick, onDayDetail, accommodations = [],
+  onSelectDay, onPlaceClick, onDayDetail, onAccommodationChange, accommodations = [],
   onReorder, onUpdateDayTitle, onRouteCalculated,
   onAssignToDay, onRemoveAssignment, onEditPlace, onDeletePlace,
   reservations = [],
@@ -148,6 +150,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     return new Set(days.map(d => d.id))
   })
   useEffect(() => { onExpandedDaysChange?.(expandedDays) }, [expandedDays])
+  const [detailOpenDayId, setDetailOpenDayId] = useState<number | null>(null)
   const [editingDayId, setEditingDayId] = useState(null)
   const [editTitle, setEditTitle] = useState('')
   const [isCalculating, setIsCalculating] = useState(false)
@@ -1244,7 +1247,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
             <div key={day.id} style={{ borderBottom: '1px solid var(--border-faint)' }}>
               {/* Tages-Header — akzeptiert Drops aus der PlacesSidebar */}
               <div
-                onClick={() => { onSelectDay(day.id); if (onDayDetail) onDayDetail(day) }}
+                onClick={() => { if (isSelected) { onSelectDay(null); setDetailOpenDayId(null) } else { onSelectDay(day.id) } }}
                 onDragOver={e => { e.preventDefault(); setDragOverDayId(day.id) }}
                 onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverDayId(null) }}
                 onDrop={e => handleDropOnDay(e, day.id)}
@@ -1263,14 +1266,18 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                 onMouseEnter={e => { if (!isSelected && !isDragTarget) e.currentTarget.style.background = 'var(--bg-tertiary)' }}
                 onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isDragTarget ? 'rgba(17,24,39,0.07)' : 'transparent' }}
               >
-                {/* Tages-Badge */}
-                <div style={{
-                  width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
-                  background: isSelected ? 'var(--accent)' : 'var(--bg-hover)',
-                  color: isSelected ? 'var(--accent-text)' : 'var(--text-muted)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 11, fontWeight: 700,
-                }}>
+                {/* Tages-Badge — click toggles inline day detail */}
+                <div
+                  onClick={e => { e.stopPropagation(); onSelectDay(day.id); setDetailOpenDayId(prev => prev === day.id ? null : day.id) }}
+                  title={t('dayplan.dayDetail') || 'Day details'}
+                  style={{
+                    width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+                    background: isSelected ? 'var(--accent)' : 'var(--bg-hover)',
+                    color: isSelected ? 'var(--accent-text)' : 'var(--text-muted)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    boxShadow: detailOpenDayId === day.id ? '0 0 0 2px var(--text-primary)' : 'none',
+                  }}>
                   {index + 1}
                 </div>
 
@@ -1323,9 +1330,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                           const border = isCheckOut && !isCheckIn ? 'rgba(239,68,68,0.2)' : isCheckIn ? 'rgba(34,197,94,0.2)' : 'var(--border-primary)'
                           const iconColor = isCheckOut && !isCheckIn ? '#ef4444' : isCheckIn ? '#22c55e' : 'var(--text-muted)'
                           return (
-                            <span key={acc.id} onClick={e => { e.stopPropagation(); onPlaceClick(acc.place_id) }} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 5, background: bg, border: `1px solid ${border}`, flexShrink: 1, minWidth: 0, maxWidth: '40%', cursor: 'pointer' }}>
-                              <Hotel size={8} style={{ color: iconColor, flexShrink: 0 }} />
-                              <span style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{acc.place_name}</span>
+                            <span key={acc.id} onClick={e => { e.stopPropagation(); onPlaceClick(acc.place_id) }} title={acc.place_name} style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 5px', borderRadius: 5, background: bg, border: `1px solid ${border}`, flexShrink: 0, cursor: 'pointer' }}>
+                              <Hotel size={10} style={{ color: iconColor }} />
                             </span>
                           )
                         })
@@ -1335,9 +1341,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                         const activeRentals = getActiveRentalsForDay(day.id)
                         if (activeRentals.length === 0) return null
                         return activeRentals.map(r => (
-                          <span key={`rental-${r.id}`} onClick={e => { e.stopPropagation(); setTransportDetail(r) }} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 5, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', flexShrink: 1, minWidth: 0, maxWidth: '40%', cursor: 'pointer' }}>
-                            <Car size={8} style={{ color: '#3b82f6', flexShrink: 0 }} />
-                            <span style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</span>
+                          <span key={`rental-${r.id}`} onClick={e => { e.stopPropagation(); setTransportDetail(r) }} title={r.title} style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 5px', borderRadius: 5, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', flexShrink: 0, cursor: 'pointer' }}>
+                            <Car size={10} style={{ color: '#3b82f6' }} />
                           </span>
                         ))
                       })()}
@@ -1385,6 +1390,27 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                   {isExpanded ? <ChevronDown size={18} strokeWidth={2} /> : <ChevronRight size={18} strokeWidth={2} />}
                 </button>
               </div>
+
+              {detailOpenDayId === day.id && (() => {
+                const wLat = loc?.place.lat ?? anyGeoPlace?.place?.lat ?? anyGeoPlace?.lat
+                const wLng = loc?.place.lng ?? anyGeoPlace?.place?.lng ?? anyGeoPlace?.lng
+                return (
+                  <DayDetailPanel
+                    inline
+                    day={day}
+                    days={days}
+                    places={places}
+                    categories={categories}
+                    tripId={tripId}
+                    assignments={assignments}
+                    reservations={reservations}
+                    lat={wLat}
+                    lng={wLng}
+                    onClose={() => setDetailOpenDayId(null)}
+                    onAccommodationChange={() => onAccommodationChange?.()}
+                  />
+                )
+              })()}
 
               {/* Aufgeklappte Orte + Notizen */}
               {isExpanded && (

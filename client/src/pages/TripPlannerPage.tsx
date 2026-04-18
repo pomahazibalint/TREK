@@ -9,7 +9,6 @@ import { getCached, fetchPhoto } from '../services/photoService'
 import DayPlanSidebar from '../components/Planner/DayPlanSidebar'
 import PlacesSidebar from '../components/Planner/PlacesSidebar'
 import PlaceInspector from '../components/Planner/PlaceInspector'
-import DayDetailPanel from '../components/Planner/DayDetailPanel'
 import PlaceFormModal from '../components/Planner/PlaceFormModal'
 import TripFormModal from '../components/Trips/TripFormModal'
 import TripMembersModal from '../components/Trips/TripMembersModal'
@@ -154,7 +153,6 @@ export default function TripPlannerPage(): React.ReactElement | null {
   }
   const { leftWidth, rightWidth, leftCollapsed, rightCollapsed, setLeftCollapsed, setRightCollapsed, startResizeLeft, startResizeRight } = useResizablePanels()
   const { selectedPlaceId, selectedAssignmentId, setSelectedPlaceId, selectAssignment } = usePlaceSelection()
-  const [showDayDetail, setShowDayDetail] = useState<Day | null>(null)
   const [showPlaceForm, setShowPlaceForm] = useState<boolean>(false)
   const [editingPlace, setEditingPlace] = useState<Place | null>(null)
   const [prefillCoords, setPrefillCoords] = useState<{ lat: number; lng: number; name?: string; address?: string } | null>(null)
@@ -271,7 +269,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
     } else {
       setSelectedPlaceId(placeId)
     }
-    if (placeId) { setShowDayDetail(null); setLeftCollapsed(false); setRightCollapsed(false) }
+    if (placeId) { setLeftCollapsed(false); setRightCollapsed(false) }
   }, [selectAssignment, setSelectedPlaceId])
 
   const handleMarkerClick = useCallback((placeId) => {
@@ -624,7 +622,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
               leftWidth={leftCollapsed ? 0 : leftWidth}
               rightWidth={rightCollapsed ? 0 : rightWidth}
               hasInspector={!!selectedPlace}
-              hasDayDetail={!!showDayDetail && !selectedPlace}
+              hasDayDetail={false}
               elevationEnabled={enabledAddons.elevation}
               isRecalculating={isRecalculating}
             />
@@ -674,7 +672,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
                   onRouteCalculated={(r) => { if (r) { setRoute(r.coordinates); setRouteInfo(r) } else { setRoute(null); setRouteInfo(null) } }}
                   reservations={reservations}
                   onAddReservation={(dayId) => { setEditingReservation(null); tripActions.setSelectedDay(dayId); setShowReservationModal(true) }}
-                  onDayDetail={(day) => { setShowDayDetail(day); setSelectedPlaceId(null); selectAssignment(null) }}
+                  onAccommodationChange={loadAccommodations}
                   onRemoveAssignment={handleRemoveAssignment}
                   onEditPlace={(place, assignmentId) => { setEditingPlace(place); setEditingAssignmentId(assignmentId || null); setShowPlaceForm(true) }}
                   onDeletePlace={(placeId) => handleDeletePlace(placeId)}
@@ -768,29 +766,6 @@ export default function TripPlannerPage(): React.ReactElement | null {
               document.body
             )}
 
-            {showDayDetail && !selectedPlace && (() => {
-              const currentDay = days.find(d => d.id === showDayDetail.id) || showDayDetail
-              const dayAssignments = assignments[String(currentDay.id)] || []
-              const geoPlace = dayAssignments.find(a => a.place?.lat && a.place?.lng)?.place || places.find(p => p.lat && p.lng)
-              return (
-                <DayDetailPanel
-                  day={currentDay}
-                  days={days}
-                  places={places}
-                  categories={categories}
-                  tripId={tripId}
-                  assignments={assignments}
-                  reservations={reservations}
-                  lat={geoPlace?.lat}
-                  lng={geoPlace?.lng}
-                  onClose={() => { setShowDayDetail(null); handleSelectDay(null) }}
-                  onAccommodationChange={loadAccommodations}
-                  leftWidth={isMobile ? 0 : (leftCollapsed ? 0 : leftWidth)}
-                  rightWidth={isMobile ? 0 : (rightCollapsed ? 0 : rightWidth)}
-                  hasElevation={enabledAddons.elevation && !!(routeInfo?.elevationProfile && routeInfo.elevationProfile.length > 1)}
-                />
-              )
-            })()}
 
             {selectedPlace && !isMobile && (
               <PlaceInspector

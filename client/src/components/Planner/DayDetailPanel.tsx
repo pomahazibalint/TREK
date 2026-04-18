@@ -57,9 +57,10 @@ interface DayDetailPanelProps {
   leftWidth?: number
   rightWidth?: number
   hasElevation?: boolean
+  inline?: boolean
 }
 
-export default function DayDetailPanel({ day, days, places, categories = [], tripId, assignments, reservations = [], lat, lng, onClose, onAccommodationChange, leftWidth = 0, rightWidth = 0, hasElevation = false }: DayDetailPanelProps) {
+export default function DayDetailPanel({ day, days, places, categories = [], tripId, assignments, reservations = [], lat, lng, onClose, onAccommodationChange, leftWidth = 0, rightWidth = 0, hasElevation = false, inline = false }: DayDetailPanelProps) {
   const { t, language, locale } = useTranslation()
   const can = useCanDo()
   const tripObj = useTripStore((s) => s.trip)
@@ -179,41 +180,43 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
   const placesWithCoords = places.filter(p => p.lat && p.lng)
   const font = { fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif" }
 
+  const outerStyle: React.CSSProperties = inline
+    ? {}
+    : { position: 'fixed', bottom: hasElevation ? 104 : 20, left: `calc(${leftWidth}px + (100vw - ${leftWidth}px - ${rightWidth}px) / 2)`, transform: 'translateX(-50%)', width: `min(800px, calc(100vw - ${leftWidth}px - ${rightWidth}px - 32px))`, zIndex: 50, ...font }
+
+  const innerStyle: React.CSSProperties = inline
+    ? { borderTop: '1px solid var(--border-faint)', overflowX: 'hidden' }
+    : { background: 'var(--bg-elevated)', backdropFilter: 'blur(40px) saturate(180%)', WebkitBackdropFilter: 'blur(40px) saturate(180%)', borderRadius: 20, boxShadow: '0 8px 40px rgba(0,0,0,0.14), 0 0 0 1px rgba(0,0,0,0.06)', overflow: 'hidden', maxHeight: '60vh', display: 'flex', flexDirection: 'column' }
+
   return (
-    <div style={{ position: 'fixed', bottom: hasElevation ? 104 : 20, left: `calc(${leftWidth}px + (100vw - ${leftWidth}px - ${rightWidth}px) / 2)`, transform: 'translateX(-50%)', width: `min(800px, calc(100vw - ${leftWidth}px - ${rightWidth}px - 32px))`, zIndex: 50, ...font }}>
-      <div style={{
-        background: 'var(--bg-elevated)',
-        backdropFilter: 'blur(40px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-        borderRadius: 20,
-        boxShadow: '0 8px 40px rgba(0,0,0,0.14), 0 0 0 1px rgba(0,0,0,0.06)',
-        overflow: 'hidden', maxHeight: '60vh', display: 'flex', flexDirection: 'column',
-      }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '18px 16px 14px 20px', borderBottom: '1px solid var(--border-faint)' }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Calendar size={20} style={{ color: 'var(--text-primary)' }} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {day.title || t('planner.dayN', { n: (days.indexOf(day) + 1) || '?' })}
+    <div style={inline ? undefined : outerStyle}>
+      <div style={innerStyle}>
+        {!inline && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '18px 16px 14px 20px', borderBottom: '1px solid var(--border-faint)' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Calendar size={20} style={{ color: 'var(--text-primary)' }} />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-              {formattedDate && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{formattedDate}</div>}
-              {(() => {
-                const avgLevel = dayAvgPriceLevel(day.id, assignments)
-                if (!avgLevel) return null
-                return <PriceLevelBadge level={avgLevel} variant="text" />
-              })()}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+                {day.title || t('planner.dayN', { n: (days.indexOf(day) + 1) || '?' })}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                {formattedDate && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{formattedDate}</div>}
+                {(() => {
+                  const avgLevel = dayAvgPriceLevel(day.id, assignments)
+                  if (!avgLevel) return null
+                  return <PriceLevelBadge level={avgLevel} variant="text" />
+                })()}
+              </div>
             </div>
+            <button onClick={onClose} style={{ background: 'var(--bg-secondary)', border: 'none', borderRadius: 10, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+              <X size={14} style={{ color: 'var(--text-muted)' }} />
+            </button>
           </div>
-          <button onClick={onClose} style={{ background: 'var(--bg-secondary)', border: 'none', borderRadius: 10, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-            <X size={14} style={{ color: 'var(--text-muted)' }} />
-          </button>
-        </div>
+        )}
 
         {/* Scrollable content */}
-        <div style={{ overflowY: 'auto', padding: '14px 20px 18px' }}>
+        <div style={{ overflowY: inline ? 'visible' : 'auto', padding: inline ? '12px 16px 14px' : '14px 20px 18px' }}>
 
           {/* ── Weather ── */}
           {day.date && lat && lng && (
@@ -326,13 +329,13 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
           {/* Day start/end times */}
           {canEditDays && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{t('day.startTime') || 'Start'}</div>
                 <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border-primary)' }}>
                   <CustomTimePicker value={startTime} onChange={setStartTime} placeholder="09:00" />
                 </div>
               </div>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{t('day.endTime') || 'End'}</div>
                 <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border-primary)' }}>
                   <CustomTimePicker value={endTime} onChange={setEndTime} placeholder="20:00" />
