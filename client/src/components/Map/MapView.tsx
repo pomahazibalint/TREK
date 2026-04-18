@@ -45,16 +45,17 @@ function escAttr(s) {
 
 const iconCache = new Map<string, L.DivIcon>()
 
-function createPlaceIcon(place, orderNumbers, isSelected) {
-  const cacheKey = `${place.id}:${isSelected}:${place.image_url || ''}:${place.category_color || ''}:${place.category_icon || ''}:${orderNumbers?.join(',') || ''}`
+function createPlaceIcon(place, orderNumbers, isSelected, isDayPlace = true) {
+  const cacheKey = `${place.id}:${isSelected}:${isDayPlace}:${place.image_url || ''}:${place.category_color || ''}:${place.category_icon || ''}:${orderNumbers?.join(',') || ''}`
   const cached = iconCache.get(cacheKey)
   if (cached) return cached
-  const size = isSelected ? 44 : 36
+  const size = isSelected ? 44 : isDayPlace ? 36 : 26
+  const opacity = isDayPlace ? 1 : 0.45
   const borderColor = isSelected ? '#111827' : 'white'
-  const borderWidth = isSelected ? 3 : 2.5
+  const borderWidth = isSelected ? 3 : isDayPlace ? 2.5 : 1.5
   const shadow = isSelected
     ? '0 0 0 3px rgba(17,24,39,0.25), 0 4px 14px rgba(0,0,0,0.3)'
-    : '0 2px 8px rgba(0,0,0,0.22)'
+    : isDayPlace ? '0 2px 8px rgba(0,0,0,0.22)' : '0 1px 3px rgba(0,0,0,0.15)'
   const bgColor = place.category_color || '#6b7280'
 
   // Number badges (bottom-right)
@@ -82,7 +83,7 @@ function createPlaceIcon(place, orderNumbers, isSelected) {
       className: '',
       html: `<div style="
         width:${size}px;height:${size}px;
-        cursor:pointer;position:relative;
+        cursor:pointer;position:relative;opacity:${opacity};
       ">
         <div style="
           width:${size}px;height:${size}px;border-radius:50%;
@@ -110,7 +111,7 @@ function createPlaceIcon(place, orderNumbers, isSelected) {
       box-shadow:${shadow};
       background:${bgColor};
       display:flex;align-items:center;justify-content:center;
-      cursor:pointer;position:relative;
+      cursor:pointer;position:relative;opacity:${opacity};
       will-change:transform;contain:layout style;
     ">
       ${categoryIconSvg(place.category_icon, isSelected ? 18 : 15)}
@@ -356,15 +357,18 @@ function minZoomForDistance(distanceM: number): number {
   return Math.max(10, Math.min(15, Math.round(15 - Math.log2(Math.max(distanceM, 100) / 100))))
 }
 
+const MIN_LABEL_DISTANCE_M = 500
+
 interface RouteLabelProps {
   midpoint: [number, number]
   walkingText: string
   drivingText: string
   distanceText: string
   distanceM: number
+  mode: string
 }
 
-function RouteLabel({ midpoint, walkingText, drivingText, distanceText, distanceM }: RouteLabelProps) {
+function RouteLabel({ midpoint, walkingText, drivingText, distanceText, distanceM, mode }: RouteLabelProps) {
   const map = useMap()
   const minZoom = minZoomForDistance(distanceM)
   const [visible, setVisible] = useState(map ? map.getZoom() >= minZoom : false)
@@ -377,7 +381,14 @@ function RouteLabel({ midpoint, walkingText, drivingText, distanceText, distance
     return () => map.off('zoomend', check)
   }, [map, minZoom])
 
-  if (!visible || !midpoint) return null
+  if (!visible || !midpoint || distanceM < MIN_LABEL_DISTANCE_M) return null
+
+  const timeText = mode === 'walking' ? walkingText : drivingText
+  const timeIcon = mode === 'walking'
+    ? `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2"/><path d="M7 21l3-7"/><path d="M10 14l5-5"/><path d="M15 9l-4 7"/><path d="M18 18l-3-7"/></svg>`
+    : mode === 'cycling'
+    ? `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg>`
+    : `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9L18 10l-2-4H7L5 10l-2.5 1.1C1.7 11.3 1 12.1 1 13v3c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>`
 
   const icon = L.divIcon({
     className: 'route-info-pill',
@@ -394,13 +405,8 @@ function RouteLabel({ midpoint, walkingText, drivingText, distanceText, distance
       <span style="opacity:0.7">${distanceText}</span>
       <span style="opacity:0.3">|</span>
       <span style="display:flex;align-items:center;gap:2px">
-        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2"/><path d="M7 21l3-7"/><path d="M10 14l5-5"/><path d="M15 9l-4 7"/><path d="M18 18l-3-7"/></svg>
-        ${walkingText}
-      </span>
-      <span style="opacity:0.3">|</span>
-      <span style="display:flex;align-items:center;gap:2px">
-        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9L18 10l-2-4H7L5 10l-2.5 1.1C1.7 11.3 1 12.1 1 13v3c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
-        ${drivingText}
+        ${timeIcon}
+        ${timeText}
       </span>
     </div>`,
     iconSize: [0, 0],
@@ -622,12 +628,15 @@ export const MapView = memo(function MapView({
 
   const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
 
+  const dayPlaceIdSet = useMemo(() => new Set(dayPlaces.map(p => p.id)), [dayPlaces])
+
   const markers = useMemo(() => places.map((place) => {
     const isSelected = place.id === selectedPlaceId
     const pck = place.google_place_id || place.osm_id || `${place.lat},${place.lng}`
     const resolvedPhoto = (pck && photoUrls[pck]) || (place.image_url?.startsWith('data:') ? place.image_url : null) || null
     const orderNumbers = dayOrderMap[place.id] ?? null
-    const icon = createPlaceIcon({ ...place, image_url: resolvedPhoto }, orderNumbers, isSelected)
+    const isDayPlace = dayPlaces.length === 0 || dayPlaceIdSet.has(place.id)
+    const icon = createPlaceIcon({ ...place, image_url: resolvedPhoto }, orderNumbers, isSelected, isDayPlace)
 
     return (
       <Marker
@@ -735,7 +744,7 @@ export const MapView = memo(function MapView({
             />
           )}
           {routeSegments.map((seg, i) => (
-            <RouteLabel key={i} midpoint={seg.mid} walkingText={seg.walkingText} drivingText={seg.drivingText} distanceText={seg.distanceText} distanceM={seg.distanceM} />
+            <RouteLabel key={i} midpoint={seg.mid} walkingText={seg.walkingText} drivingText={seg.drivingText} distanceText={seg.distanceText} distanceM={seg.distanceM} mode={seg.mode} />
           ))}
         </>
       )}
