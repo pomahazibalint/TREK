@@ -4,7 +4,7 @@ declare global { interface Window { __dragData: DragDataPayload | null } }
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom'
-import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Bike, Footprints, Copy } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Bike, Footprints, Copy, Wallet } from 'lucide-react'
 
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
 import { assignmentsApi, reservationsApi, daysApi } from '../../api/client'
@@ -77,6 +77,7 @@ interface DayPlanSidebarProps {
   onPlaceClick: (placeId: number) => void
   onDayDetail?: (day: Day) => void
   onAccommodationChange?: () => void
+  onOpenDraftBudget?: (assignmentId: number, budgetEntryId: number, isDraft: boolean) => void
   accommodations?: Accommodation[]
   onReorder: (dayId: number, orderedIds: number[]) => void
   onUpdateDayTitle: (dayId: number, title: string) => void
@@ -101,7 +102,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   tripId,
   trip, days, places, categories, assignments,
   selectedDayId, selectedPlaceId, selectedAssignmentId,
-  onSelectDay, onPlaceClick, onDayDetail, onAccommodationChange, accommodations = [],
+  onSelectDay, onPlaceClick, onDayDetail, onAccommodationChange, onOpenDraftBudget, accommodations = [],
   onReorder, onUpdateDayTitle, onRouteCalculated,
   onAssignToDay, onRemoveAssignment, onEditPlace, onDeletePlace,
   reservations = [],
@@ -1100,6 +1101,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif" }}>
+      <style>{`@keyframes chipFadeIn { from { opacity: 0; transform: scale(0.88); } to { opacity: 1; transform: scale(1); } }`}</style>
       {/* Reise-Titel */}
       <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border-faint)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
@@ -1236,7 +1238,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
           const isExpanded = expandedDays.has(day.id)
           const da = getDayAssignments(day.id)
           const cost = dayTotalCost(day.id, assignments, currency)
-          const formattedDate = formatDate(day.date, locale)
+          const formattedDate = formatDate(day.date, locale, undefined, true)
           const loc = da.find(a => a.place?.lat && a.place?.lng)
           const isDragTarget = dragOverDayId === day.id
           const merged = mergedItemsMap[day.id] || []
@@ -1695,6 +1697,38 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                                   )}
                                 </div>
                               )}
+                              {(assignment as any).draft_budget_entry_id && (assignment as any).budget_entry_price > 0 ? (() => {
+                                const isDraft = (assignment as any).budget_entry_is_draft !== 0
+                                const price = (assignment as any).budget_entry_price
+                                const cur = (assignment as any).budget_entry_currency || place.currency || ''
+                                return (
+                                  <div
+                                    onClick={e => { e.stopPropagation(); onOpenDraftBudget?.(assignment.id, (assignment as any).draft_budget_entry_id, isDraft) }}
+                                    style={{ marginTop: 3, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                                      background: isDraft ? 'rgba(245,158,11,0.08)' : 'rgba(22,163,74,0.08)',
+                                      color: isDraft ? '#d97706' : '#16a34a',
+                                      border: `1px solid ${isDraft ? 'rgba(245,158,11,0.25)' : 'rgba(22,163,74,0.25)'}`,
+                                    }}
+                                    title={isDraft ? t('planner.budgetDraftTooltip') || 'Draft expense — click to reconcile' : t('planner.budgetConfirmedTooltip') || 'Confirmed expense — click to edit'}
+                                  >
+                                    <Wallet size={9} />
+                                    {price} {cur}
+                                  </div>
+                                )
+                              })() : (canEditDays && isHovered && (
+                                <div
+                                  onClick={e => { e.stopPropagation(); onEditPlace(place, assignment.id) }}
+                                  style={{ marginTop: 3, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 5, fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                                    background: 'transparent', color: 'var(--text-faint)',
+                                    border: '1px dashed var(--border-primary)',
+                                    animation: 'chipFadeIn 0.15s ease',
+                                  }}
+                                  title={t('planner.addVisitPrice') || 'Set a price for this visit — creates a draft budget entry'}
+                                >
+                                  <Wallet size={9} />
+                                  {t('planner.addPrice') || 'Add price'}
+                                </div>
+                              ))}
                             </div>
                             {canEditDays && <div className="reorder-buttons" style={{ flexShrink: 0, display: 'flex', gap: 1, opacity: isHovered ? 1 : undefined, transition: 'opacity 0.15s' }}>
                               <button onClick={moveUp} disabled={idx === 0} style={{ background: 'none', border: 'none', padding: '1px 2px', cursor: idx === 0 ? 'default' : 'pointer', color: idx === 0 ? 'var(--border-primary)' : 'var(--text-faint)', display: 'flex', lineHeight: 1 }}>
