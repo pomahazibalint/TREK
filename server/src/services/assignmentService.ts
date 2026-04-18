@@ -1,6 +1,7 @@
 import { db } from '../db/database';
 import { loadTagsByPlaceIds, loadParticipantsByAssignmentIds, formatAssignmentWithPlace } from './queryHelpers';
 import { AssignmentRow, DayAssignment } from '../types';
+import { createDraftFromAssignment, deleteDraftForAssignment, syncDraftMembers, syncDraftDate } from './budgetService';
 
 export function getAssignmentWithPlace(assignmentId: number | bigint) {
   const a = db.prepare(`
@@ -10,12 +11,14 @@ export function getAssignmentWithPlace(assignmentId: number | bigint) {
       COALESCE(da.assignment_end_time, p.end_time) as end_time,
       p.duration_minutes, p.notes as place_notes,
       p.image_url, p.transport_mode, p.google_place_id, p.website, p.phone,
-      c.name as category_name, c.color as category_color, c.icon as category_icon
+      c.name as category_name, c.color as category_color, c.icon as category_icon,
+      bi.is_draft as budget_entry_is_draft, bi.total_price as budget_entry_price, bi.currency as budget_entry_currency
     FROM day_assignments da
     JOIN places p ON da.place_id = p.id
     LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN budget_items bi ON da.draft_budget_entry_id = bi.id
     WHERE da.id = ?
-  `).get(assignmentId) as AssignmentRow | undefined;
+  `).get(assignmentId) as (AssignmentRow & { draft_budget_entry_id?: number | null; budget_entry_is_draft?: number | null; budget_entry_price?: number | null; budget_entry_currency?: string | null }) | undefined;
 
   if (!a) return null;
 
@@ -40,6 +43,10 @@ export function getAssignmentWithPlace(assignmentId: number | bigint) {
     notes: a.notes,
     assignment_time: a.assignment_time ?? null,
     assignment_end_time: a.assignment_end_time ?? null,
+    draft_budget_entry_id: a.draft_budget_entry_id ?? null,
+    budget_entry_is_draft: a.budget_entry_is_draft ?? null,
+    budget_entry_price: a.budget_entry_price ?? null,
+    budget_entry_currency: a.budget_entry_currency ?? null,
     participants,
     created_at: a.created_at,
     place: {
@@ -81,13 +88,15 @@ export function listDayAssignments(dayId: string | number) {
       COALESCE(da.assignment_end_time, p.end_time) as end_time,
       p.duration_minutes, p.notes as place_notes,
       p.image_url, p.transport_mode, p.google_place_id, p.website, p.phone,
-      c.name as category_name, c.color as category_color, c.icon as category_icon
+      c.name as category_name, c.color as category_color, c.icon as category_icon,
+      bi.is_draft as budget_entry_is_draft, bi.total_price as budget_entry_price, bi.currency as budget_entry_currency
     FROM day_assignments da
     JOIN places p ON da.place_id = p.id
     LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN budget_items bi ON da.draft_budget_entry_id = bi.id
     WHERE da.day_id = ?
     ORDER BY da.order_index ASC, da.created_at ASC
-  `).all(dayId) as AssignmentRow[];
+  `).all(dayId) as (AssignmentRow & { budget_entry_is_draft?: number | null; budget_entry_price?: number | null; budget_entry_currency?: string | null })[];
 
   const placeIds = [...new Set(assignments.map(a => a.place_id))];
   const tagsByPlaceId = loadTagsByPlaceIds(placeIds, { compact: true });
@@ -108,7 +117,7 @@ export function placeExists(placeId: string | number, tripId: string | number) {
   return !!db.prepare('SELECT id FROM places WHERE id = ? AND trip_id = ?').get(placeId, tripId);
 }
 
-export function createAssignment(dayId: string | number, placeId: string | number, notes: string | null) {
+export function createAssignment(tripId: string | number, dayId: string | number, placeId: string | number, notes: string | null) {
   const maxOrder = db.prepare('SELECT MAX(order_index) as max FROM day_assignments WHERE day_id = ?').get(dayId) as { max: number | null };
   const orderIndex = (maxOrder.max !== null ? maxOrder.max : -1) + 1;
 
@@ -116,7 +125,13 @@ export function createAssignment(dayId: string | number, placeId: string | numbe
     'INSERT INTO day_assignments (day_id, place_id, order_index, notes) VALUES (?, ?, ?, ?)'
   ).run(dayId, placeId, orderIndex, notes || null);
 
-  return getAssignmentWithPlace(result.lastInsertRowid);
+  const assignment = getAssignmentWithPlace(result.lastInsertRowid);
+  if (assignment?.place.price && assignment.place.price > 0) {
+    const day = db.prepare('SELECT date FROM days WHERE id = ?').get(dayId) as { date: string | null } | undefined;
+    createDraftFromAssignment(tripId, Number(result.lastInsertRowid), assignment.place.name, assignment.place.price, assignment.place.currency || null, day?.date || null, notes, []);
+    return getAssignmentWithPlace(result.lastInsertRowid);
+  }
+  return assignment;
 }
 
 export function assignmentExistsInDay(id: string | number, dayId: string | number, tripId: string | number) {
@@ -126,6 +141,7 @@ export function assignmentExistsInDay(id: string | number, dayId: string | numbe
 }
 
 export function deleteAssignment(id: string | number) {
+  deleteDraftForAssignment(Number(id));
   db.prepare('DELETE FROM day_assignments WHERE id = ?').run(id);
 }
 
@@ -153,6 +169,11 @@ export function getAssignmentForTrip(id: string | number, tripId: string | numbe
 
 export function moveAssignment(id: string | number, newDayId: string | number, orderIndex: number, oldDayId: number) {
   db.prepare('UPDATE day_assignments SET day_id = ?, order_index = ? WHERE id = ?').run(newDayId, orderIndex || 0, id);
+  const a = db.prepare('SELECT draft_budget_entry_id FROM day_assignments WHERE id = ?').get(id) as { draft_budget_entry_id: number | null } | undefined;
+  if (a?.draft_budget_entry_id) {
+    const day = db.prepare('SELECT date FROM days WHERE id = ?').get(newDayId) as { date: string | null } | undefined;
+    syncDraftDate(a.draft_budget_entry_id, day?.date || null);
+  }
   const updated = getAssignmentWithPlace(Number(id));
   return { assignment: updated, oldDayId };
 }
@@ -200,12 +221,15 @@ export function updateTime(id: string | number, placeTime: string | null, endTim
   return getAssignmentWithPlace(Number(id));
 }
 
-export function setParticipants(assignmentId: string | number, userIds: number[]) {
+export function setParticipants(assignmentId: string | number, userIds: number[], tripId: string | number) {
   db.prepare('DELETE FROM assignment_participants WHERE assignment_id = ?').run(assignmentId);
   if (userIds.length > 0) {
     const insert = db.prepare('INSERT OR IGNORE INTO assignment_participants (assignment_id, user_id) VALUES (?, ?)');
     for (const userId of userIds) insert.run(assignmentId, userId);
   }
+
+  const a = db.prepare('SELECT draft_budget_entry_id FROM day_assignments WHERE id = ?').get(assignmentId) as { draft_budget_entry_id: number | null } | undefined;
+  if (a?.draft_budget_entry_id) syncDraftMembers(a.draft_budget_entry_id, userIds, tripId);
 
   return db.prepare(`
     SELECT ap.user_id, u.username, u.avatar

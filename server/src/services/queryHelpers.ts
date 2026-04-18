@@ -52,7 +52,7 @@ function loadParticipantsByAssignmentIds(assignmentIds: number[]): Record<number
 }
 
 /** Reshape a flat assignment+place DB row into the nested API response shape with embedded place, tags, and participants. */
-function formatAssignmentWithPlace(a: AssignmentRow, tags: Partial<Tag>[], participants: Participant[]) {
+function formatAssignmentWithPlace(a: AssignmentRow & { budget_entry_is_draft?: number | null; budget_entry_price?: number | null; budget_entry_currency?: string | null }, tags: Partial<Tag>[], participants: Participant[]) {
   return {
     id: a.id,
     day_id: a.day_id,
@@ -61,6 +61,10 @@ function formatAssignmentWithPlace(a: AssignmentRow, tags: Partial<Tag>[], parti
     notes: a.notes,
     assignment_time: a.assignment_time ?? null,
     assignment_end_time: a.assignment_end_time ?? null,
+    draft_budget_entry_id: (a as any).draft_budget_entry_id ?? null,
+    budget_entry_is_draft: a.budget_entry_is_draft ?? null,
+    budget_entry_price: a.budget_entry_price ?? null,
+    budget_entry_currency: a.budget_entry_currency ?? null,
     participants: participants || [],
     created_at: a.created_at,
     place: {

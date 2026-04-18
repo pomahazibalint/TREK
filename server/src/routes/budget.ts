@@ -7,12 +7,14 @@ import { db } from '../db/database';
 import {
   verifyTripAccess,
   listBudgetItems,
+  listDraftBudgetItems,
   createBudgetItem,
   updateBudgetItem,
   deleteBudgetItem,
   updateMemberOwed,
   updateMemberPayments,
   calculateSettlement,
+  convertDraftToReal,
 } from '../services/budgetService';
 import { listFilesForBudgetItem } from '../services/fileService';
 
@@ -155,6 +157,26 @@ router.delete('/:id', authenticate, (req: Request, res: Response) => {
 
   res.json({ success: true });
   broadcast(tripId, 'budget:deleted', { itemId: Number(id) }, req.headers['x-socket-id'] as string);
+});
+
+router.get('/drafts', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { tripId } = req.params;
+  if (!verifyTripAccess(tripId, authReq.user.id)) return res.status(404).json({ error: 'Trip not found' });
+  res.json({ items: listDraftBudgetItems(tripId) });
+});
+
+router.post('/:id/convert', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { tripId, id } = req.params;
+  const trip = verifyTripAccess(tripId, authReq.user.id);
+  if (!trip) return res.status(404).json({ error: 'Trip not found' });
+  if (!checkPermission('budget_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+    return res.status(403).json({ error: 'No permission' });
+  const item = convertDraftToReal(id, tripId);
+  if (!item) return res.status(404).json({ error: 'Draft not found' });
+  res.json({ item });
+  broadcast(tripId, 'budget:converted', { item }, req.headers['x-socket-id'] as string);
 });
 
 export default router;

@@ -132,6 +132,8 @@ export interface BudgetItem {
   sort_order: number;
   created_at?: string;
   reservation_id?: number | null;
+  is_draft?: number;
+  linked_assignment_id?: number | null;
   members?: BudgetItemMember[];
 }
 

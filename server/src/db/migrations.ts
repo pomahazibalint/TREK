@@ -922,6 +922,25 @@ function runMigrations(db: Database.Database): void {
     () => {
       try { db.exec('ALTER TABLE places ADD COLUMN price_level INTEGER DEFAULT NULL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
     },
+    // Migration 82: Draft budget entries linked to assignments
+    () => {
+      try { db.exec('ALTER TABLE budget_items ADD COLUMN is_draft INTEGER NOT NULL DEFAULT 0'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec('ALTER TABLE budget_items ADD COLUMN linked_assignment_id INTEGER REFERENCES day_assignments(id) ON DELETE SET NULL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec('ALTER TABLE day_assignments ADD COLUMN draft_budget_entry_id INTEGER REFERENCES budget_items(id) ON DELETE SET NULL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec('ALTER TABLE budget_item_members ADD COLUMN synced_amount_owed_ref REAL DEFAULT NULL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+    },
+    // Migration 83: Trigger to cascade-delete draft budget entries when their assignment is deleted
+    () => {
+      db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_delete_assignment_draft
+        AFTER DELETE ON day_assignments
+        FOR EACH ROW
+        WHEN OLD.draft_budget_entry_id IS NOT NULL
+        BEGIN
+          DELETE FROM budget_items WHERE id = OLD.draft_budget_entry_id AND is_draft = 1;
+        END;
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {

@@ -263,7 +263,7 @@ export function registerTools(server: McpServer, userId: number): void {
       if (!canAccessTrip(tripId, userId)) return noAccess();
       if (!dayExists(dayId, tripId)) return { content: [{ type: 'text' as const, text: 'Day not found.' }], isError: true };
       if (!placeExists(placeId, tripId)) return { content: [{ type: 'text' as const, text: 'Place not found.' }], isError: true };
-      const assignment = createAssignment(dayId, placeId, notes || null);
+      const assignment = createAssignment(tripId, dayId, placeId, notes || null);
       broadcast(tripId, 'assignment:created', { assignment });
       return ok({ assignment });
     }

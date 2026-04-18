@@ -18,6 +18,7 @@ import {
   updateTime,
   setParticipants,
 } from '../services/assignmentService';
+import { setAssignmentDraftPrice } from '../services/budgetService';
 import { AuthRequest } from '../types';
 
 const router = express.Router({ mergeParams: true });
@@ -42,7 +43,7 @@ router.post('/trips/:tripId/days/:dayId/assignments', authenticate, requireTripA
   if (!dayExists(dayId, tripId)) return res.status(404).json({ error: 'Day not found' });
   if (!placeExists(place_id, tripId)) return res.status(404).json({ error: 'Place not found' });
 
-  const assignment = createAssignment(dayId, place_id, notes);
+  const assignment = createAssignment(tripId, dayId, place_id, notes);
   res.status(201).json({ assignment });
   broadcast(tripId, 'assignment:created', { assignment }, req.headers['x-socket-id'] as string);
 });
@@ -127,9 +128,25 @@ router.put('/trips/:tripId/assignments/:id/participants', authenticate, requireT
   const { user_ids } = req.body;
   if (!Array.isArray(user_ids)) return res.status(400).json({ error: 'user_ids must be an array' });
 
-  const participants = setParticipants(id, user_ids);
+  const participants = setParticipants(id, user_ids, tripId);
   res.json({ participants });
   broadcast(Number(tripId), 'assignment:participants', { assignmentId: Number(id), participants }, req.headers['x-socket-id'] as string);
+});
+
+router.put('/trips/:tripId/assignments/:id/draft-price', authenticate, requireTripAccess, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))
+    return res.status(403).json({ error: 'No permission' });
+
+  const { tripId, id } = req.params;
+  const { price, currency } = req.body;
+
+  const existing = getAssignmentForTrip(id, tripId);
+  if (!existing) return res.status(404).json({ error: 'Assignment not found' });
+
+  const result = setAssignmentDraftPrice(tripId, Number(id), price ?? null, currency ?? null);
+  res.json(result);
+  broadcast(Number(tripId), 'assignment:draft-price', { assignmentId: Number(id), ...result }, req.headers['x-socket-id'] as string);
 });
 
 export default router;

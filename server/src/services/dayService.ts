@@ -92,10 +92,12 @@ export function listDays(tripId: string | number) {
       COALESCE(da.assignment_end_time, p.end_time) as end_time,
       p.duration_minutes, p.notes as place_notes,
       p.image_url, p.transport_mode, p.google_place_id, p.website, p.phone,
-      c.name as category_name, c.color as category_color, c.icon as category_icon
+      c.name as category_name, c.color as category_color, c.icon as category_icon,
+      bi.is_draft as budget_entry_is_draft, bi.total_price as budget_entry_price, bi.currency as budget_entry_currency
     FROM day_assignments da
     JOIN places p ON da.place_id = p.id
     LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN budget_items bi ON da.draft_budget_entry_id = bi.id
     WHERE da.day_id IN (${dayPlaceholders})
     ORDER BY da.order_index ASC, da.created_at ASC
   `).all(...dayIds) as AssignmentRow[];

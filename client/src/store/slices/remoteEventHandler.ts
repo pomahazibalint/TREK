@@ -94,6 +94,21 @@ export function handleRemoteEvent(set: SetState, event: WebSocketEvent): void {
           }
         }
       }
+      case 'assignment:draft-price': {
+        // Update the assignment's draft budget fields in every day that contains it
+        const assignmentId = payload.assignmentId as number
+        const updates = {
+          draft_budget_entry_id: payload.draft_budget_entry_id ?? null,
+          budget_entry_is_draft: payload.budget_entry_is_draft ?? null,
+          budget_entry_price: payload.budget_entry_price ?? null,
+          budget_entry_currency: payload.budget_entry_currency ?? null,
+        }
+        const newAssignments: typeof state.assignments = {}
+        for (const [dayKey, list] of Object.entries(state.assignments)) {
+          newAssignments[dayKey] = list.map(a => a.id === assignmentId ? { ...a, ...updates } : a)
+        }
+        return { assignments: newAssignments }
+      }
       case 'assignment:reordered': {
         const dayKey = String(payload.dayId)
         const currentItems = state.assignments[dayKey] || []
@@ -222,6 +237,21 @@ export function handleRemoteEvent(set: SetState, event: WebSocketEvent): void {
               : i
           ),
         }
+      case 'budget:converted': {
+        const itemId = (payload.item as { id: number }).id
+        const newAssignments: typeof state.assignments = {}
+        let changed = false
+        for (const [dayKey, list] of Object.entries(state.assignments)) {
+          newAssignments[dayKey] = list.map(a => {
+            if ((a as any).draft_budget_entry_id === itemId) {
+              changed = true
+              return { ...a, budget_entry_is_draft: 0 }
+            }
+            return a
+          })
+        }
+        return changed ? { assignments: newAssignments } : {}
+      }
 
       // Reservations
       case 'reservation:created':

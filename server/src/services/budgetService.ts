@@ -28,7 +28,7 @@ function loadItemMembers(itemId: number | string) {
 
 export function listBudgetItems(tripId: string | number) {
   const items = db.prepare(
-    'SELECT * FROM budget_items WHERE trip_id = ? ORDER BY category ASC, created_at ASC'
+    'SELECT * FROM budget_items WHERE trip_id = ? ORDER BY is_draft ASC, category ASC, created_at ASC'
   ).all(tripId) as BudgetItem[];
 
   const itemIds = items.map(i => i.id);
@@ -237,12 +237,12 @@ export function calculateSettlement(tripId: string | number) {
   const trip = db.prepare('SELECT currency FROM trips WHERE id = ?').get(tripId) as { currency: string } | undefined;
   const settlementCurrency = trip?.currency || 'EUR';
 
-  const items = db.prepare('SELECT * FROM budget_items WHERE trip_id = ?').all(tripId) as BudgetItem[];
+  const items = db.prepare('SELECT * FROM budget_items WHERE trip_id = ? AND is_draft = 0').all(tripId) as BudgetItem[];
   const allMembers = db.prepare(`
     SELECT bm.budget_item_id, bm.user_id, bm.amount_owed_ref, bm.amount_paid_ref, u.username, u.avatar
     FROM budget_item_members bm
     JOIN users u ON bm.user_id = u.id
-    WHERE bm.budget_item_id IN (SELECT id FROM budget_items WHERE trip_id = ?)
+    WHERE bm.budget_item_id IN (SELECT id FROM budget_items WHERE trip_id = ? AND is_draft = 0)
   `).all(tripId) as (BudgetItemMember & { budget_item_id: number })[];
 
   // Calculate net balance per user: positive = is owed money, negative = owes money
@@ -326,4 +326,212 @@ export function calculateSettlement(tripId: string | number) {
     })),
     flows,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Draft budget entries — linked to day_assignments
+// ---------------------------------------------------------------------------
+
+function getTripMemberIds(tripId: string | number): number[] {
+  const rows = db.prepare(`
+    SELECT user_id FROM trip_members WHERE trip_id = ?
+    UNION SELECT user_id FROM trips WHERE id = ?
+  `).all(tripId, tripId) as { user_id: number }[];
+  return rows.map(r => r.user_id);
+}
+
+export function createDraftFromAssignment(
+  tripId: string | number,
+  assignmentId: number | bigint,
+  placeName: string,
+  price: number,
+  currency: string | null,
+  expenseDate: string | null,
+  assignmentNotes: string | null,
+  participantUserIds: number[],
+): number | null {
+  if (!price || price <= 0) return null;
+
+  const trip = db.prepare('SELECT currency FROM trips WHERE id = ?').get(tripId) as { currency: string } | undefined;
+  const itemCurrency = currency || trip?.currency || 'EUR';
+  const name = assignmentNotes ? `${placeName} — ${assignmentNotes}` : placeName;
+
+  const maxOrder = db.prepare('SELECT MAX(sort_order) as max FROM budget_items WHERE trip_id = ?').get(tripId) as { max: number | null };
+  const sortOrder = (maxOrder.max !== null ? maxOrder.max : -1) + 1;
+
+  const result = db.prepare(`
+    INSERT INTO budget_items (trip_id, category, name, total_price, currency, tip_ref, sort_order, expense_date, is_draft, linked_assignment_id)
+    VALUES (?, 'Activities', ?, ?, ?, 0, ?, ?, 1, ?)
+  `).run(tripId, name, price, itemCurrency, sortOrder, expenseDate || null, assignmentId);
+
+  const draftId = Number(result.lastInsertRowid);
+  const memberIds = participantUserIds.length > 0 ? participantUserIds : getTripMemberIds(tripId);
+
+  if (memberIds.length > 0) {
+    const n = memberIds.length;
+    const share = Math.round(price / n * 100) / 100;
+    const lastShare = Math.round((price - share * (n - 1)) * 100) / 100;
+    const insert = db.prepare(`
+      INSERT INTO budget_item_members (budget_item_id, user_id, amount_owed_ref, amount_paid_ref, synced_amount_owed_ref)
+      VALUES (?, ?, ?, 0, ?)
+    `);
+    memberIds.forEach((uid, i) => {
+      const amount = i === n - 1 ? lastShare : share;
+      insert.run(draftId, uid, amount, amount);
+    });
+  }
+
+  db.prepare('UPDATE day_assignments SET draft_budget_entry_id = ? WHERE id = ?').run(draftId, assignmentId);
+  return draftId;
+}
+
+export function syncDraftMembers(
+  draftId: number,
+  newParticipantIds: number[],
+  tripId: string | number,
+): void {
+  const draft = db.prepare('SELECT total_price FROM budget_items WHERE id = ? AND is_draft = 1').get(draftId) as { total_price: number } | undefined;
+  if (!draft) return;
+
+  const totalPrice = draft.total_price;
+  const memberIds = newParticipantIds.length > 0 ? newParticipantIds : getTripMemberIds(tripId);
+
+  const existing = db.prepare(`
+    SELECT user_id, amount_owed_ref, synced_amount_owed_ref FROM budget_item_members WHERE budget_item_id = ?
+  `).all(draftId) as { user_id: number; amount_owed_ref: number; synced_amount_owed_ref: number | null }[];
+
+  const existingByUser = new Map(existing.map(r => [r.user_id, r]));
+  const userEditedIds = new Set(
+    existing
+      .filter(r => r.synced_amount_owed_ref !== null && Math.abs(r.amount_owed_ref - r.synced_amount_owed_ref) > 0.005)
+      .map(r => r.user_id)
+  );
+
+  const newIdSet = new Set(memberIds);
+  for (const [removedId] of existingByUser) {
+    if (!newIdSet.has(removedId)) {
+      if (userEditedIds.has(removedId)) {
+        db.prepare('UPDATE budget_item_members SET amount_owed_ref = 0, synced_amount_owed_ref = 0 WHERE budget_item_id = ? AND user_id = ?').run(draftId, removedId);
+      } else {
+        db.prepare('DELETE FROM budget_item_members WHERE budget_item_id = ? AND user_id = ?').run(draftId, removedId);
+      }
+    }
+  }
+
+  const editedAllocated = memberIds.filter(id => userEditedIds.has(id)).reduce((sum, id) => sum + (existingByUser.get(id)?.amount_owed_ref || 0), 0);
+  const nonEditedIds = memberIds.filter(id => !userEditedIds.has(id));
+  const remaining = Math.max(0, totalPrice - editedAllocated);
+  const n = nonEditedIds.length;
+
+  const upsert = db.prepare(`
+    INSERT INTO budget_item_members (budget_item_id, user_id, amount_owed_ref, amount_paid_ref, synced_amount_owed_ref)
+    VALUES (?, ?, ?, 0, ?)
+    ON CONFLICT(budget_item_id, user_id) DO UPDATE SET amount_owed_ref = excluded.amount_owed_ref, synced_amount_owed_ref = excluded.synced_amount_owed_ref
+  `);
+  nonEditedIds.forEach((uid, i) => {
+    const share = n > 0 ? Math.round(remaining / n * 100) / 100 : 0;
+    const amount = n > 0 && i === n - 1 ? Math.round((remaining - share * (n - 1)) * 100) / 100 : share;
+    upsert.run(draftId, uid, amount, amount);
+  });
+}
+
+export function syncDraftDate(draftId: number, date: string | null): void {
+  db.prepare('UPDATE budget_items SET expense_date = ? WHERE id = ? AND is_draft = 1').run(date || null, draftId);
+}
+
+export function convertDraftToReal(id: string | number, tripId: string | number) {
+  const item = db.prepare('SELECT * FROM budget_items WHERE id = ? AND trip_id = ? AND is_draft = 1').get(id, tripId) as BudgetItem | undefined;
+  if (!item) return null;
+  db.prepare('UPDATE budget_items SET is_draft = 0, linked_assignment_id = NULL WHERE id = ?').run(id);
+  // Keep draft_budget_entry_id on assignment so the badge can still navigate to the real entry.
+  const updated = db.prepare('SELECT * FROM budget_items WHERE id = ?').get(id) as BudgetItem & { members?: BudgetItemMember[] };
+  updated.members = loadItemMembers(id);
+  return updated;
+}
+
+export function deleteDraftForAssignment(assignmentId: number): void {
+  const draft = db.prepare('SELECT id FROM budget_items WHERE linked_assignment_id = ? AND is_draft = 1').get(assignmentId) as { id: number } | undefined;
+  if (draft) db.prepare('DELETE FROM budget_items WHERE id = ?').run(draft.id);
+}
+
+export function listDraftBudgetItems(tripId: string | number) {
+  const items = db.prepare(
+    'SELECT * FROM budget_items WHERE trip_id = ? AND is_draft = 1 ORDER BY created_at ASC'
+  ).all(tripId) as BudgetItem[];
+  const itemIds = items.map(i => i.id);
+  if (itemIds.length === 0) return items.map(i => ({ ...i, members: [] }));
+  const allMembers = db.prepare(`
+    SELECT bm.budget_item_id, bm.user_id, bm.amount_owed_ref, bm.amount_paid_ref, u.username, u.avatar
+    FROM budget_item_members bm
+    JOIN users u ON bm.user_id = u.id
+    WHERE bm.budget_item_id IN (${itemIds.map(() => '?').join(',')})
+  `).all(...itemIds) as (BudgetItemMember & { budget_item_id: number })[];
+  const membersByItem: Record<number, (BudgetItemMember & { avatar_url: string | null })[]> = {};
+  for (const m of allMembers) {
+    if (!membersByItem[m.budget_item_id]) membersByItem[m.budget_item_id] = [];
+    membersByItem[m.budget_item_id].push({ ...m, avatar_url: avatarUrl(m) });
+  }
+  items.forEach(item => { (item as any).members = membersByItem[item.id] || []; });
+  return items;
+}
+
+// Set (or create) the draft price for a specific assignment.
+// When price is null/0 and a draft exists, the draft is deleted.
+export function setAssignmentDraftPrice(
+  tripId: string | number,
+  assignmentId: number,
+  price: number | null,
+  currency: string | null,
+): { draft_budget_entry_id: number | null; budget_entry_is_draft: number | null; budget_entry_price: number | null; budget_entry_currency: string | null } {
+  const assignment = db.prepare(`
+    SELECT da.id, da.draft_budget_entry_id, da.notes, da.day_id,
+      p.name as place_name, p.currency as place_currency
+    FROM day_assignments da
+    JOIN places p ON da.place_id = p.id
+    WHERE da.id = ?
+  `).get(assignmentId) as { id: number; draft_budget_entry_id: number | null; notes: string | null; day_id: number; place_name: string; place_currency: string | null } | undefined;
+
+  if (!assignment) return { draft_budget_entry_id: null, budget_entry_is_draft: null, budget_entry_price: null, budget_entry_currency: null };
+
+  const effectiveCurrency = currency || assignment.place_currency;
+  const existingDraftId = assignment.draft_budget_entry_id;
+
+  // Price cleared: delete draft if it's still a draft
+  if (!price || price <= 0) {
+    if (existingDraftId) {
+      const draft = db.prepare('SELECT is_draft FROM budget_items WHERE id = ?').get(existingDraftId) as { is_draft: number } | undefined;
+      if (draft?.is_draft) {
+        db.prepare('DELETE FROM budget_items WHERE id = ?').run(existingDraftId);
+        db.prepare('UPDATE day_assignments SET draft_budget_entry_id = NULL WHERE id = ?').run(assignmentId);
+      }
+    }
+    return { draft_budget_entry_id: null, budget_entry_is_draft: null, budget_entry_price: null, budget_entry_currency: null };
+  }
+
+  // Draft exists and is still a draft: update price and recalculate equal split
+  if (existingDraftId) {
+    const draft = db.prepare('SELECT is_draft, total_price FROM budget_items WHERE id = ?').get(existingDraftId) as { is_draft: number; total_price: number } | undefined;
+    if (draft?.is_draft) {
+      db.prepare('UPDATE budget_items SET total_price = ?, currency = ? WHERE id = ?').run(price, effectiveCurrency, existingDraftId);
+      // Recalculate equal split for all members
+      const members = db.prepare('SELECT user_id FROM budget_item_members WHERE budget_item_id = ?').all(existingDraftId) as { user_id: number }[];
+      const n = members.length;
+      if (n > 0) {
+        const share = Math.round(price / n * 100) / 100;
+        const upsert = db.prepare('UPDATE budget_item_members SET amount_owed_ref = ?, synced_amount_owed_ref = ? WHERE budget_item_id = ? AND user_id = ?');
+        members.forEach((m, i) => {
+          const amount = i === n - 1 ? Math.round((price - share * (n - 1)) * 100) / 100 : share;
+          upsert.run(amount, amount, existingDraftId, m.user_id);
+        });
+      }
+      return { draft_budget_entry_id: existingDraftId, budget_entry_is_draft: 1, budget_entry_price: price, budget_entry_currency: effectiveCurrency };
+    }
+    // Already converted: don't touch the real entry, just return current state
+    return { draft_budget_entry_id: existingDraftId, budget_entry_is_draft: 0, budget_entry_price: draft?.total_price ?? price, budget_entry_currency: effectiveCurrency };
+  }
+
+  // No draft yet: create one
+  const day = db.prepare('SELECT date FROM days WHERE id = ?').get(assignment.day_id) as { date: string | null } | undefined;
+  const draftId = createDraftFromAssignment(tripId, assignmentId, assignment.place_name, price, effectiveCurrency, day?.date || null, assignment.notes, []);
+  return { draft_budget_entry_id: draftId, budget_entry_is_draft: 1, budget_entry_price: price, budget_entry_currency: effectiveCurrency };
 }

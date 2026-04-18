@@ -10,6 +10,7 @@ import DayPlanSidebar from '../components/Planner/DayPlanSidebar'
 import PlacesSidebar from '../components/Planner/PlacesSidebar'
 import PlaceInspector from '../components/Planner/PlaceInspector'
 import PlaceFormModal from '../components/Planner/PlaceFormModal'
+import ExpenseModal from '../components/Budget/ExpenseModal'
 import TripFormModal from '../components/Trips/TripFormModal'
 import TripMembersModal from '../components/Trips/TripMembersModal'
 import { ReservationModal } from '../components/Planner/ReservationModal'
@@ -24,7 +25,7 @@ import Navbar from '../components/Layout/Navbar'
 import { useToast } from '../components/shared/Toast'
 import { Map, X, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Ticket, PackageCheck, Wallet, FolderOpen, Camera, Users } from 'lucide-react'
 import { useTranslation } from '../i18n'
-import { addonsApi, accommodationsApi, authApi, tripsApi, assignmentsApi, mapsApi } from '../api/client'
+import { addonsApi, accommodationsApi, authApi, tripsApi, assignmentsApi, mapsApi, budgetApi } from '../api/client'
 import ConfirmDialog from '../components/shared/ConfirmDialog'
 import { useResizablePanels } from '../hooks/useResizablePanels'
 import { useTripWebSocket } from '../hooks/useTripWebSocket'
@@ -70,7 +71,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
   const { id: tripId } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const toast = useToast()
-  const { t, language } = useTranslation()
+  const { t, language, locale } = useTranslation()
   const { settings } = useSettingsStore()
   const trip = useTripStore(s => s.trip)
   const days = useTripStore(s => s.days)
@@ -154,6 +155,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
   const { leftWidth, rightWidth, leftCollapsed, rightCollapsed, setLeftCollapsed, setRightCollapsed, startResizeLeft, startResizeRight } = useResizablePanels()
   const { selectedPlaceId, selectedAssignmentId, setSelectedPlaceId, selectAssignment } = usePlaceSelection()
   const [showPlaceForm, setShowPlaceForm] = useState<boolean>(false)
+  const [draftBudgetModal, setDraftBudgetModal] = useState<{ item: any; context: string; isDraft: boolean } | null>(null)
   const [editingPlace, setEditingPlace] = useState<Place | null>(null)
   const [prefillCoords, setPrefillCoords] = useState<{ lat: number; lng: number; name?: string; address?: string } | null>(null)
   const [editingAssignmentId, setEditingAssignmentId] = useState<number | null>(null)
@@ -673,6 +675,24 @@ export default function TripPlannerPage(): React.ReactElement | null {
                   reservations={reservations}
                   onAddReservation={(dayId) => { setEditingReservation(null); tripActions.setSelectedDay(dayId); setShowReservationModal(true) }}
                   onAccommodationChange={loadAccommodations}
+                  onOpenDraftBudget={async (assignmentId, budgetEntryId, isDraft) => {
+                    try {
+                      let item: any = null
+                      if (isDraft) {
+                        const data = await budgetApi.listDrafts(tripId)
+                        item = (data.items || []).find((i: any) => i.id === budgetEntryId)
+                      } else {
+                        await tripActions.loadBudgetItems(tripId)
+                        item = useTripStore.getState().budgetItems.find((i: any) => i.id === budgetEntryId)
+                      }
+                      if (item) {
+                        const assignment = Object.values(assignments).flat().find((a: any) => a.id === assignmentId) as any
+                        const dayObj = days.find(d => d.id === assignment?.day_id)
+                        const context = [dayObj?.title || (dayObj ? `Day ${days.indexOf(dayObj) + 1}` : null), assignment?.notes].filter(Boolean).join(' — ')
+                        setDraftBudgetModal({ item, context, isDraft })
+                      }
+                    } catch {}
+                  }}
                   onRemoveAssignment={handleRemoveAssignment}
                   onEditPlace={(place, assignmentId) => { setEditingPlace(place); setEditingAssignmentId(assignmentId || null); setShowPlaceForm(true) }}
                   onDeletePlace={(placeId) => handleDeletePlace(placeId)}
@@ -946,7 +966,24 @@ export default function TripPlannerPage(): React.ReactElement | null {
         )}
       </div>
 
-      <PlaceFormModal isOpen={showPlaceForm} onClose={() => { setShowPlaceForm(false); setEditingPlace(null); setEditingAssignmentId(null); setPrefillCoords(null) }} onSave={handleSavePlace} place={editingPlace} prefillCoords={prefillCoords} assignmentId={editingAssignmentId} dayAssignments={editingAssignmentId ? Object.values(assignments).flat() : []} tripId={tripId} categories={categories} onCategoryCreated={cat => tripActions.addCategory?.(cat)} />
+      <PlaceFormModal isOpen={showPlaceForm} onClose={() => { setShowPlaceForm(false); setEditingPlace(null); setEditingAssignmentId(null); setPrefillCoords(null) }} onSave={handleSavePlace} place={editingPlace} prefillCoords={prefillCoords} assignmentId={editingAssignmentId} dayAssignments={editingAssignmentId ? Object.values(assignments).flat() : []} tripId={tripId} categories={categories} onCategoryCreated={cat => tripActions.addCategory?.(cat)} tripMembers={tripMembers} onSetParticipants={async (assignmentId, dayId, userIds) => { try { const data = await assignmentsApi.setParticipants(tripId, assignmentId, userIds); useTripStore.setState(state => ({ assignments: { ...state.assignments, [String(dayId)]: (state.assignments[String(dayId)] || []).map(a => a.id === assignmentId ? { ...a, participants: data.participants } : a) } })) } catch {} }} />
+      {draftBudgetModal && (
+        <ExpenseModal
+          item={draftBudgetModal.item}
+          category={draftBudgetModal.item?.category || 'Activities'}
+          tripId={tripId}
+          tripCurrency={trip?.currency || 'EUR'}
+          tripMembers={tripMembers}
+          categories={[...new Set((budgetItems || []).map((i: any) => i.category).filter(Boolean)), 'Activities', 'Other']}
+          locale={locale}
+          t={t}
+          isDraft={draftBudgetModal.isDraft}
+          linkedContext={draftBudgetModal.context}
+          onSave={() => setDraftBudgetModal(null)}
+          onClose={() => setDraftBudgetModal(null)}
+          onConvert={() => { setDraftBudgetModal(null); tripActions.loadBudgetItems?.(tripId) }}
+        />
+      )}
       <TripFormModal isOpen={showTripForm} onClose={() => setShowTripForm(false)} onSave={async (data) => { await tripActions.updateTrip(tripId, data); toast.success(t('trip.toast.tripUpdated')) }} trip={trip} />
       <TripMembersModal isOpen={showMembersModal} onClose={() => setShowMembersModal(false)} tripId={tripId} tripTitle={trip?.title} />
       <ReservationModal isOpen={showReservationModal} onClose={() => { setShowReservationModal(false); setEditingReservation(null) }} onSave={handleSaveReservation} reservation={editingReservation} days={days} places={places} assignments={assignments} selectedDayId={selectedDayId} files={files} onFileUpload={canUploadFiles ? (fd) => tripActions.addFile(tripId, fd) : undefined} onFileDelete={(id) => tripActions.deleteFile(tripId, id)} accommodations={tripAccommodations} />
