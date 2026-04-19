@@ -269,12 +269,17 @@ router.post('/messages', authenticate, validateStringLengths({ text: 5000 }), (r
       for (const username of mentions) {
         const mentioned = members.find(m => m.username === username);
         if (mentioned && mentioned.id !== authReq.user.id) {
-          createNotificationForRecipient(mentioned.id, {
+          createNotificationForRecipient({
             type: 'navigate',
-            title: `@${authReq.user.username || 'Someone'} mentioned you`,
-            body: text.length > 80 ? text.substring(0, 80) + '…' : text,
-            url: `/trips/${tripId}/collab`,
-          }).catch(() => {});
+            scope: 'trip',
+            target: Number(tripId),
+            sender_id: authReq.user.id,
+            title_key: 'notif.collab_message.title',
+            text_key: 'notif.collab_message.text',
+            text_params: { actor: authReq.user.username || 'Someone' },
+            navigate_text_key: 'notif.action.view_collab',
+            navigate_target: `/trips/${tripId}/collab`,
+          }, mentioned.id, null);
         }
       }
     });
