@@ -1,7 +1,8 @@
 import type { RouteResult, RouteSegment, Waypoint, TransportMode } from '../../types'
 import { mapsApi } from '../../api/client'
 
-const OSRM_BASE = 'https://router.project-osrm.org/route/v1'
+const OSRM_ROUTE_BASE = 'https://router.project-osrm.org/route/v1'
+const OSRM_TABLE_BASE = 'https://router.project-osrm.org/table/v1'
 
 // Client-side cache: same waypoints + profile → same OSRM geometry
 const routeCache = new Map<string, { result: RouteResult; fetchedAt: number }>()
@@ -114,7 +115,7 @@ export async function calculateRoute(
 
   const osrmProfile = profile === 'walking' ? 'foot' : profile === 'cycling' ? 'bicycle' : 'car'
   const coords = waypoints.map((p) => `${p.lng},${p.lat}`).join(';')
-  const url = `${OSRM_BASE}/${osrmProfile}/${coords}?overview=full&geometries=geojson&steps=false&annotations=distance,duration`
+  const url = `${OSRM_ROUTE_BASE}/${osrmProfile}/${coords}?overview=full&geometries=geojson&steps=false&annotations=distance,duration`
 
   // Retry transient network failures with exponential backoff (up to 3 attempts)
   let lastError: Error | null = null
@@ -300,7 +301,7 @@ export async function calculateDistanceMatrix(
 
   const osrmProfile = profile === 'walking' ? 'foot' : profile === 'cycling' ? 'bicycle' : 'car'
   const coords = waypoints.map((p) => `${p.lng},${p.lat}`).join(';')
-  const url = `${OSRM_BASE}/table/v1/${osrmProfile}/${coords}?annotations=duration,distance`
+  const url = `${OSRM_TABLE_BASE}/${osrmProfile}/${coords}?annotations=duration,distance`
 
   try {
     const response = await fetch(url, { signal })
