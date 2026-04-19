@@ -170,7 +170,6 @@ export default function ExpenseModal({
   const handleConvert = async () => {
     if (!name.trim()) { setError(t('budget.table.name') + ' is required'); return }
     if (!expenseDate) { setError('Date is required to convert to an expense'); return }
-    if (!owedBalanced) { setError('Owed amounts + tip must equal the total before converting'); return }
     if (!item?.id) return
     setConverting(true); setError('')
     try {
@@ -262,8 +261,8 @@ export default function ExpenseModal({
                     <th style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.05em', width: isDraft ? '55%' : '40%' }}></th>
                     <th style={{ padding: '9px 12px', textAlign: 'right', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.05em', width: isDraft ? '45%' : '30%' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-                        {t('budget.modal.owes')} ({itemCurrency})
-                        <button onClick={equalSplitOwed} style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.2)', background: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>= {t('budget.modal.equalSplit')}</button>
+                        {isDraft ? t('budget.modal.paid') : t('budget.modal.owes')} ({itemCurrency})
+                        <button onClick={isDraft ? equalSplitPaid : equalSplitOwed} style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.2)', background: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>= {t('budget.modal.equalSplit')}</button>
                       </div>
                     </th>
                     {!isDraft && (
@@ -291,8 +290,11 @@ export default function ExpenseModal({
                           </div>
                         </td>
                         <td style={{ padding: '5px 12px', textAlign: 'right' }}>
-                          {numInp(row.owed, v => setRows(prev => prev.map((r, j) => j === i ? { ...r, owed: v } : r)))}
-                          {isForeignCurrency && row.owed > 0 && hintRate && <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>≈ {fmtNum(row.owed * hintRate, locale, tripCurrency)}</div>}
+                          {isDraft
+                            ? numInp(row.paid, v => setRows(prev => prev.map((r, j) => j === i ? { ...r, paid: v } : r)))
+                            : numInp(row.owed, v => setRows(prev => prev.map((r, j) => j === i ? { ...r, owed: v } : r)))
+                          }
+                          {isForeignCurrency && (isDraft ? row.paid : row.owed) > 0 && hintRate && <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>≈ {fmtNum((isDraft ? row.paid : row.owed) * hintRate, locale, tripCurrency)}</div>}
                         </td>
                         {!isDraft && (
                           <td style={{ padding: '5px 12px', textAlign: 'right' }}>
@@ -303,14 +305,16 @@ export default function ExpenseModal({
                       </tr>
                     )
                   })}
-                  <tr style={{ borderTop: '1px solid var(--border-primary)', background: 'var(--bg-secondary)' }}>
-                    <td style={{ padding: '7px 12px', fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>{t('budget.modal.tip')}</td>
-                    <td style={{ padding: '5px 12px', textAlign: 'right' }}>
-                      {numInp(tip, setTip)}
-                      {isForeignCurrency && tip > 0 && hintRate && <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>≈ {fmtNum(tip * hintRate, locale, tripCurrency)}</div>}
-                    </td>
-                    {!isDraft && <td style={{ padding: '5px 12px' }} />}
-                  </tr>
+                  {!isDraft && (
+                    <tr style={{ borderTop: '1px solid var(--border-primary)', background: 'var(--bg-secondary)' }}>
+                      <td style={{ padding: '7px 12px', fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>{t('budget.modal.tip')}</td>
+                      <td style={{ padding: '5px 12px', textAlign: 'right' }}>
+                        {numInp(tip, setTip)}
+                        {isForeignCurrency && tip > 0 && hintRate && <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>≈ {fmtNum(tip * hintRate, locale, tripCurrency)}</div>}
+                      </td>
+                      <td style={{ padding: '5px 12px' }} />
+                    </tr>
+                  )}
                   <tr style={{ borderTop: '2px solid var(--border-primary)', background: '#000', color: '#fff' }}>
                     <td style={{ padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -320,8 +324,8 @@ export default function ExpenseModal({
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700 }}>{fmtNum(owedTotal, locale, itemCurrency)}</span>
-                        <DeltaBadge delta={owedDelta} cur={itemCurrency} />
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>{isDraft ? (paidSum > 0.01 ? fmtNum(paidSum, locale, itemCurrency) : '—') : fmtNum(owedTotal, locale, itemCurrency)}</span>
+                        <DeltaBadge delta={isDraft ? paidDelta : owedDelta} allZero={isDraft && paidSum < 0.01} cur={itemCurrency} />
                       </div>
                     </td>
                     {!isDraft && (
@@ -363,7 +367,7 @@ export default function ExpenseModal({
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4 }}>
             <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}>{t('common.cancel')}</button>
             {isDraft && item?.id && (
-              <button onClick={handleConvert} disabled={converting || saving} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: owedBalanced && expenseDate ? '#d97706' : 'var(--bg-tertiary)', color: owedBalanced && expenseDate ? '#fff' : 'var(--text-faint)', cursor: owedBalanced && expenseDate ? 'pointer' : 'default', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button onClick={handleConvert} disabled={converting || saving} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: expenseDate ? '#d97706' : 'var(--bg-tertiary)', color: expenseDate ? '#fff' : 'var(--text-faint)', cursor: expenseDate ? 'pointer' : 'default', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
                 {converting && <div style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.3)', borderTop: '2px solid #fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />}
                 <ArrowRightCircle size={14} /> Convert to expense
               </button>
