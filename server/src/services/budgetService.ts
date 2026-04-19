@@ -47,6 +47,8 @@ export function listBudgetItems(tripId: string | number) {
       if (!membersByItem[m.budget_item_id]) membersByItem[m.budget_item_id] = [];
       membersByItem[m.budget_item_id].push({
         user_id: m.user_id,
+        amount_owed: m.amount_owed,
+        amount_paid: m.amount_paid,
         amount_owed_ref: m.amount_owed_ref,
         amount_paid_ref: m.amount_paid_ref,
         username: m.username,
