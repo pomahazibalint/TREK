@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import ReactDOM from 'react-dom'
 import { useTripStore } from '../../store/tripStore'
-import { X, RefreshCw, Paperclip, Upload, ArrowRightCircle } from 'lucide-react'
+import { X, Paperclip, Upload, ArrowRightCircle } from 'lucide-react'
 import { budgetApi } from '../../api/client'
 import { CustomDatePicker } from '../shared/CustomDateTimePicker'
 import type { BudgetItem } from '../../types'
@@ -56,8 +56,9 @@ export default function ExpenseModal({
   const [totalPrice, setTotalPrice] = useState(item?.total_price ?? 0)
   const [itemCurrency, setItemCurrency] = useState(item?.currency || tripCurrency)
   const isForeignCurrency = itemCurrency !== tripCurrency
-  const [totalPriceRef, setTotalPriceRef] = useState<number>(item?.total_price_ref ?? (item?.total_price || 0))
-  const [exchangeRate, setExchangeRate] = useState<number | null>(item?.exchange_rate ?? null)
+  const [hintRate, setHintRate] = useState<number | null>(
+    (item?.currency !== tripCurrency && item?.exchange_rate) ? item.exchange_rate : null
+  )
   const [note, setNote] = useState(item?.note || '')
   const [expenseDate, setExpenseDate] = useState(item?.expense_date || '')
   const [selectedCategory, setSelectedCategory] = useState(item?.category || category)
@@ -68,7 +69,6 @@ export default function ExpenseModal({
     const rate = (isForeign && item.exchange_rate) ? item.exchange_rate : 1
     return isForeign ? Math.round(tipRef / rate * 100) / 100 : tipRef
   })
-  const [fetchingRate, setFetchingRate] = useState(false)
   const [saving, setSaving] = useState(false)
   const [converting, setConverting] = useState(false)
   const [error, setError] = useState('')
@@ -133,48 +133,31 @@ export default function ExpenseModal({
     setRows(prev => prev.map((r, i) => ({ ...r, paid: i === n - 1 ? Math.round((totalPrice - each * (n - 1)) * 100) / 100 : each })))
   }
 
-  const fetchRate = async () => {
-    if (!isForeignCurrency) return
-    setFetchingRate(true)
-    try {
-      const resp = await fetch(`https://api.exchangerate-api.com/v4/latest/${itemCurrency}`)
-      const data = await resp.json()
-      const rate = data.rates?.[tripCurrency]
-      if (rate) { setExchangeRate(rate); setTotalPriceRef(Math.round(totalPrice * rate * 100) / 100) }
-    } catch {}
-    setFetchingRate(false)
-  }
-
-  useEffect(() => { if (!isForeignCurrency) setTotalPriceRef(totalPrice) }, [totalPrice, isForeignCurrency])
-  useEffect(() => { if (isForeignCurrency && exchangeRate) setTotalPriceRef(Math.round(totalPrice * exchangeRate * 100) / 100) }, [exchangeRate, totalPrice, isForeignCurrency])
+  useEffect(() => {
+    if (!isForeignCurrency) { setHintRate(null); return }
+    let cancelled = false
+    fetch(`https://api.exchangerate-api.com/v4/latest/${itemCurrency}`)
+      .then(r => r.json())
+      .then((data: any) => { if (!cancelled) { const rate = data.rates?.[tripCurrency]; if (rate) setHintRate(rate) } })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [itemCurrency, isForeignCurrency, tripCurrency])
 
   const buildSavePayload = () => {
-    const effectiveRate = (isForeignCurrency && totalPrice > 0) ? (totalPriceRef / totalPrice) : 1
     const tipVal = tip || 0
-    const tip_ref = isForeignCurrency ? Math.round(tipVal * effectiveRate * 100) / 100 : tipVal
-    const itemData = { name: name.trim(), total_price: totalPrice, currency: itemCurrency, total_price_ref: isForeignCurrency ? totalPriceRef : null, exchange_rate: isForeignCurrency ? (exchangeRate || effectiveRate) : null, tip_ref, note: note.trim() || null, expense_date: expenseDate || null, category: selectedCategory }
-    const owedMembers = rows.filter(r => r.owed > 0).map(r => ({ user_id: r.user_id, amount_owed_ref: Math.round((r.owed || 0) * effectiveRate * 100) / 100 }))
-    if (isForeignCurrency && owedBalanced && owedMembers.length > 0) {
-      const sum = owedMembers.reduce((s, m) => s + m.amount_owed_ref, 0) + tip_ref
-      const diff = totalPriceRef - sum
-      if (Math.abs(diff) < 0.1) owedMembers[0].amount_owed_ref = Math.round((owedMembers[0].amount_owed_ref + diff) * 100) / 100
-    }
-    const payments = rows.map(r => ({ user_id: r.user_id, amount_paid_ref: Math.round((r.paid || 0) * effectiveRate * 100) / 100 }))
-    if (isForeignCurrency && paidBalanced && paidSum > 0.01) {
-      const sum = payments.reduce((s, p) => s + p.amount_paid_ref, 0)
-      const diff = totalPriceRef - sum
-      if (Math.abs(diff) < 0.1) { const fp = payments.find(p => p.amount_paid_ref > 0); if (fp) fp.amount_paid_ref = Math.round((fp.amount_paid_ref + diff) * 100) / 100 }
-    }
-    return { itemData, owedMembers, payments, effectiveRate, tip_ref }
+    const itemData = { name: name.trim(), total_price: totalPrice, currency: itemCurrency, note: note.trim() || null, expense_date: expenseDate || null, category: selectedCategory }
+    const owedMembers = rows.filter(r => r.owed > 0).map(r => ({ user_id: r.user_id, amount_owed: r.owed || 0 }))
+    const payments = rows.map(r => ({ user_id: r.user_id, amount_paid: r.paid || 0 }))
+    return { itemData, owedMembers, payments, tip: tipVal }
   }
 
   const persist = async () => {
-    const { itemData, owedMembers, payments, effectiveRate, tip_ref } = buildSavePayload()
+    const { itemData, owedMembers, payments, tip } = buildSavePayload()
     let savedId: number
     if (item) { const updated = await updateBudgetItem(tripId, item.id, itemData); savedId = updated.id }
     else { const created = await addBudgetItem(tripId, itemData); savedId = created.id }
-    if (owedMembers.length > 0 && (owedBalanced || !isForeignCurrency)) await setBudgetItemMemberOwed(tripId, savedId, owedMembers, tip_ref)
-    if (paidSum > 0.01 && (paidBalanced || !isForeignCurrency)) await setBudgetItemMemberPayments(tripId, savedId, payments)
+    if (owedMembers.length > 0 && owedBalanced) await setBudgetItemMemberOwed(tripId, savedId, owedMembers, tip)
+    if (paidSum > 0.01 && paidBalanced) await setBudgetItemMemberPayments(tripId, savedId, payments)
     return savedId
   }
 
@@ -272,23 +255,6 @@ export default function ExpenseModal({
             </div>
           </div>
 
-          {isForeignCurrency && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, padding: '12px', background: 'var(--bg-secondary)', borderRadius: 10 }}>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 4 }}>{t('budget.modal.referenceAmount')} ({tripCurrency})</label>
-                <input type="text" inputMode="decimal" value={totalPriceRef === 0 ? '' : String(totalPriceRef)} onChange={e => { const n = parseFloat(e.target.value.replace(',', '.')); setTotalPriceRef(isNaN(n) ? 0 : n) }} style={{ ...inp }} />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 4 }}>{t('budget.modal.exchangeRate')}</label>
-                <input type="text" inputMode="decimal" value={exchangeRate ?? ''} onChange={e => { const n = parseFloat(e.target.value.replace(',', '.')); setExchangeRate(isNaN(n) ? null : n) }} style={{ ...inp }} />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                <button onClick={fetchRate} disabled={fetchingRate} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 6, border: '1px solid var(--border-primary)', background: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                  <RefreshCw size={12} style={{ animation: fetchingRate ? 'spin 1s linear infinite' : 'none' }} />{t('budget.modal.fetchRate')}
-                </button>
-              </div>
-            </div>
-          )}
 
           <input value={note} onChange={e => setNote(e.target.value)} placeholder={t('budget.table.note')} style={inp} />
 
@@ -330,12 +296,12 @@ export default function ExpenseModal({
                         </td>
                         <td style={{ padding: '5px 12px', textAlign: 'right' }}>
                           {numInp(row.owed, v => setRows(prev => prev.map((r, j) => j === i ? { ...r, owed: v } : r)))}
-                          {isForeignCurrency && row.owed > 0 && <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>≈ {fmtNum(row.owed * (totalPriceRef / (totalPrice || 1)), locale, tripCurrency)}</div>}
+                          {isForeignCurrency && row.owed > 0 && hintRate && <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>≈ {fmtNum(row.owed * hintRate, locale, tripCurrency)}</div>}
                         </td>
                         {!isDraft && (
                           <td style={{ padding: '5px 12px', textAlign: 'right' }}>
                             {numInp(row.paid, v => setRows(prev => prev.map((r, j) => j === i ? { ...r, paid: v } : r)))}
-                            {isForeignCurrency && row.paid > 0 && <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>≈ {fmtNum(row.paid * (totalPriceRef / (totalPrice || 1)), locale, tripCurrency)}</div>}
+                            {isForeignCurrency && row.paid > 0 && hintRate && <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>≈ {fmtNum(row.paid * hintRate, locale, tripCurrency)}</div>}
                           </td>
                         )}
                       </tr>
@@ -345,7 +311,7 @@ export default function ExpenseModal({
                     <td style={{ padding: '7px 12px', fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>{t('budget.modal.tip')}</td>
                     <td style={{ padding: '5px 12px', textAlign: 'right' }}>
                       {numInp(tip, setTip)}
-                      {isForeignCurrency && tip > 0 && <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>≈ {fmtNum(tip * (totalPriceRef / (totalPrice || 1)), locale, tripCurrency)}</div>}
+                      {isForeignCurrency && tip > 0 && hintRate && <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>≈ {fmtNum(tip * hintRate, locale, tripCurrency)}</div>}
                     </td>
                     {!isDraft && <td style={{ padding: '5px 12px' }} />}
                   </tr>
@@ -353,7 +319,7 @@ export default function ExpenseModal({
                     <td style={{ padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span>{fmtNum(totalPrice, locale, itemCurrency)}</span>
-                        {isForeignCurrency && <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: 400 }}>{fmtNum(totalPriceRef, locale, tripCurrency)}</span>}
+                        {isForeignCurrency && hintRate && <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: 400 }}>{fmtNum(Math.round(totalPrice * hintRate * 100) / 100, locale, tripCurrency)}</span>}
                       </div>
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right' }}>

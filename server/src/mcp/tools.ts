@@ -307,7 +307,7 @@ export function registerTools(server: McpServer, userId: number): void {
     async ({ tripId, name, category, total_price, note }) => {
       if (isDemoUser(userId)) return demoDenied();
       if (!canAccessTrip(tripId, userId)) return noAccess();
-      const item = createBudgetItem(tripId, { category, name, total_price, note });
+      const item = await createBudgetItem(tripId, { category, name, total_price, note });
       broadcast(tripId, 'budget:created', { item });
       return ok({ item });
     }
@@ -615,15 +615,13 @@ export function registerTools(server: McpServer, userId: number): void {
         name: z.string().min(1).max(200).optional(),
         category: z.string().max(100).optional(),
         total_price: z.number().nonnegative().optional(),
-        persons: z.number().int().positive().nullable().optional(),
-        days: z.number().int().positive().nullable().optional(),
         note: z.string().max(500).nullable().optional(),
       },
     },
-    async ({ tripId, itemId, name, category, total_price, persons, days, note }) => {
+    async ({ tripId, itemId, name, category, total_price, note }) => {
       if (isDemoUser(userId)) return demoDenied();
       if (!canAccessTrip(tripId, userId)) return noAccess();
-      const item = updateBudgetItem(itemId, tripId, { name, category, total_price, persons, days, note });
+      const item = await updateBudgetItem(itemId, tripId, { name, category, total_price, note });
       if (!item) return { content: [{ type: 'text' as const, text: 'Budget item not found.' }], isError: true };
       broadcast(tripId, 'budget:updated', { item });
       return ok({ item });

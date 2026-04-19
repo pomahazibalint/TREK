@@ -5,9 +5,9 @@ export const budgetApi = {
   create: (tripId: number | string, data: Record<string, unknown>) => apiClient.post(`/trips/${tripId}/budget`, data).then(r => r.data),
   update: (tripId: number | string, id: number, data: Record<string, unknown>) => apiClient.put(`/trips/${tripId}/budget/${id}`, data).then(r => r.data),
   delete: (tripId: number | string, id: number) => apiClient.delete(`/trips/${tripId}/budget/${id}`).then(r => r.data),
-  setMemberOwed: (tripId: number | string, id: number, members: { user_id: number; amount_owed_ref: number }[], tip_ref: number) =>
-    apiClient.put(`/trips/${tripId}/budget/${id}/members`, { members, tip_ref }).then(r => r.data),
-  setMemberPayments: (tripId: number | string, id: number, payments: { user_id: number; amount_paid_ref: number }[]) =>
+  setMemberOwed: (tripId: number | string, id: number, members: { user_id: number; amount_owed: number }[], tip: number) =>
+    apiClient.put(`/trips/${tripId}/budget/${id}/members`, { members, tip }).then(r => r.data),
+  setMemberPayments: (tripId: number | string, id: number, payments: { user_id: number; amount_paid: number }[]) =>
     apiClient.put(`/trips/${tripId}/budget/${id}/members/payments`, { payments }).then(r => r.data),
   settlement: (tripId: number | string) => apiClient.get(`/trips/${tripId}/budget/settlement`).then(r => r.data),
   listDrafts: (tripId: number | string) => apiClient.get(`/trips/${tripId}/budget/drafts`).then(r => r.data),

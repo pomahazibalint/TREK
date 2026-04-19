@@ -1,5 +1,6 @@
 import { db, canAccessTrip } from '../db/database';
 import { BudgetItem, BudgetItemMember } from '../types';
+import { fetchExchangeRate } from '../utils/exchangeRate';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,24 +59,31 @@ export function listBudgetItems(tripId: string | number) {
   return items;
 }
 
-export function createBudgetItem(
+export async function createBudgetItem(
   tripId: string | number,
   data: {
     category?: string;
     name: string;
     total_price?: number;
     currency?: string;
-    total_price_ref?: number | null;
-    exchange_rate?: number | null;
-    tip_ref?: number;
     note?: string | null;
     expense_date?: string | null;
   },
 ) {
-  // Inherit trip currency as default for the item
   const trip = db.prepare('SELECT currency FROM trips WHERE id = ?').get(tripId) as { currency: string } | undefined;
   const tripCurrency = trip?.currency || 'EUR';
   const itemCurrency = data.currency || tripCurrency;
+  const totalPrice = data.total_price || 0;
+
+  let exchangeRate: number | null = null;
+  let totalPriceRef: number | null = null;
+
+  if (itemCurrency !== tripCurrency) {
+    const rate = await fetchExchangeRate(itemCurrency, tripCurrency);
+    if (rate === null) throw new Error(`Could not fetch exchange rate for ${itemCurrency} → ${tripCurrency}`);
+    exchangeRate = rate;
+    totalPriceRef = Math.round(totalPrice * rate * 100) / 100;
+  }
 
   const maxOrder = db.prepare(
     'SELECT MAX(sort_order) as max FROM budget_items WHERE trip_id = ?'
@@ -90,11 +98,11 @@ export function createBudgetItem(
     tripId,
     data.category || 'Other',
     data.name,
-    data.total_price || 0,
+    totalPrice,
     itemCurrency,
-    data.total_price_ref !== undefined ? data.total_price_ref : null,
-    data.exchange_rate !== undefined ? data.exchange_rate : null,
-    data.tip_ref || 0,
+    totalPriceRef,
+    exchangeRate,
+    0,
     data.note || null,
     sortOrder,
     data.expense_date || null,
@@ -105,7 +113,7 @@ export function createBudgetItem(
   return item;
 }
 
-export function updateBudgetItem(
+export async function updateBudgetItem(
   id: string | number,
   tripId: string | number,
   data: {
@@ -113,16 +121,39 @@ export function updateBudgetItem(
     name?: string;
     total_price?: number;
     currency?: string;
-    total_price_ref?: number | null;
-    exchange_rate?: number | null;
-    tip_ref?: number;
     note?: string | null;
     sort_order?: number;
     expense_date?: string | null;
   },
 ) {
-  const item = db.prepare('SELECT * FROM budget_items WHERE id = ? AND trip_id = ?').get(id, tripId);
+  const item = db.prepare('SELECT * FROM budget_items WHERE id = ? AND trip_id = ?').get(id, tripId) as BudgetItem | undefined;
   if (!item) return null;
+
+  const trip = db.prepare('SELECT currency FROM trips WHERE id = ?').get(tripId) as { currency: string } | undefined;
+  const tripCurrency = trip?.currency || 'EUR';
+  const newCurrency = data.currency ?? item.currency;
+  const newTotalPrice = data.total_price ?? item.total_price;
+
+  let exchangeRate: number | null | undefined = undefined;
+  let totalPriceRef: number | null | undefined = undefined;
+
+  if (newCurrency === tripCurrency) {
+    exchangeRate = null;
+    totalPriceRef = null;
+  } else {
+    const currencyChanged = data.currency !== undefined && data.currency !== item.currency;
+    const missingRate = !item.exchange_rate;
+    if (currencyChanged || missingRate) {
+      const rate = await fetchExchangeRate(newCurrency, tripCurrency);
+      if (rate === null) throw new Error(`Could not fetch exchange rate for ${newCurrency} → ${tripCurrency}`);
+      exchangeRate = rate;
+    } else {
+      exchangeRate = item.exchange_rate;
+    }
+    totalPriceRef = Math.round(newTotalPrice * (exchangeRate as number) * 100) / 100;
+  }
+
+  const hasRateUpdate = exchangeRate !== undefined;
 
   db.prepare(`
     UPDATE budget_items SET
@@ -132,7 +163,6 @@ export function updateBudgetItem(
       currency     = COALESCE(?, currency),
       total_price_ref = CASE WHEN ? THEN ? ELSE total_price_ref END,
       exchange_rate   = CASE WHEN ? THEN ? ELSE exchange_rate END,
-      tip_ref      = CASE WHEN ? IS NOT NULL THEN ? ELSE tip_ref END,
       note         = CASE WHEN ? THEN ? ELSE note END,
       sort_order   = CASE WHEN ? IS NOT NULL THEN ? ELSE sort_order END,
       expense_date = CASE WHEN ? THEN ? ELSE expense_date END
@@ -142,9 +172,8 @@ export function updateBudgetItem(
     data.name || null,
     data.total_price !== undefined ? 1 : null, data.total_price !== undefined ? data.total_price : 0,
     data.currency || null,
-    data.total_price_ref !== undefined ? 1 : 0, data.total_price_ref !== undefined ? data.total_price_ref : null,
-    data.exchange_rate !== undefined ? 1 : 0, data.exchange_rate !== undefined ? data.exchange_rate : null,
-    data.tip_ref !== undefined ? 1 : null, data.tip_ref !== undefined ? data.tip_ref : 0,
+    hasRateUpdate ? 1 : 0, hasRateUpdate ? totalPriceRef : null,
+    hasRateUpdate ? 1 : 0, hasRateUpdate ? exchangeRate : null,
     data.note !== undefined ? 1 : 0, data.note !== undefined ? data.note : null,
     data.sort_order !== undefined ? 1 : null, data.sort_order !== undefined ? data.sort_order : 0,
     data.expense_date !== undefined ? 1 : 0, data.expense_date !== undefined ? (data.expense_date || null) : null,
@@ -170,32 +199,38 @@ export function deleteBudgetItem(id: string | number, tripId: string | number): 
 export function updateMemberOwed(
   id: string | number,
   tripId: string | number,
-  members: { user_id: number; amount_owed_ref: number }[],
-  tip_ref: number,
+  members: { user_id: number; amount_owed: number }[],
+  tip: number,
 ) {
   const item = db.prepare('SELECT * FROM budget_items WHERE id = ? AND trip_id = ?').get(id, tripId) as BudgetItem | undefined;
   if (!item) return null;
 
-  const ref = item.total_price_ref ?? item.total_price;
-  const individualSum = members.reduce((s, m) => s + (Number(m.amount_owed_ref) || 0), 0);
-  const effectiveTotal = individualSum + (Number(tip_ref) || 0);
+  const rate = item.exchange_rate || 1;
+  const individualSum = members.reduce((s, m) => s + (Number(m.amount_owed) || 0), 0);
+  const effectiveTotal = individualSum + (Number(tip) || 0);
 
-  if (Math.abs(effectiveTotal - ref) > 0.01) {
+  if (Math.abs(effectiveTotal - item.total_price) > 0.01) {
     return { error: 'Owed amounts plus tip must sum to the total expense value' };
   }
 
-  // Preserve existing amount_paid_ref values
-  const existing = db.prepare('SELECT user_id, amount_paid_ref FROM budget_item_members WHERE budget_item_id = ?').all(id) as { user_id: number; amount_paid_ref: number }[];
-  const paidByUser: Record<number, number> = {};
-  for (const e of existing) paidByUser[e.user_id] = e.amount_paid_ref;
+  const tip_ref = Math.round((tip || 0) * rate * 100) / 100;
 
-  db.prepare('DELETE FROM budget_item_members WHERE budget_item_id = ?').run(id);
+  db.transaction(() => {
+    // Preserve existing amount_paid_ref values
+    const existing = db.prepare('SELECT user_id, amount_paid_ref FROM budget_item_members WHERE budget_item_id = ?').all(id) as { user_id: number; amount_paid_ref: number }[];
+    const paidByUser: Record<number, number> = {};
+    for (const e of existing) paidByUser[e.user_id] = e.amount_paid_ref;
 
-  const insert = db.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, amount_owed_ref, amount_paid_ref) VALUES (?, ?, ?, ?)');
-  for (const m of members) insert.run(id, m.user_id, m.amount_owed_ref, paidByUser[m.user_id] || 0);
+    db.prepare('DELETE FROM budget_item_members WHERE budget_item_id = ?').run(id);
 
-  // Persist the updated tip
-  db.prepare('UPDATE budget_items SET tip_ref = ? WHERE id = ?').run(tip_ref, id);
+    const insert = db.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, amount_owed_ref, amount_paid_ref) VALUES (?, ?, ?, ?)');
+    for (const m of members) {
+      const amount_owed_ref = Math.round((m.amount_owed || 0) * rate * 100) / 100;
+      insert.run(id, m.user_id, amount_owed_ref, paidByUser[m.user_id] || 0);
+    }
+
+    db.prepare('UPDATE budget_items SET tip_ref = ? WHERE id = ?').run(tip_ref, id);
+  })();
 
   const updatedMembers = loadItemMembers(id).map(m => ({ ...m, avatar_url: avatarUrl(m) }));
   const updatedItem = db.prepare('SELECT * FROM budget_items WHERE id = ?').get(id) as BudgetItem;
@@ -209,21 +244,28 @@ export function updateMemberOwed(
 export function updateMemberPayments(
   id: string | number,
   tripId: string | number,
-  payments: { user_id: number; amount_paid_ref: number }[],
+  payments: { user_id: number; amount_paid: number }[],
 ) {
   const item = db.prepare('SELECT * FROM budget_items WHERE id = ? AND trip_id = ?').get(id, tripId) as BudgetItem | undefined;
   if (!item) return null;
 
-  const ref = item.total_price_ref ?? item.total_price;
-  const totalPaid = payments.reduce((s, p) => s + (Number(p.amount_paid_ref) || 0), 0);
+  const rate = item.exchange_rate || 1;
+  const totalPaid = payments.reduce((s, p) => s + (Number(p.amount_paid) || 0), 0);
   const allZero = totalPaid < 0.01;
 
-  if (!allZero && Math.abs(totalPaid - ref) > 0.01) {
+  if (!allZero && Math.abs(totalPaid - item.total_price) > 0.01) {
     return { error: 'Paid amounts must sum to the total expense value, or all be zero' };
   }
 
-  const update = db.prepare('UPDATE budget_item_members SET amount_paid_ref = ? WHERE budget_item_id = ? AND user_id = ?');
-  for (const p of payments) update.run(p.amount_paid_ref, id, p.user_id);
+  const upsert = db.prepare(`
+    INSERT INTO budget_item_members (budget_item_id, user_id, amount_owed_ref, amount_paid_ref)
+    VALUES (?, ?, 0, ?)
+    ON CONFLICT(budget_item_id, user_id) DO UPDATE SET amount_paid_ref = excluded.amount_paid_ref
+  `);
+  for (const p of payments) {
+    const amount_paid_ref = Math.round((p.amount_paid || 0) * rate * 100) / 100;
+    upsert.run(id, p.user_id, amount_paid_ref);
+  }
 
   const members = loadItemMembers(id).map(m => ({ ...m, avatar_url: avatarUrl(m) }));
   return { members };
@@ -265,7 +307,7 @@ export function calculateSettlement(tripId: string | number) {
     // Skip items not yet fully configured on either side
     if (totalOwed < 0.01 || totalPaid < 0.01) continue;
 
-    const tipPerMember = (item.tip_ref ?? 0) / members.length;
+    const tipPerMember = Math.round(((item.tip_ref ?? 0) / members.length) * 100) / 100;
 
     for (const m of members) {
       if (!balances[m.user_id]) {
@@ -302,12 +344,12 @@ export function calculateSettlement(tripId: string | number) {
 
   let di = 0, ci = 0;
   while (di < debtors.length && ci < creditors.length) {
-    const transfer = Math.min(debtors[di].amount, creditors[ci].amount);
+    const transfer = Math.round(Math.min(debtors[di].amount, creditors[ci].amount) * 100) / 100;
     if (transfer > 0.01) {
       flows.push({
         from: { user_id: debtors[di].user_id, username: debtors[di].username, avatar_url: debtors[di].avatar_url },
         to: { user_id: creditors[ci].user_id, username: creditors[ci].username, avatar_url: creditors[ci].avatar_url },
-        amount: Math.round(transfer * 100) / 100,
+        amount: transfer,
       });
     }
     debtors[di].amount -= transfer;

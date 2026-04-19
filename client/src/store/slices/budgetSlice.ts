@@ -16,13 +16,13 @@ export interface BudgetSlice {
   setBudgetItemMemberOwed: (
     tripId: number | string,
     itemId: number,
-    members: { user_id: number; amount_owed_ref: number }[],
-    tip_ref: number,
+    members: { user_id: number; amount_owed: number }[],
+    tip: number,
   ) => Promise<{ members: BudgetMember[]; item: BudgetItem }>
   setBudgetItemMemberPayments: (
     tripId: number | string,
     itemId: number,
-    payments: { user_id: number; amount_paid_ref: number }[],
+    payments: { user_id: number; amount_paid: number }[],
   ) => Promise<{ members: BudgetMember[] }>
 }
 
@@ -74,8 +74,8 @@ export const createBudgetSlice = (set: SetState, get: GetState): BudgetSlice => 
     }
   },
 
-  setBudgetItemMemberOwed: async (tripId, itemId, members, tip_ref) => {
-    const result = await budgetApi.setMemberOwed(tripId, itemId, members, tip_ref)
+  setBudgetItemMemberOwed: async (tripId, itemId, members, tip) => {
+    const result = await budgetApi.setMemberOwed(tripId, itemId, members, tip)
     set(state => ({
       budgetItems: state.budgetItems.map(item =>
         item.id === itemId ? { ...item, members: result.members, tip_ref: result.item.tip_ref } : item

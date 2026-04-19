@@ -30,7 +30,7 @@ router.get('/', authenticate, (req: Request, res: Response) => {
   res.json({ items: listBudgetItems(tripId) });
 });
 
-router.post('/', authenticate, (req: Request, res: Response) => {
+router.post('/', authenticate, async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const { tripId } = req.params;
 
@@ -43,12 +43,16 @@ router.post('/', authenticate, (req: Request, res: Response) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Name is required' });
 
-  const item = createBudgetItem(tripId, req.body);
-  res.status(201).json({ item });
-  broadcast(tripId, 'budget:created', { item }, req.headers['x-socket-id'] as string);
+  try {
+    const item = await createBudgetItem(tripId, req.body);
+    res.status(201).json({ item });
+    broadcast(tripId, 'budget:created', { item }, req.headers['x-socket-id'] as string);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to create expense' });
+  }
 });
 
-router.put('/:id', authenticate, (req: Request, res: Response) => {
+router.put('/:id', authenticate, async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const { tripId, id } = req.params;
 
@@ -58,27 +62,31 @@ router.put('/:id', authenticate, (req: Request, res: Response) => {
   if (!checkPermission('budget_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
     return res.status(403).json({ error: 'No permission' });
 
-  const updated = updateBudgetItem(id, tripId, req.body);
-  if (!updated) return res.status(404).json({ error: 'Budget item not found' });
+  try {
+    const updated = await updateBudgetItem(id, tripId, req.body);
+    if (!updated) return res.status(404).json({ error: 'Budget item not found' });
 
-  // Sync price back to linked reservation
-  if (updated.reservation_id && req.body.total_price !== undefined) {
-    try {
-      const reservation = db.prepare('SELECT id, metadata FROM reservations WHERE id = ? AND trip_id = ?').get(updated.reservation_id, tripId) as { id: number; metadata: string | null } | undefined;
-      if (reservation) {
-        const meta = reservation.metadata ? JSON.parse(reservation.metadata) : {};
-        meta.price = String(updated.total_price);
-        db.prepare('UPDATE reservations SET metadata = ? WHERE id = ?').run(JSON.stringify(meta), reservation.id);
-        const updatedRes = db.prepare('SELECT * FROM reservations WHERE id = ?').get(reservation.id);
-        broadcast(tripId, 'reservation:updated', { reservation: updatedRes }, req.headers['x-socket-id'] as string);
+    // Sync price back to linked reservation
+    if (updated.reservation_id && req.body.total_price !== undefined) {
+      try {
+        const reservation = db.prepare('SELECT id, metadata FROM reservations WHERE id = ? AND trip_id = ?').get(updated.reservation_id, tripId) as { id: number; metadata: string | null } | undefined;
+        if (reservation) {
+          const meta = reservation.metadata ? JSON.parse(reservation.metadata) : {};
+          meta.price = String(updated.total_price);
+          db.prepare('UPDATE reservations SET metadata = ? WHERE id = ?').run(JSON.stringify(meta), reservation.id);
+          const updatedRes = db.prepare('SELECT * FROM reservations WHERE id = ?').get(reservation.id);
+          broadcast(tripId, 'reservation:updated', { reservation: updatedRes }, req.headers['x-socket-id'] as string);
+        }
+      } catch (err) {
+        console.error('[budget] Failed to sync price to reservation:', err);
       }
-    } catch (err) {
-      console.error('[budget] Failed to sync price to reservation:', err);
     }
-  }
 
-  res.json({ item: updated });
-  broadcast(tripId, 'budget:updated', { item: updated }, req.headers['x-socket-id'] as string);
+    res.json({ item: updated });
+    broadcast(tripId, 'budget:updated', { item: updated }, req.headers['x-socket-id'] as string);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to update expense' });
+  }
 });
 
 // Set who owes how much (beneficiary side) + tip
@@ -92,10 +100,10 @@ router.put('/:id/members', authenticate, (req: Request, res: Response) => {
   if (!checkPermission('budget_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
     return res.status(403).json({ error: 'No permission' });
 
-  const { members, tip_ref = 0 } = req.body;
+  const { members, tip = 0 } = req.body;
   if (!Array.isArray(members)) return res.status(400).json({ error: 'members must be an array' });
 
-  const result = updateMemberOwed(id, tripId, members, tip_ref);
+  const result = updateMemberOwed(id, tripId, members, tip);
   if (!result) return res.status(404).json({ error: 'Budget item not found' });
   if ('error' in result) return res.status(400).json({ error: result.error });
 
@@ -122,7 +130,7 @@ router.put('/:id/members/payments', authenticate, (req: Request, res: Response) 
   if ('error' in result) return res.status(400).json({ error: result.error });
 
   res.json({ members: result.members });
-  broadcast(Number(tripId), 'budget:members-payments-updated', { itemId: Number(id), payments }, req.headers['x-socket-id'] as string);
+  broadcast(Number(tripId), 'budget:members-payments-updated', { itemId: Number(id), members: result.members }, req.headers['x-socket-id'] as string);
 });
 
 router.get('/settlement', authenticate, (req: Request, res: Response) => {
