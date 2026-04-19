@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import ReactDOM from 'react-dom'
 import { useTripStore } from '../../store/tripStore'
+import { useAuthStore } from '../../store/authStore'
 import { useCanDo } from '../../store/permissionsStore'
 import { useTranslation } from '../../i18n'
 import { Plus, Trash2, Calculator, Wallet, Pencil, Info, ChevronDown, ChevronRight, Download, X, RefreshCw, Paperclip, Upload, FileEdit } from 'lucide-react'
@@ -157,6 +158,7 @@ interface BudgetPanelProps {
 
 export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelProps) {
   const { trip, budgetItems, addBudgetItem, updateBudgetItem, deleteBudgetItem, loadBudgetItems } = useTripStore()
+  const currentUser = useAuthStore(s => s.user)
   const can = useCanDo()
   const { t, locale } = useTranslation()
   const [newCategoryName, setNewCategoryName] = useState('')
@@ -562,6 +564,54 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
               </div>
             )}
           </div>
+
+          {/* Personal balance card */}
+          {hasMultipleMembers && settlement && currentUser && (() => {
+            const myBalance = settlement.balances.find((b: any) => b.user_id === currentUser.id)
+            if (!myBalance) return null
+            const owed = settlement.flows.filter((f: any) => f.to.user_id === currentUser.id)
+            const owing = settlement.flows.filter((f: any) => f.from.user_id === currentUser.id)
+            const isPositive = myBalance.balance > 0
+            const isNegative = myBalance.balance < 0
+            const accentColor = isPositive ? '#4ade80' : isNegative ? '#f87171' : 'rgba(255,255,255,0.4)'
+            const bgColor = isPositive ? 'rgba(74,222,128,0.08)' : isNegative ? 'rgba(248,113,113,0.08)' : 'var(--bg-tertiary)'
+            const borderColor = isPositive ? 'rgba(74,222,128,0.25)' : isNegative ? 'rgba(248,113,113,0.25)' : 'var(--border-primary)'
+            return (
+              <div style={{ background: 'var(--bg-card)', borderRadius: 16, border: `1px solid ${borderColor}`, marginBottom: 16, overflow: 'hidden' }}>
+                <div style={{ padding: '14px 16px 10px', background: bgColor, borderBottom: `1px solid ${borderColor}` }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>{t('budget.yourBalance')}</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: accentColor, lineHeight: 1 }}>
+                    {myBalance.balance > 0 ? '+' : ''}{fmtNum(myBalance.balance, locale, settlement.settlement_currency)}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 3 }}>
+                    {isPositive ? t('budget.balancePositive') : isNegative ? t('budget.balanceNegative') : t('budget.balanceSettled')}
+                  </div>
+                </div>
+                {(owed.length > 0 || owing.length > 0) && (
+                  <div style={{ padding: '10px 16px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {owed.map((f: any, i: number) => (
+                      <div key={`owed-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', overflow: 'hidden', flexShrink: 0 }}>
+                          {f.from.avatar_url ? <img src={f.from.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : f.from.username?.[0]?.toUpperCase()}
+                        </div>
+                        <span style={{ flex: 1, fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.from.username}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#4ade80', whiteSpace: 'nowrap' }}>+{fmtNum(f.amount, locale, settlement.settlement_currency)}</span>
+                      </div>
+                    ))}
+                    {owing.map((f: any, i: number) => (
+                      <div key={`owing-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', overflow: 'hidden', flexShrink: 0 }}>
+                          {f.to.avatar_url ? <img src={f.to.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : f.to.username?.[0]?.toUpperCase()}
+                        </div>
+                        <span style={{ flex: 1, fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.to.username}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#f87171', whiteSpace: 'nowrap' }}>−{fmtNum(f.amount, locale, settlement.settlement_currency)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Draft entries — excluded from totals */}
           {drafts.length > 0 && (

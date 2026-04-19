@@ -1,4 +1,4 @@
-const es: Record<string, string> = {
+const es: Record<string, string | { name: string; category: string }[]> = {
   // Common
   'common.save': 'Guardar',
   'common.cancel': 'Cancelar',
@@ -988,6 +988,10 @@ const es: Record<string, string> = {
   'budget.paid': 'Pagado',
   'budget.open': 'Abrir',
   'budget.noMembers': 'No hay miembros asignados',
+  'budget.yourBalance': 'Your Balance',
+  'budget.balancePositive': 'You are owed money',
+  'budget.balanceNegative': 'You owe money',
+  'budget.balanceSettled': 'All settled',
   'budget.settlement': 'Liquidación',
   'budget.settlementInfo': 'Haz clic en el avatar de un miembro en una partida del presupuesto para marcarlo en verde — esto significa que ha pagado. La liquidación muestra quién debe cuánto a quién.',
   'budget.netBalances': 'Saldos netos',

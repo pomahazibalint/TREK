@@ -1,4 +1,4 @@
-const zh: Record<string, string> = {
+const zh: Record<string, string | { name: string; category: string }[]> = {
   // Common
   'common.save': '保存',
   'common.cancel': '取消',
@@ -1028,6 +1028,10 @@ const zh: Record<string, string> = {
   'budget.paid': '已支付',
   'budget.open': '未支付',
   'budget.noMembers': '未分配成员',
+  'budget.yourBalance': 'Your Balance',
+  'budget.balancePositive': 'You are owed money',
+  'budget.balanceNegative': 'You owe money',
+  'budget.balanceSettled': 'All settled',
   'budget.settlement': '结算',
   'budget.settlementInfo': '点击预算项目上的成员头像将其标记为绿色——表示该成员已付款。结算会显示谁欠谁多少。',
   'budget.netBalances': '净余额',

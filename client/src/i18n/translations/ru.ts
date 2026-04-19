@@ -1,4 +1,4 @@
-const ru: Record<string, string> = {
+const ru: Record<string, string | { name: string; category: string }[]> = {
   // Common
   'common.save': 'Сохранить',
   'common.cancel': 'Отмена',
@@ -1028,6 +1028,10 @@ const ru: Record<string, string> = {
   'budget.paid': 'Оплачено',
   'budget.open': 'Не оплачено',
   'budget.noMembers': 'Участники не назначены',
+  'budget.yourBalance': 'Your Balance',
+  'budget.balancePositive': 'You are owed money',
+  'budget.balanceNegative': 'You owe money',
+  'budget.balanceSettled': 'All settled',
   'budget.settlement': 'Взаиморасчёт',
   'budget.settlementInfo': 'Нажмите на аватар участника в строке бюджета, чтобы отметить его зелёным — это значит, что он заплатил. Взаиморасчёт покажет, кто кому и сколько должен.',
   'budget.netBalances': 'Чистые балансы',

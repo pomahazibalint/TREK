@@ -1,4 +1,4 @@
-const zhTw: Record<string, string> = {
+const zhTw: Record<string, string | { name: string; category: string }[]> = {
   // Common
   'common.save': '儲存',
   'common.cancel': '取消',
@@ -982,6 +982,10 @@ const zhTw: Record<string, string> = {
   'budget.paid': '已支付',
   'budget.open': '未支付',
   'budget.noMembers': '未分配成員',
+  'budget.yourBalance': 'Your Balance',
+  'budget.balancePositive': 'You are owed money',
+  'budget.balanceNegative': 'You owe money',
+  'budget.balanceSettled': 'All settled',
   'budget.settlement': '結算',
   'budget.settlementInfo': '點選預算專案上的成員頭像將其標記為綠色——表示該成員已付款。結算會顯示誰欠誰多少。',
   'budget.netBalances': '淨餘額',

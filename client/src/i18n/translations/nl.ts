@@ -1,4 +1,4 @@
-const nl: Record<string, string> = {
+const nl: Record<string, string | { name: string; category: string }[]> = {
   // Common
   'common.save': 'Opslaan',
   'common.cancel': 'Annuleren',
@@ -1028,6 +1028,10 @@ const nl: Record<string, string> = {
   'budget.paid': 'Betaald',
   'budget.open': 'Open',
   'budget.noMembers': 'Geen leden toegewezen',
+  'budget.yourBalance': 'Your Balance',
+  'budget.balancePositive': 'You are owed money',
+  'budget.balanceNegative': 'You owe money',
+  'budget.balanceSettled': 'All settled',
   'budget.settlement': 'Afrekening',
   'budget.settlementInfo': 'Klik op de avatar van een lid bij een budgetpost om deze groen te markeren — dit betekent dat diegene heeft betaald. De afrekening toont vervolgens wie wie hoeveel verschuldigd is.',
   'budget.netBalances': 'Nettosaldi',
