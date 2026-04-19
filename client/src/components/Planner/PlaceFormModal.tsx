@@ -80,12 +80,13 @@ interface PlaceFormModalProps {
   dayAssignments?: Assignment[]
   tripMembers?: TripMember[]
   onSetParticipants?: (assignmentId: number, dayId: number, participantIds: number[]) => void
+  focusPriceOnOpen?: boolean
 }
 
 export default function PlaceFormModal({
   isOpen, onClose, onSave, place, prefillCoords, tripId, categories,
   onCategoryCreated, assignmentId, dayAssignments = [],
-  tripMembers = [], onSetParticipants,
+  tripMembers = [], onSetParticipants, focusPriceOnOpen = false,
 }: PlaceFormModalProps) {
   const [form, setForm] = useState(DEFAULT_FORM)
   const [mapsSearch, setMapsSearch] = useState('')
@@ -99,6 +100,8 @@ export default function PlaceFormModal({
   const [draftEntryId, setDraftEntryId] = useState<number | null>(null)
   const [draftEntryIsConverted, setDraftEntryIsConverted] = useState(false)
   const fileRef = useRef(null)
+  const priceRef = useRef<HTMLInputElement>(null)
+  const [priceHighlighted, setPriceHighlighted] = useState(false)
   const toast = useToast()
   const { t, language } = useTranslation()
   const { hasMapsKey } = useAuthStore()
@@ -154,6 +157,18 @@ export default function PlaceFormModal({
       setForm(f => ({ ...f, price: '' }))
     }
   }, [place, prefillCoords, isOpen])
+
+  useEffect(() => {
+    if (!focusPriceOnOpen || !isOpen) return
+    const scrollId = setTimeout(() => {
+      priceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      priceRef.current?.focus()
+      priceRef.current?.select()
+      setPriceHighlighted(true)
+    }, 250)
+    const clearId = setTimeout(() => setPriceHighlighted(false), 2500)
+    return () => { clearTimeout(scrollId); clearTimeout(clearId) }
+  }, [focusPriceOnOpen, isOpen])
 
   const handleChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -499,12 +514,13 @@ export default function PlaceFormModal({
         </div>
 
         {/* Price + Currency */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+        <div style={{ borderRadius: 6, boxShadow: priceHighlighted ? '0 0 0 2px rgba(217,119,6,0.45)' : '0 0 0 0 transparent', transition: 'box-shadow 0.6s ease' }}>
+          <label className="block text-sm font-medium mb-1" style={{ color: priceHighlighted ? '#d97706' : undefined, transition: 'color 0.4s', marginTop: 0 }}>
             {assignmentId ? (t('places.formPriceVisit') || 'Price (this visit)') : (t('places.formPrice') || 'Price')}
           </label>
           <div className="grid grid-cols-3 gap-2 items-center">
             <input
+              ref={priceRef}
               type="number"
               min="0"
               step="any"

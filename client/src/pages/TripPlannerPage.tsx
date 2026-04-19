@@ -159,6 +159,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
   const [editingPlace, setEditingPlace] = useState<Place | null>(null)
   const [prefillCoords, setPrefillCoords] = useState<{ lat: number; lng: number; name?: string; address?: string } | null>(null)
   const [editingAssignmentId, setEditingAssignmentId] = useState<number | null>(null)
+  const [focusPriceOnOpen, setFocusPriceOnOpen] = useState(false)
   const [showTripForm, setShowTripForm] = useState<boolean>(false)
   const [showMembersModal, setShowMembersModal] = useState<boolean>(false)
   const [showReservationModal, setShowReservationModal] = useState<boolean>(false)
@@ -694,7 +695,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
                     } catch {}
                   }}
                   onRemoveAssignment={handleRemoveAssignment}
-                  onEditPlace={(place, assignmentId) => { setEditingPlace(place); setEditingAssignmentId(assignmentId || null); setShowPlaceForm(true) }}
+                  onEditPlace={(place, assignmentId, focusPrice) => { setEditingPlace(place); setEditingAssignmentId(assignmentId || null); setFocusPriceOnOpen(!!focusPrice); setShowPlaceForm(true) }}
                   onDeletePlace={(placeId) => handleDeletePlace(placeId)}
                   accommodations={tripAccommodations}
                   transportMode={transportMode}
@@ -968,7 +969,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
         )}
       </div>
 
-      <PlaceFormModal isOpen={showPlaceForm} onClose={() => { setShowPlaceForm(false); setEditingPlace(null); setEditingAssignmentId(null); setPrefillCoords(null) }} onSave={handleSavePlace} place={editingPlace} prefillCoords={prefillCoords} assignmentId={editingAssignmentId} dayAssignments={editingAssignmentId ? Object.values(assignments).flat() : []} tripId={tripId} categories={categories} onCategoryCreated={cat => tripActions.addCategory?.(cat)} tripMembers={tripMembers} onSetParticipants={async (assignmentId, dayId, userIds) => { try { const data = await assignmentsApi.setParticipants(tripId, assignmentId, userIds); useTripStore.setState(state => ({ assignments: { ...state.assignments, [String(dayId)]: (state.assignments[String(dayId)] || []).map(a => a.id === assignmentId ? { ...a, participants: data.participants } : a) } })) } catch {} }} />
+      <PlaceFormModal isOpen={showPlaceForm} onClose={() => { setShowPlaceForm(false); setEditingPlace(null); setEditingAssignmentId(null); setPrefillCoords(null); setFocusPriceOnOpen(false) }} onSave={handleSavePlace} place={editingPlace} prefillCoords={prefillCoords} assignmentId={editingAssignmentId} dayAssignments={editingAssignmentId ? Object.values(assignments).flat() : []} tripId={tripId} categories={categories} onCategoryCreated={cat => tripActions.addCategory?.(cat)} tripMembers={tripMembers} focusPriceOnOpen={focusPriceOnOpen} onSetParticipants={async (assignmentId, dayId, userIds) => { try { const data = await assignmentsApi.setParticipants(tripId, assignmentId, userIds); useTripStore.setState(state => ({ assignments: { ...state.assignments, [String(dayId)]: (state.assignments[String(dayId)] || []).map(a => a.id === assignmentId ? { ...a, participants: data.participants } : a) } })) } catch {} }} />
       {draftBudgetModal && (
         <ExpenseModal
           item={draftBudgetModal.item}

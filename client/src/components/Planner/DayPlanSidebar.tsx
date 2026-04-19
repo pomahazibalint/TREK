@@ -1717,7 +1717,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                                 )
                               })() : (canEditDays && isHovered && (
                                 <div
-                                  onClick={e => { e.stopPropagation(); onEditPlace(place, assignment.id) }}
+                                  onClick={e => { e.stopPropagation(); onEditPlace(place, assignment.id, true) }}
                                   style={{ marginTop: 3, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 5, fontSize: 11, fontWeight: 500, cursor: 'pointer',
                                     background: 'transparent', color: 'var(--text-faint)',
                                     border: '1px dashed var(--border-primary)',
