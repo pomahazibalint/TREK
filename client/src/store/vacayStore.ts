@@ -85,6 +85,16 @@ const api = {
     ax.get(`${planUrl(planId)}/entries/${year}`).then((r: AxiosResponse) => r.data),
   toggleEntry: (planId: number, date: string, targetUserId?: number): Promise<unknown> =>
     ax.post(`${planUrl(planId)}/entries/toggle`, { date, target_user_id: targetUserId }).then((r: AxiosResponse) => r.data),
+  batchEntries: (planId: number, dates: string[], note: string | null, eventName: string | null, location: string | null, showDetails: number | null): Promise<unknown> => {
+    const body: Record<string, unknown> = { dates }
+    if (note !== null)        body.note = note
+    if (eventName !== null)   body.event_name = eventName
+    if (location !== null)    body.location = location
+    if (showDetails !== null) body.show_details = showDetails
+    return ax.post(`${planUrl(planId)}/entries/batch`, body).then((r: AxiosResponse) => r.data)
+  },
+  removeEntries: (planId: number, dates: string[]): Promise<unknown> =>
+    ax.delete(`${planUrl(planId)}/entries/batch`, { data: { dates } }).then((r: AxiosResponse) => r.data),
   toggleCompanyHoliday: (planId: number, date: string): Promise<unknown> =>
     ax.post(`${planUrl(planId)}/entries/company-holiday`, { date }).then((r: AxiosResponse) => r.data),
   getStats: (planId: number, year: number): Promise<VacayStatsResponse> =>
@@ -141,6 +151,8 @@ interface VacayState {
   removeYear: (year: number) => Promise<void>
   loadEntries: (year?: number) => Promise<void>
   toggleEntry: (date: string, targetUserId?: number) => Promise<void>
+  saveEntryDetails: (dates: string[], note: string | null, eventName: string | null, location: string | null, showDetails: number | null) => Promise<void>
+  removeEntries: (dates: string[]) => Promise<void>
   toggleCompanyHoliday: (date: string) => Promise<void>
   loadStats: (year?: number) => Promise<void>
   updateVacationDays: (year: number, days: number, targetUserId?: number) => Promise<void>
@@ -302,6 +314,22 @@ export const useVacayStore = create<VacayState>((set, get) => ({
     const planId = get().selectedPlanId
     if (!planId) return
     await api.toggleEntry(planId, date, targetUserId)
+    await get().loadEntries()
+    await get().loadStats()
+  },
+
+  saveEntryDetails: async (dates: string[], note: string | null, eventName: string | null, location: string | null, showDetails: number | null) => {
+    const planId = get().selectedPlanId
+    if (!planId) return
+    await api.batchEntries(planId, dates, note, eventName, location, showDetails)
+    await get().loadEntries()
+    await get().loadStats()
+  },
+
+  removeEntries: async (dates: string[]) => {
+    const planId = get().selectedPlanId
+    if (!planId) return
+    await api.removeEntries(planId, dates)
     await get().loadEntries()
     await get().loadStats()
   },

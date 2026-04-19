@@ -20,14 +20,20 @@ interface VacayMonthCardProps {
   companyHolidaysEnabled?: boolean
   entryMap: Record<string, VacayEntry[]>
   onCellClick: (date: string) => void
+  onCellMouseDown: (date: string) => void
+  onCellMouseEnter: (date: string) => void
   companyMode: boolean
   blockWeekends: boolean
   weekendDays?: number[]
+  selectionStart: string | null
+  selectionEnd: string | null
+  currentUserId?: number
 }
 
 export default function VacayMonthCard({
   year, month, holidays, companyHolidaySet, companyHolidaysEnabled = true, entryMap,
-  onCellClick, companyMode, blockWeekends, weekendDays = [0, 6]
+  onCellClick, onCellMouseDown, onCellMouseEnter, companyMode, blockWeekends,
+  weekendDays = [0, 6], selectionStart, selectionEnd, currentUserId,
 }: VacayMonthCardProps) {
   const { t, locale } = useTranslation()
 
@@ -77,12 +83,15 @@ export default function VacayMonthCard({
               const isCompany = companyHolidaysEnabled && companyHolidaySet.has(dateStr)
               const dayEntries = entryMap[dateStr] || []
               const isBlocked = !!holiday || (weekend && blockWeekends) || (isCompany && !companyMode)
+              const isSelected = !isBlocked && selectionStart && selectionEnd && dateStr >= selectionStart && dateStr <= selectionEnd
+              const ownEntry = currentUserId ? dayEntries.find(e => e.user_id === currentUserId) : undefined
+              const hasDetails = ownEntry && (ownEntry.event_name || ownEntry.note || ownEntry.location)
 
               return (
                 <div
                   key={di}
                   title={holiday ? (holiday.label ? `${holiday.label}: ${holiday.localName}` : holiday.localName) : undefined}
-                  className="relative flex items-center justify-center cursor-pointer transition-colors"
+                  className="relative flex items-center justify-center transition-colors"
                   style={{
                     height: 28,
                     background: weekend ? 'var(--bg-secondary)' : 'transparent',
@@ -91,7 +100,8 @@ export default function VacayMonthCard({
                     cursor: isBlocked ? 'default' : 'pointer',
                   }}
                   onClick={() => onCellClick(dateStr)}
-                  onMouseEnter={e => { if (!isBlocked) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                  onMouseDown={e => { e.preventDefault(); if (!isBlocked) onCellMouseDown(dateStr) }}
+                  onMouseEnter={e => { onCellMouseEnter(dateStr); if (!isBlocked) e.currentTarget.style.background = isSelected ? '' : 'var(--bg-hover)' }}
                   onMouseLeave={e => { e.currentTarget.style.background = weekend ? 'var(--bg-secondary)' : 'transparent' }}
                 >
                   {holiday && <div className="absolute inset-0.5 rounded" style={{ background: hexToRgba(holiday.color, 0.12) }} />}
@@ -122,12 +132,21 @@ export default function VacayMonthCard({
                     </div>
                   )}
 
+                  {isSelected && (
+                    <div className="absolute inset-0" style={{ background: 'var(--text-primary)', opacity: 0.12, pointerEvents: 'none' }} />
+                  )}
+
                   <span className="relative z-[1] text-[11px] font-medium" style={{
                     color: holiday ? holiday.color : weekend ? 'var(--text-faint)' : 'var(--text-primary)',
                     fontWeight: dayEntries.length > 0 ? 700 : 500,
                   }}>
                     {day}
                   </span>
+
+                  {hasDetails && (
+                    <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full z-[1]"
+                      style={{ background: ownEntry?.person_color || 'var(--text-muted)', opacity: 0.8 }} />
+                  )}
                 </div>
               )
             })}

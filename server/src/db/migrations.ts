@@ -1037,6 +1037,11 @@ function runMigrations(db: Database.Database): void {
         }
       }
     },
+    // Migration 89: Add event_name and location to vacay_entries
+    () => {
+      try { db.exec("ALTER TABLE vacay_entries ADD COLUMN event_name TEXT DEFAULT ''"); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec("ALTER TABLE vacay_entries ADD COLUMN location TEXT DEFAULT ''"); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+    },
   ];
 
   if (currentVersion < migrations.length) {

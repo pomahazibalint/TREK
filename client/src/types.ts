@@ -411,6 +411,9 @@ export interface VacayEntry {
   person_name?: string
   show_details?: number
   busy_only?: boolean
+  note?: string | null
+  event_name?: string | null
+  location?: string | null
 }
 
 export interface VacayStat {

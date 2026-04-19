@@ -210,6 +210,26 @@ router.post('/plans/:planId/entries/toggle', requirePlanAccess as express.Reques
   res.json(svc.toggleEntry(userId, r.planId, date, req.headers['x-socket-id'] as string));
 });
 
+router.post('/plans/:planId/entries/batch', requirePlanAccess as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
+  const body = req.body;
+  if (!Array.isArray(body.dates) || body.dates.length === 0) return res.status(400).json({ error: 'dates required' });
+  const note        = 'note'        in body ? (body.note        ?? '') : null;
+  const event_name  = 'event_name'  in body ? (body.event_name  ?? '') : null;
+  const location    = 'location'    in body ? (body.location    ?? '') : null;
+  const show_details = 'show_details' in body ? (body.show_details ? 1 : 0) : null;
+  svc.batchEntries(r.user.id, r.planId, body.dates, note, event_name, location, show_details, req.headers['x-socket-id'] as string);
+  res.json({ success: true });
+});
+
+router.delete('/plans/:planId/entries/batch', requirePlanAccess as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
+  const { dates } = req.body;
+  if (!Array.isArray(dates) || dates.length === 0) return res.status(400).json({ error: 'dates required' });
+  svc.removeEntries(r.user.id, r.planId, dates, req.headers['x-socket-id'] as string);
+  res.json({ success: true });
+});
+
 router.post('/plans/:planId/entries/company-holiday', requirePlanAccess as express.RequestHandler, requireOwner as express.RequestHandler, (req: Request, res: Response) => {
   const r = req as AuthRequest & { planId: number };
   const { date, note } = req.body;

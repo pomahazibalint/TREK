@@ -306,6 +306,8 @@ function createTables(db: Database.Database): void {
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       date TEXT NOT NULL,
       note TEXT DEFAULT '',
+      event_name TEXT DEFAULT '',
+      location TEXT DEFAULT '',
       UNIQUE(user_id, plan_id, date)
     );
 

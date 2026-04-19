@@ -737,6 +737,16 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'vacay.shareDetailsDefault': 'Share details in shared calendars',
   'vacay.shareDetailsDefaultHint': 'Applies to new entries. Existing entries are not changed.',
   'vacay.busyOnly': 'Busy',
+  'vacay.eventName': 'Event Name',
+  'vacay.location': 'Location',
+  'vacay.note': 'Note',
+  'vacay.optional': 'Optional',
+  'vacay.shareDetails': 'Share details',
+  'vacay.shareDetailsHint': 'Event name, location and note are visible to other calendar members',
+  'vacay.removeEntry': 'Remove',
+  'vacay.markThrough': 'Mark through',
+  'vacay.daysSelected': '{n} days',
+  'vacay.mixedValues': 'Multiple values…',
   'nav.myTrips': 'My Trips',
 
   // Atlas addon

@@ -642,7 +642,7 @@ export function getEntries(planId: number, year: string, requestingUserId?: numb
 
     entries = rawEntries.map(e => {
       if (requestingUserId && e.user_id !== requestingUserId && !e.show_details) {
-        return { ...e, note: null, busy_only: true };
+        return { ...e, note: null, event_name: null, location: null, busy_only: true };
       }
       return e;
     });
@@ -663,10 +663,54 @@ export function toggleEntry(userId: number, planId: number, date: string, socket
     return { action: 'removed' };
   } else {
     const showDetails = getUserShareDetailsDefault(userId) ? 1 : 0;
-    db.prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note, show_details) VALUES (?, ?, ?, ?, ?)').run(personalPlan.id, userId, date, '', showDetails);
+    db.prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note, event_name, location, show_details) VALUES (?, ?, ?, ?, ?, ?, ?)').run(personalPlan.id, userId, date, '', '', '', showDetails);
     notifyPlanUsers(planId, socketId);
     return { action: 'added' };
   }
+}
+
+export function batchEntries(
+  userId: number, planId: number, dates: string[],
+  note: string | null, eventName: string | null, location: string | null, showDetails: number | null,
+  socketId: string | undefined,
+): void {
+  const personalPlan = db.prepare('SELECT id FROM vacay_plans WHERE owner_id = ? AND is_personal = 1').get(userId) as { id: number } | undefined;
+  if (!personalPlan) return;
+
+  const run = db.transaction(() => {
+    for (const date of dates) {
+      const existing = db.prepare('SELECT id FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?').get(userId, personalPlan.id, date) as { id: number } | undefined;
+      if (existing) {
+        const sets: string[] = [];
+        const vals: (string | number)[] = [];
+        if (note !== null)        { sets.push('note = ?');        vals.push(note); }
+        if (eventName !== null)   { sets.push('event_name = ?');  vals.push(eventName); }
+        if (location !== null)    { sets.push('location = ?');    vals.push(location); }
+        if (showDetails !== null) { sets.push('show_details = ?'); vals.push(showDetails); }
+        if (sets.length > 0) {
+          vals.push(existing.id);
+          db.prepare(`UPDATE vacay_entries SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+        }
+      } else {
+        db.prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note, event_name, location, show_details) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .run(personalPlan.id, userId, date, note ?? '', eventName ?? '', location ?? '', showDetails ?? 1);
+      }
+    }
+  });
+  run();
+  notifyPlanUsers(planId, socketId);
+}
+
+export function removeEntries(userId: number, planId: number, dates: string[], socketId: string | undefined): void {
+  const personalPlan = db.prepare('SELECT id FROM vacay_plans WHERE owner_id = ? AND is_personal = 1').get(userId) as { id: number } | undefined;
+  if (!personalPlan) return;
+  const run = db.transaction(() => {
+    for (const date of dates) {
+      db.prepare('DELETE FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?').run(userId, personalPlan.id, date);
+    }
+  });
+  run();
+  notifyPlanUsers(planId, socketId);
 }
 
 export function toggleCompanyHoliday(planId: number, date: string, note: string | undefined, socketId: string | undefined): { action: string } {
