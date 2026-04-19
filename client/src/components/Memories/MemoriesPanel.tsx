@@ -552,7 +552,7 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
           </div>
           <ProviderTabs />
         </div>
-        <div style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>From</div>
             <input type="date" value={dateSyncFrom} onChange={e => setDateSyncFrom(e.target.value)}
