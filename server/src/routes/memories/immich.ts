@@ -14,6 +14,7 @@ import {
   streamImmichAsset,
   listAlbums,
   syncAlbumAssets,
+  syncDateRangePhotos,
   getAssetInfo,
   isValidAssetId,
 } from '../../services/memories/immichService';
@@ -117,7 +118,18 @@ router.post('/trips/:tripId/album-links/:linkId/sync', authenticate, async (req:
   const authReq = req as AuthRequest;
   const { tripId, linkId } = req.params;
   const sid = req.headers['x-socket-id'] as string;
-  const result = await syncAlbumAssets(tripId, linkId, authReq.user.id, sid);
+
+  const { db } = require('../../db/database');
+  const link = db.prepare('SELECT sync_type, sync_from_date, sync_to_date, user_id FROM trip_album_links WHERE id = ? AND trip_id = ?').get(linkId, tripId) as { sync_type: string; sync_from_date: string | null; sync_to_date: string | null; user_id: number } | undefined;
+  if (!link) return res.status(404).json({ error: 'Album link not found' });
+
+  let result;
+  if (link.sync_type === 'date_range' && link.sync_from_date && link.sync_to_date) {
+    result = await syncDateRangePhotos(tripId, linkId, authReq.user.id, link.sync_from_date, link.sync_to_date, sid);
+  } else {
+    result = await syncAlbumAssets(tripId, linkId, authReq.user.id, sid);
+  }
+
   if (result.error) return res.status(result.status!).json({ error: result.error });
   res.json({ success: true, added: result.added, total: result.total });
   if (result.added! > 0) {

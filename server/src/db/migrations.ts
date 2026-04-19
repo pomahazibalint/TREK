@@ -956,6 +956,13 @@ function runMigrations(db: Database.Database): void {
       `);
       db.exec(`UPDATE budget_items SET tip = ROUND(tip_ref / COALESCE(exchange_rate, 1) * 100) / 100`);
     },
+    // Migration 85: Auto-sync columns for photo album/date-range links
+    () => {
+      try { db.exec('ALTER TABLE trip_album_links ADD COLUMN auto_sync INTEGER NOT NULL DEFAULT 0'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec("ALTER TABLE trip_album_links ADD COLUMN sync_type TEXT NOT NULL DEFAULT 'album'"); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec('ALTER TABLE trip_album_links ADD COLUMN sync_from_date TEXT'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec('ALTER TABLE trip_album_links ADD COLUMN sync_to_date TEXT'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+    },
   ];
 
   if (currentVersion < migrations.length) {

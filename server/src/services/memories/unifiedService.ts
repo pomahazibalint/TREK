@@ -83,6 +83,10 @@ export function listTripAlbumLinks(tripId: string, userId: number): ServiceResul
              tal.album_id,
              tal.album_name,
              tal.sync_enabled,
+             tal.auto_sync,
+             tal.sync_type,
+             tal.sync_from_date,
+             tal.sync_to_date,
              tal.last_synced_at,
              tal.created_at,
              u.username
@@ -223,7 +227,16 @@ export function removeTripPhoto(
 // ----------------------------------------------
 // managing album links in trip
 
-export function createTripAlbumLink(tripId: string, userId: number, providerRaw: unknown, albumIdRaw: unknown, albumNameRaw: unknown): ServiceResult<true> {
+export function createTripAlbumLink(
+  tripId: string,
+  userId: number,
+  providerRaw: unknown,
+  albumIdRaw: unknown,
+  albumNameRaw: unknown,
+  syncTypeRaw?: unknown,
+  syncFromDateRaw?: unknown,
+  syncToDateRaw?: unknown,
+): ServiceResult<true> {
   const access = canAccessTrip(tripId, userId);
   if (!access) {
     return fail('Trip not found or access denied', 404);
@@ -232,6 +245,9 @@ export function createTripAlbumLink(tripId: string, userId: number, providerRaw:
   const provider = String(providerRaw || '').toLowerCase();
   const albumId = String(albumIdRaw || '').trim();
   const albumName = String(albumNameRaw || '').trim();
+  const syncType = syncTypeRaw === 'date_range' ? 'date_range' : 'album';
+  const syncFromDate = syncFromDateRaw ? String(syncFromDateRaw).trim() : null;
+  const syncToDate = syncToDateRaw ? String(syncToDateRaw).trim() : null;
 
   if (!provider) {
     return fail('provider is required', 400);
@@ -240,7 +256,6 @@ export function createTripAlbumLink(tripId: string, userId: number, providerRaw:
     return fail('album_id required', 400);
   }
 
-
   const providerResult = _validProvider(provider);
   if (!providerResult.success) {
     return providerResult as ServiceResult<true>;
@@ -248,8 +263,8 @@ export function createTripAlbumLink(tripId: string, userId: number, providerRaw:
 
   try {
     const result = db.prepare(
-      'INSERT OR IGNORE INTO trip_album_links (trip_id, user_id, provider, album_id, album_name) VALUES (?, ?, ?, ?, ?)'
-    ).run(tripId, userId, provider, albumId, albumName);
+      'INSERT OR IGNORE INTO trip_album_links (trip_id, user_id, provider, album_id, album_name, sync_type, sync_from_date, sync_to_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(tripId, userId, provider, albumId, albumName, syncType, syncFromDate, syncToDate);
 
     if (result.changes === 0) {
       return fail('Album already linked', 409);
@@ -258,6 +273,32 @@ export function createTripAlbumLink(tripId: string, userId: number, providerRaw:
     return success(true);
   } catch (error) {
     return mapDbError(error, 'Failed to link album');
+  }
+}
+
+export function toggleAlbumLinkAutoSync(
+  tripId: string,
+  linkId: string,
+  userId: number,
+  autoSync: boolean,
+): ServiceResult<true> {
+  const access = canAccessTrip(tripId, userId);
+  if (!access) {
+    return fail('Trip not found or access denied', 404);
+  }
+
+  try {
+    const result = db.prepare(
+      'UPDATE trip_album_links SET auto_sync = ? WHERE id = ? AND trip_id = ? AND user_id = ?'
+    ).run(autoSync ? 1 : 0, linkId, tripId, userId);
+
+    if (result.changes === 0) {
+      return fail('Album link not found or access denied', 404);
+    }
+
+    return success(true);
+  } catch (error) {
+    return mapDbError(error, 'Failed to update auto-sync setting');
   }
 }
 

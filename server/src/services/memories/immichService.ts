@@ -357,3 +357,37 @@ export async function syncAlbumAssets(
     return { error: 'Could not reach Immich', status: 502 };
   }
 }
+
+export async function syncDateRangePhotos(
+  tripId: string,
+  linkId: string,
+  userId: number,
+  fromDate: string,
+  toDate: string,
+  sid: string,
+): Promise<{ success?: boolean; added?: number; total?: number; error?: string; status?: number }> {
+  const creds = getImmichCredentials(userId);
+  if (!creds) return { error: 'Immich not configured', status: 400 };
+
+  const result = await searchPhotos(userId, fromDate, toDate);
+  if (result.error) return { error: result.error, status: result.status };
+
+  const assets = result.assets || [];
+
+  if (assets.length === 0) {
+    updateSyncTimeForAlbumLink(linkId);
+    return { success: true, added: 0, total: 0 };
+  }
+
+  const selection: Selection = {
+    provider: 'immich',
+    asset_ids: assets.map((a: any) => a.id),
+  };
+
+  const addResult = await addTripPhotos(tripId, userId, true, [selection], sid, linkId);
+  if ('error' in addResult) return { error: addResult.error.message, status: addResult.error.status };
+
+  updateSyncTimeForAlbumLink(linkId);
+
+  return { success: true, added: addResult.data.added, total: assets.length };
+}

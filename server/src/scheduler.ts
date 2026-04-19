@@ -230,11 +230,60 @@ function startVersionCheck(): void {
   }, { timezone: tz });
 }
 
+// Auto photo sync: every 6 hours for all album/date-range links with auto_sync enabled
+let autoPhotoSyncTask: ScheduledTask | null = null;
+
+function startAutoPhotoSync(): void {
+  if (autoPhotoSyncTask) { autoPhotoSyncTask.stop(); autoPhotoSyncTask = null; }
+
+  const tz = process.env.TZ || 'UTC';
+  autoPhotoSyncTask = cron.schedule('0 */6 * * *', async () => {
+    try {
+      const { db } = require('./db/database');
+      const links = db.prepare(`
+        SELECT id, trip_id, user_id, provider, sync_type, sync_from_date, sync_to_date
+        FROM trip_album_links
+        WHERE auto_sync = 1
+      `).all() as { id: number; trip_id: number; user_id: number; provider: string; sync_type: string; sync_from_date: string | null; sync_to_date: string | null }[];
+
+      let synced = 0;
+      for (const link of links) {
+        try {
+          if (link.provider === 'immich') {
+            const { syncAlbumAssets: saa, syncDateRangePhotos: sdr } = require('./services/memories/immichService');
+            if (link.sync_type === 'date_range' && link.sync_from_date && link.sync_to_date) {
+              await sdr(String(link.trip_id), String(link.id), link.user_id, link.sync_from_date, link.sync_to_date, '');
+            } else {
+              await saa(String(link.trip_id), String(link.id), link.user_id, '');
+            }
+            synced++;
+          }
+        } catch (err: unknown) {
+          const { logError: le } = require('./services/auditLog');
+          le(`Auto Photo Sync link ${link.id}: ${err instanceof Error ? err.message : err}`);
+        }
+      }
+
+      if (synced > 0) {
+        const { logInfo: li } = require('./services/auditLog');
+        li(`Auto Photo Sync: synced ${synced} link(s)`);
+      }
+    } catch (err: unknown) {
+      const { logError: le } = require('./services/auditLog');
+      le(`Auto Photo Sync: ${err instanceof Error ? err.message : err}`);
+    }
+  }, { timezone: tz });
+
+  const { logInfo: li } = require('./services/auditLog');
+  li('Auto Photo Sync scheduled: every 6 hours');
+}
+
 function stop(): void {
   if (currentTask) { currentTask.stop(); currentTask = null; }
   if (demoTask) { demoTask.stop(); demoTask = null; }
   if (reminderTask) { reminderTask.stop(); reminderTask = null; }
   if (versionCheckTask) { versionCheckTask.stop(); versionCheckTask = null; }
+  if (autoPhotoSyncTask) { autoPhotoSyncTask.stop(); autoPhotoSyncTask = null; }
 }
 
-export { start, stop, startDemoReset, startTripReminders, startVersionCheck, loadSettings, saveSettings, VALID_INTERVALS };
+export { start, stop, startDemoReset, startTripReminders, startVersionCheck, startAutoPhotoSync, loadSettings, saveSettings, VALID_INTERVALS };

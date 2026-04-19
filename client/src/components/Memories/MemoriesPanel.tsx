@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import apiClient, { addonsApi } from '../../api/client'
-import { Camera, Plus, Share2, EyeOff, Eye, X, Check, Search, ArrowUpDown, MapPin, Filter, Link2, RefreshCw, Unlink, FolderOpen, Info, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Camera, Plus, Share2, EyeOff, Eye, X, Check, Search, ArrowUpDown, MapPin, Filter, Link2, RefreshCw, Unlink, FolderOpen, Info, ChevronLeft, ChevronRight, CalendarRange, Timer } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useTranslation } from '../../i18n'
 import { fetchImageAsBlob, clearImageQueue } from '../../api/authUrl'
@@ -86,7 +86,9 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
   const [showAlbumPicker, setShowAlbumPicker] = useState(false)
   const [albums, setAlbums] = useState<{ id: string; albumName: string; assetCount: number }[]>([])
   const [albumsLoading, setAlbumsLoading] = useState(false)
-  const [albumLinks, setAlbumLinks] = useState<{ id: number; provider: string; album_id: string; album_name: string; user_id: number; username: string; sync_enabled: number; last_synced_at: string | null }[]>([])
+  const [albumLinks, setAlbumLinks] = useState<{ id: number; provider: string; album_id: string; album_name: string; user_id: number; username: string; sync_enabled: number; auto_sync: number; sync_type: string; sync_from_date: string | null; sync_to_date: string | null; last_synced_at: string | null }[]>([])
+  const [dateSyncFrom, setDateSyncFrom] = useState(startDate || '')
+  const [dateSyncTo, setDateSyncTo] = useState(endDate || '')
   const [syncing, setSyncing] = useState<number | null>(null)
 
 
@@ -143,6 +145,8 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
   }
 
   const openAlbumPicker = async () => {
+    setDateSyncFrom(startDate || '')
+    setDateSyncTo(endDate || '')
     setShowAlbumPicker(true)
     await loadAlbums(selectedProvider)
   }
@@ -186,6 +190,34 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
       await loadPhotos()
     } catch { toast.error(t('memories.error.syncAlbum')) }
     finally { setSyncing(null) }
+  }
+
+  const toggleAutoSync = async (linkId: number, currentValue: number) => {
+    try {
+      await apiClient.patch(buildUnifiedUrl('album-links', linkId.toString()), { auto_sync: !currentValue })
+      await loadAlbumLinks()
+    } catch { toast.error(t('memories.error.syncAlbum')) }
+  }
+
+  const linkDateRange = async () => {
+    if (!selectedProvider || !dateSyncFrom || !dateSyncTo) return
+    const albumId = `date_range:${dateSyncFrom}:${dateSyncTo}`
+    const albumName = `${dateSyncFrom} – ${dateSyncTo}`
+    try {
+      await apiClient.post(buildUnifiedUrl('album-links'), {
+        album_id: albumId,
+        album_name: albumName,
+        provider: selectedProvider,
+        sync_type: 'date_range',
+        sync_from_date: dateSyncFrom,
+        sync_to_date: dateSyncTo,
+      })
+      setShowAlbumPicker(false)
+      await loadAlbumLinks()
+      const linksRes = await apiClient.get(buildUnifiedUrl('album-links'))
+      const newLink = (linksRes.data.links || []).find((l: any) => l.album_id === albumId && l.provider === selectedProvider)
+      if (newLink) await syncAlbum(newLink.id, selectedProvider)
+    } catch { toast.error(t('memories.error.linkAlbum')) }
   }
 
   // Lightbox
@@ -525,6 +557,32 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
               })}
             </div>
           )}
+
+          {/* Date-range sync section */}
+          <div style={{ marginTop: 16, padding: '14px', borderRadius: 10, border: '1px solid var(--border-secondary)', background: 'var(--bg-tertiary)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+              <CalendarRange size={13} />
+              {t('memories.addDateSync')}
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input type="date" value={dateSyncFrom} onChange={e => setDateSyncFrom(e.target.value)}
+                style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'inherit', flex: 1, minWidth: 120 }} />
+              <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>–</span>
+              <input type="date" value={dateSyncTo} onChange={e => setDateSyncTo(e.target.value)}
+                style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'inherit', flex: 1, minWidth: 120 }} />
+              <button onClick={linkDateRange} disabled={!dateSyncFrom || !dateSyncTo}
+                style={{
+                  padding: '6px 14px', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 600,
+                  cursor: dateSyncFrom && dateSyncTo ? 'pointer' : 'default', fontFamily: 'inherit',
+                  background: dateSyncFrom && dateSyncTo ? 'var(--text-primary)' : 'var(--border-primary)',
+                  color: dateSyncFrom && dateSyncTo ? 'var(--bg-primary)' : 'var(--text-faint)',
+                  whiteSpace: 'nowrap',
+                }}>
+                <Link2 size={11} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 5 }} />
+                {t('memories.linkAlbum')}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -756,13 +814,20 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
                 display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8,
                 background: 'var(--bg-tertiary)', fontSize: 11, color: 'var(--text-muted)',
               }}>
-                <FolderOpen size={11} />
+                {link.sync_type === 'date_range' ? <CalendarRange size={11} /> : <FolderOpen size={11} />}
                 <span style={{ fontWeight: 500 }}>{link.album_name}</span>
                 {link.username !== currentUser?.username && <span style={{ color: 'var(--text-faint)' }}>({link.username})</span>}
                 <button onClick={() => syncAlbum(link.id, link.provider)} disabled={syncing === link.id} title={t('memories.syncAlbum')}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: 'var(--text-faint)' }}>
                   <RefreshCw size={11} style={{ animation: syncing === link.id ? 'spin 1s linear infinite' : 'none' }} />
                 </button>
+                {link.user_id === currentUser?.id && (
+                  <button onClick={() => toggleAutoSync(link.id, link.auto_sync)}
+                    title={link.auto_sync ? t('memories.disableAutoSync') : t('memories.enableAutoSync')}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: link.auto_sync ? 'var(--text-primary)' : 'var(--text-faint)' }}>
+                    <Timer size={11} />
+                  </button>
+                )}
                 {link.user_id === currentUser?.id && (
                   <button onClick={() => unlinkAlbum(link.id)} title={t('memories.unlinkAlbum')}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: 'var(--text-faint)' }}>

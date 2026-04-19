@@ -9,6 +9,7 @@ import {
     addTripPhotos,
     removeTripPhoto,
     setTripPhotoSharing,
+    toggleAlbumLinkAutoSync,
 } from '../../services/memories/unifiedService';
 import immichRouter from './immich';
 import synologyRouter from './synology';
@@ -85,7 +86,26 @@ router.get('/unified/trips/:tripId/album-links', authenticate, (req: Request, re
 router.post('/unified/trips/:tripId/album-links', authenticate, async (req: Request, res: Response) => {
     const authReq = req as AuthRequest;
     const { tripId } = req.params;
-    const result = createTripAlbumLink(tripId, authReq.user.id, req.body?.provider, req.body?.album_id, req.body?.album_name);
+    const result = createTripAlbumLink(
+        tripId,
+        authReq.user.id,
+        req.body?.provider,
+        req.body?.album_id,
+        req.body?.album_name,
+        req.body?.sync_type,
+        req.body?.sync_from_date,
+        req.body?.sync_to_date,
+    );
+    if ('error' in result) return res.status(result.error.status).json({ error: result.error.message });
+    res.json({ success: true });
+});
+
+router.patch('/unified/trips/:tripId/album-links/:linkId', authenticate, (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const { tripId, linkId } = req.params;
+    const autoSync = req.body?.auto_sync;
+    if (typeof autoSync !== 'boolean') return res.status(400).json({ error: 'auto_sync (boolean) is required' });
+    const result = toggleAlbumLinkAutoSync(tripId, linkId, authReq.user.id, autoSync);
     if ('error' in result) return res.status(result.error.status).json({ error: result.error.message });
     res.json({ success: true });
 });
