@@ -209,6 +209,9 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'admin.notifications.adminWebhookPanel.testFailed': 'Test webhook failed',
   'admin.notifications.adminWebhookPanel.alwaysOnHint': 'Admin webhook always fires when a URL is configured',
   'admin.notifications.adminNotificationsHint': 'Configure which channels deliver admin-only notifications (e.g. version alerts).',
+  'admin.notifications.events': 'Notification Events',
+  'admin.notifications.eventsHint': 'Choose which events trigger notifications for all users.',
+  'admin.notifications.configureFirst': 'Configure SMTP or Webhook below first, then enable events.',
   'admin.smtp.title': 'Email & Notifications',
   'admin.smtp.hint': 'SMTP configuration for sending email notifications.',
   'admin.smtp.testButton': 'Send test email',
@@ -1034,6 +1037,11 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'budget.categoryName': 'Category Name',
   'budget.table.name': 'Name',
   'budget.table.total': 'Total',
+  'budget.table.persons': 'People',
+  'budget.table.days': 'Days',
+  'budget.table.perPerson': 'Per Person',
+  'budget.table.perDay': 'Per Day',
+  'budget.table.perPersonDay': 'Per P./Day',
   'budget.table.note': 'Note',
   'budget.table.date': 'Date',
   'budget.table.members': 'Members',
@@ -1075,6 +1083,8 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'budget.charged': 'Charged',
   'budget.paid': 'Paid',
   'budget.balance': 'Balance',
+  'budget.perPerson': 'Per Person',
+  'budget.open': 'Open',
 
   // Files
   'files.title': 'Files',
@@ -1460,6 +1470,8 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'memories.reviewTitle': 'Review your photos',
   'memories.reviewHint': 'Click photos to exclude them from sharing.',
   'memories.shareCount': 'Share {count} photos',
+  'memories.immichUrl': 'Immich Server URL',
+  'memories.immichApiKey': 'API Key',
   //-------------------------
   //todo section
   'memories.providerUrl': 'Server URL',
