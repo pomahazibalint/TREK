@@ -15,7 +15,7 @@ import { useCanDo } from '../../store/permissionsStore'
 import type { Place, Category, Day, AssignmentsMap } from '../../types'
 
 interface PlacesSidebarProps {
-  tripId: number
+  tripId: number | string
   places: Place[]
   categories: Category[]
   assignments: AssignmentsMap
@@ -23,7 +23,7 @@ interface PlacesSidebarProps {
   selectedPlaceId: number | null
   onPlaceClick: (placeId: number | null) => void
   onAddPlace: () => void
-  onAssignToDay: (placeId: number, dayId: number) => void
+  onAssignToDay: (placeId: number, dayId?: number, ...args: any[]) => void
   onEditPlace: (place: Place) => void
   onDeletePlace: (placeId: number) => void
   days: Day[]
@@ -374,7 +374,7 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
                     {cat && (() => {
                       const CatIcon = getCategoryIcon(cat.icon)
-                      return <CatIcon size={11} strokeWidth={2} color={cat.color || '#6366f1'} style={{ flexShrink: 0 }} title={cat.name} />
+                      return <CatIcon size={11} strokeWidth={2} color={cat.color || '#6366f1'} style={{ flexShrink: 0 }} />
                     })()}
                     <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
                       {place.name}

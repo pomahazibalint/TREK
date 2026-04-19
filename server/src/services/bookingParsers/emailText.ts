@@ -54,8 +54,8 @@ function extractDate(text: string): string | undefined {
       august: 8, augusztus: 8,
       september: 9, szeptember: 9,
       october: 10, október: 10,
-      november: 11, november: 11,
-      december: 12, december: 12,
+      november: 11,
+      december: 12,
     }
     const monthKey = fullMatch.toLowerCase().split(/\s/)[0]
     const month = months[monthKey]

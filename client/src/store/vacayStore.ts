@@ -6,13 +6,16 @@ import type { VacayPlan, VacayUser, VacayEntry, VacayStat, HolidaysMap, HolidayI
 const ax = apiClient
 
 interface PendingInvite {
+  id?: number
   user_id: number
   username: string
 }
 
 interface IncomingInvite {
+  id?: number
   plan_id: number
   owner_username: string
+  username?: string
 }
 
 interface VacayPlanResponse {

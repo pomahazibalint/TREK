@@ -35,7 +35,7 @@ import { usePlannerHistory } from '../hooks/usePlannerHistory'
 import type { Accommodation, TripMember, Day, Place, Reservation, PackingItem, TodoItem } from '../types'
 import { ListTodo } from 'lucide-react'
 
-function ListsContainer({ tripId, packingItems, todoItems }: { tripId: number; packingItems: PackingItem[]; todoItems: TodoItem[] }) {
+function ListsContainer({ tripId, packingItems, todoItems }: { tripId: number | string; packingItems: PackingItem[]; todoItems: TodoItem[] }) {
   const [subTab, setSubTab] = useState<'packing' | 'todo'>(() => {
     return (sessionStorage.getItem(`trip-lists-subtab-${tripId}`) as 'packing' | 'todo') || 'packing'
   })
@@ -61,8 +61,8 @@ function ListsContainer({ tripId, packingItems, todoItems }: { tripId: number; p
           </button>
         ))}
       </div>
-      {subTab === 'packing' && <PackingListPanel tripId={tripId} items={packingItems} />}
-      {subTab === 'todo' && <TodoListPanel tripId={tripId} items={todoItems} />}
+      {subTab === 'packing' && <PackingListPanel tripId={Number(tripId)} items={packingItems} />}
+      {subTab === 'todo' && <TodoListPanel tripId={Number(tripId)} items={todoItems} />}
     </div>
   )
 }
@@ -112,7 +112,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
 
   useEffect(() => {
     addonsApi.enabled().then(data => {
-      const map = {}
+      const map: Record<string, boolean> = {}
       data.addons.forEach(a => { map[a.id] = true })
       // Check if any photo provider is enabled (for memories tab to show)
       const hasPhotoProviders = data.addons.some(a => a.type === 'photo_provider')
@@ -276,7 +276,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
 
   const handleMarkerClick = useCallback((placeId) => {
     const opening = placeId !== undefined
-    setSelectedPlaceId(prev => prev === placeId ? null : placeId)
+    setSelectedPlaceId(selectedPlaceId === placeId ? null : placeId)
     if (opening) { setLeftCollapsed(false); setRightCollapsed(false) }
   }, [])
 
@@ -320,7 +320,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
         for (const file of pendingFiles) {
           const fd = new FormData()
           fd.append('file', file)
-          fd.append('place_id', editingPlace.id)
+          fd.append('place_id', String(editingPlace.id))
           try { await tripActions.addFile(tripId, fd) } catch {}
         }
       }
@@ -331,7 +331,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
         for (const file of pendingFiles) {
           const fd = new FormData()
           fd.append('file', file)
-          fd.append('place_id', place.id)
+          fd.append('place_id', String(place.id))
           try { await tripActions.addFile(tripId, fd) } catch {}
         }
       }
@@ -432,7 +432,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
       const dayItems = useTripStore.getState().assignments[String(dayId)] || []
       const ordered = orderedIds.map(id => dayItems.find(a => a.id === id)).filter(Boolean)
       const waypoints = ordered.map(a => a.place).filter(p => p?.lat && p?.lng)
-      if (waypoints.length >= 2) setRoute(waypoints.map(p => [p.lat, p.lng]))
+      if (waypoints.length >= 2) setRoute(waypoints.map(p => [p.lat, p.lng] as [number, number]))
       else setRoute(null)
       setRouteInfo(null)
     }
@@ -616,7 +616,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
               onMarkerClick={handleMarkerClick}
               onMapClick={handleMapClick}
               onMapContextMenu={handleMapContextMenu}
-              center={defaultCenter}
+              center={defaultCenter as [number, number]}
               zoom={defaultZoom}
               tileUrl={mapTileUrl}
               fitKey={fitKey}
@@ -759,13 +759,15 @@ export default function TripPlannerPage(): React.ReactElement | null {
                     assignments={assignments}
                     selectedDayId={selectedDayId}
                     selectedPlaceId={selectedPlaceId}
-                    onPlaceClick={handlePlaceClick}
+                    onPlaceClick={(placeId) => handlePlaceClick(placeId, undefined)}
                     onAddPlace={() => { setEditingPlace(null); setShowPlaceForm(true) }}
                     onAssignToDay={handleAssignToDay}
                     onEditPlace={(place) => { setEditingPlace(place); setEditingAssignmentId(null); setShowPlaceForm(true) }}
                     onDeletePlace={(placeId) => handleDeletePlace(placeId)}
                     onCategoryFilterChange={setMapCategoryFilter}
                     pushUndo={pushUndo}
+                    days={days}
+                    isMobile={false}
                   />
                 </div>
               </div>
@@ -897,8 +899,8 @@ export default function TripPlannerPage(): React.ReactElement | null {
                   </div>
                   <div style={{ flex: 1, overflow: 'auto' }}>
                     {mobileSidebarOpen === 'left'
-                      ? <DayPlanSidebar tripId={tripId} trip={trip} days={days} places={places} categories={categories} assignments={assignments} selectedDayId={selectedDayId} selectedPlaceId={selectedPlaceId} selectedAssignmentId={selectedAssignmentId} onSelectDay={(id) => { handleSelectDay(id); setMobileSidebarOpen(null) }} onPlaceClick={(placeId, assignmentId) => { handlePlaceClick(placeId, assignmentId); setMobileSidebarOpen(null) }} onReorder={handleReorder} onUpdateDayTitle={handleUpdateDayTitle} onAssignToDay={handleAssignToDay} onRouteCalculated={(r) => { if (r) { setRoute(r.coordinates); setRouteInfo(r) } }} reservations={reservations} onAddReservation={(dayId) => { setEditingReservation(null); tripActions.setSelectedDay(dayId); setShowReservationModal(true); setMobileSidebarOpen(null) }} onDayDetail={(day) => { setShowDayDetail(day); setSelectedPlaceId(null); setSelectedAssignmentId(null); setMobileSidebarOpen(null) }} accommodations={tripAccommodations} transportMode={transportMode} onTransportModeChange={setTransportMode} onNavigateToFiles={() => { setMobileSidebarOpen(null); handleTabChange('dateien') }} onExpandedDaysChange={setExpandedDayIds} pushUndo={pushUndo} canUndo={canUndo} lastActionLabel={lastActionLabel} onUndo={handleUndo} />
-                      : <PlacesSidebar tripId={tripId} places={places} categories={categories} assignments={assignments} selectedDayId={selectedDayId} selectedPlaceId={selectedPlaceId} onPlaceClick={(placeId) => { handlePlaceClick(placeId); setMobileSidebarOpen(null) }} onAddPlace={() => { setEditingPlace(null); setShowPlaceForm(true); setMobileSidebarOpen(null) }} onAssignToDay={handleAssignToDay} onEditPlace={(place) => { setEditingPlace(place); setEditingAssignmentId(null); setShowPlaceForm(true); setMobileSidebarOpen(null) }} onDeletePlace={(placeId) => handleDeletePlace(placeId)} days={days} isMobile onCategoryFilterChange={setMapCategoryFilter} pushUndo={pushUndo} />
+                      ? <DayPlanSidebar tripId={tripId} trip={trip} days={days} places={places} categories={categories} assignments={assignments} selectedDayId={selectedDayId} selectedPlaceId={selectedPlaceId} selectedAssignmentId={selectedAssignmentId} onSelectDay={(id) => { handleSelectDay(id, undefined); setMobileSidebarOpen(null) }} onPlaceClick={(placeId, assignmentId) => { handlePlaceClick(placeId, assignmentId); setMobileSidebarOpen(null) }} onReorder={handleReorder} onUpdateDayTitle={handleUpdateDayTitle} onAssignToDay={handleAssignToDay} onRouteCalculated={(r) => { if (r) { setRoute(r.coordinates); setRouteInfo(r) } }} reservations={reservations} onAddReservation={(dayId) => { setEditingReservation(null); tripActions.setSelectedDay(dayId); setShowReservationModal(true); setMobileSidebarOpen(null) }} onDayDetail={(day) => { setSelectedPlaceId(null); selectAssignment(null, null); setMobileSidebarOpen(null) }} accommodations={tripAccommodations} transportMode={transportMode} onTransportModeChange={setTransportMode} onNavigateToFiles={() => { setMobileSidebarOpen(null); handleTabChange('dateien') }} onExpandedDaysChange={setExpandedDayIds} onRemoveAssignment={handleRemoveAssignment} onEditPlace={(place) => { setEditingPlace(place); setEditingAssignmentId(null); setShowPlaceForm(true); setMobileSidebarOpen(null) }} onDeletePlace={(placeId) => handleDeletePlace(placeId)} pushUndo={pushUndo} canUndo={canUndo} lastActionLabel={lastActionLabel} onUndo={handleUndo} />
+                      : <PlacesSidebar tripId={tripId} places={places} categories={categories} assignments={assignments} selectedDayId={selectedDayId} selectedPlaceId={selectedPlaceId} onPlaceClick={(placeId) => { handlePlaceClick(placeId, undefined); setMobileSidebarOpen(null) }} onAddPlace={() => { setEditingPlace(null); setShowPlaceForm(true); setMobileSidebarOpen(null) }} onAssignToDay={handleAssignToDay} onEditPlace={(place) => { setEditingPlace(place); setEditingAssignmentId(null); setShowPlaceForm(true); setMobileSidebarOpen(null) }} onDeletePlace={(placeId) => handleDeletePlace(placeId)} days={days} isMobile onCategoryFilterChange={setMapCategoryFilter} pushUndo={pushUndo} />
                     }
                   </div>
                 </div>
@@ -932,7 +934,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
 
         {activeTab === 'finanzplan' && (
           <div style={{ height: '100%', overflowY: 'auto', overscrollBehavior: 'contain', maxWidth: 1800, margin: '0 auto', width: '100%', padding: '8px 0' }}>
-            <BudgetPanel tripId={tripId} tripMembers={tripMembers} />
+            <BudgetPanel tripId={Number(tripId)} tripMembers={tripMembers} />
           </div>
         )}
 
@@ -971,7 +973,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
         <ExpenseModal
           item={draftBudgetModal.item}
           category={draftBudgetModal.item?.category || 'Activities'}
-          tripId={tripId}
+          tripId={Number(tripId)}
           tripCurrency={trip?.currency || 'EUR'}
           tripMembers={tripMembers}
           categories={[...new Set((budgetItems || []).map((i: any) => i.category).filter(Boolean)), 'Activities', 'Other']}

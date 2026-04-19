@@ -280,7 +280,7 @@ export default function VacayPage(): React.ReactElement {
   )
 }
 
-function InfoItem({ icon: Icon, text }: { icon: React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>; text: string }): React.ReactElement {
+function InfoItem({ icon: Icon, text }: { icon: React.ComponentType<{ size?: number | string; className?: string; style?: React.CSSProperties }>; text: string }): React.ReactElement {
   return (
     <div className="flex items-start gap-3 px-3 py-2 rounded-lg" style={{ background: 'var(--bg-secondary)' }}>
       <Icon size={15} className="shrink-0 mt-0.5" style={{ color: 'var(--text-muted)' }} />

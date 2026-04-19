@@ -52,6 +52,10 @@ export default function FilesPage(): React.ReactElement {
     await tripStore.deleteFile(tripId, fileId)
   }
 
+  const handleUpdate = async (_fileId: number, _data: Partial<TripFile>): Promise<void> => {
+    await loadData()
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -87,6 +91,7 @@ export default function FilesPage(): React.ReactElement {
             files={files}
             onUpload={handleUpload}
             onDelete={handleDelete}
+            onUpdate={handleUpdate}
             places={places}
             tripId={tripId}
           />

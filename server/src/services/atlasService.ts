@@ -15,7 +15,7 @@ async function loadAdmin1Geo(): Promise<any> {
   ).then(r => r.json()).then(geo => {
     admin1GeoCache = geo;
     admin1GeoLoading = null;
-    console.log(`[Atlas] Cached admin-1 GeoJSON: ${geo.features?.length || 0} features`);
+    console.log(`[Atlas] Cached admin-1 GeoJSON: ${(geo as any).features?.length || 0} features`);
     return geo;
   }).catch(err => {
     admin1GeoLoading = null;

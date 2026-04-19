@@ -35,7 +35,7 @@ function getOffset(tz) {
     const now = new Date()
     const local = new Date(now.toLocaleString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }))
     const remote = new Date(now.toLocaleString('en-US', { timeZone: tz }))
-    const diff = (remote - local) / 3600000
+    const diff = (remote.getTime() - local.getTime()) / 3600000
     const sign = diff >= 0 ? '+' : ''
     return `${sign}${diff}h`
   } catch { return '' }

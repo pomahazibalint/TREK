@@ -126,7 +126,7 @@ router.post('/', authenticate, requireTripAccess, demoUploadBlock, upload.single
   if (!validation.valid) {
     // Delete the uploaded file since it failed validation
     fs.unlinkSync(path.join(filesDir, req.file.filename));
-    return res.status(400).json({ error: validation.reason });
+    return res.status(400).json({ error: (validation as { valid: false; reason: string }).reason });
   }
 
   const { place_id, description, reservation_id } = req.body;

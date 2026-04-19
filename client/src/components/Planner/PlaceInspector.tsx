@@ -107,6 +107,7 @@ interface TripMember {
   id: number
   username: string
   avatar_url?: string | null
+  avatar?: string | null
 }
 
 interface PlaceInspectorProps {
@@ -120,10 +121,10 @@ interface PlaceInspectorProps {
   onClose: () => void
   onEdit: () => void
   onDelete: () => void
-  onAssignToDay: (placeId: number, dayId: number) => void
-  onRemoveAssignment: (assignmentId: number, dayId: number) => void
+  onAssignToDay: (placeId: number, dayId?: number, ...args: any[]) => void
+  onRemoveAssignment: (assignmentId: number, dayId?: number) => void
   files: TripFile[]
-  onFileUpload?: (fd: FormData) => Promise<void>
+  onFileUpload?: (fd: FormData) => Promise<void | TripFile>
   tripMembers?: TripMember[]
   onSetParticipants: (assignmentId: number, dayId: number, participantIds: number[]) => void
   onUpdatePlace: (placeId: number, data: Partial<Place>) => void
@@ -191,7 +192,7 @@ export default function PlaceInspector({
       for (const file of selectedFiles) {
         const fd = new FormData()
         fd.append('file', file)
-        fd.append('place_id', place.id)
+        fd.append('place_id', String(place.id))
         await onFileUpload(fd)
       }
       setFilesExpanded(true)

@@ -30,6 +30,7 @@ interface TripMember {
   id: number
   username: string
   avatar_url?: string | null
+  avatar?: string | null
 }
 
 interface WhatsNextWidgetProps {

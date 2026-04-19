@@ -246,7 +246,7 @@ const previewCache = {}
 
 interface LinkPreviewProps {
   url: string
-  tripId: number
+  tripId: number | string
   own: boolean
   onLoad: (() => void) | undefined
 }
@@ -281,7 +281,7 @@ function LinkPreview({ url, tripId, own, onLoad }: LinkPreviewProps) {
     >
       {data.image && (
         <img src={data.image} alt="" style={{ width: '100%', height: 140, objectFit: 'cover', display: 'block' }}
-          onError={e => e.target.style.display = 'none'} />
+          onError={e => (e.target as HTMLImageElement).style.display = 'none'} />
       )}
       <div style={{ padding: '8px 10px' }}>
         {domain && (
@@ -355,7 +355,7 @@ function ReactionBadge({ reaction, currentUserId, onReact }: ReactionBadgeProps)
 
 /* ── Main Component ── */
 interface CollabChatProps {
-  tripId: number
+  tripId: number | string
   currentUser: User
 }
 
@@ -485,7 +485,7 @@ export default function CollabChat({ tripId, currentUser }: CollabChatProps) {
     if (!body || sending) return
     setSending(true)
     try {
-      const payload = { text: body }
+      const payload: { text: string; reply_to?: number } = { text: body }
       if (replyTo) payload.reply_to = replyTo.id
       const data = await collabApi.sendMessage(tripId, payload)
       if (data?.message) {
@@ -683,13 +683,13 @@ export default function CollabChat({ tripId, currentUser }: CollabChatProps) {
                       onContextMenu={e => { e.preventDefault(); if (canEdit) setReactMenu({ msgId: msg.id, x: e.clientX, y: e.clientY }) }}
                       onTouchEnd={e => {
                         const now = Date.now()
-                        const lastTap = e.currentTarget.dataset.lastTap || 0
+                        const lastTap = Number(e.currentTarget.dataset.lastTap || 0)
                         if (now - lastTap < 300 && canEdit) {
                           e.preventDefault()
                           const touch = e.changedTouches?.[0]
                           if (touch) setReactMenu({ msgId: msg.id, x: touch.clientX, y: touch.clientY })
                         }
-                        e.currentTarget.dataset.lastTap = now
+                        e.currentTarget.dataset.lastTap = String(now)
                       }}
                     >
                       {bigEmoji ? (

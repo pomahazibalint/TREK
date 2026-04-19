@@ -101,7 +101,7 @@ export default function PhotosPage(): React.ReactElement {
             onUpdate={handleUpdate}
             places={places}
             days={days}
-            tripId={tripId}
+            tripId={Number(tripId)}
           />
         </div>
       </div>

@@ -175,11 +175,13 @@ function setAdminGlobalPref(event: NotifEventType, channel: 'email' | 'webhook',
 
 // ── Shared helper for per-user channel preference upserts ─────────────────
 
+type BoundStmt = { run(...params: unknown[]): unknown }
+
 function applyUserChannelPrefs(
   userId: number,
   prefs: Partial<Record<string, Partial<Record<string, boolean>>>>,
-  upsert: ReturnType<typeof db.prepare>,
-  del: ReturnType<typeof db.prepare>
+  upsert: BoundStmt,
+  del: BoundStmt
 ): void {
   for (const [eventType, channels] of Object.entries(prefs)) {
     if (!channels) continue;

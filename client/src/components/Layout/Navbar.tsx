@@ -25,6 +25,7 @@ interface Addon {
   name: string
   icon: string
   type: string
+  enabled?: boolean
 }
 
 export default function Navbar({ tripTitle, tripId, onBack, showBack, onShare }: NavbarProps): React.ReactElement {

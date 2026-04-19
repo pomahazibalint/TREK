@@ -24,7 +24,7 @@ import { useSettingsStore } from '../../store/settingsStore'
 import { useTranslation } from '../../i18n'
 import { formatDate, formatTime, dayTotalCost, dayAvgPriceLevel, currencyDecimals } from '../../utils/formatters'
 import { useDayNotes } from '../../hooks/useDayNotes'
-import type { Trip, Day, Place, Category, Assignment, Reservation, AssignmentsMap, RouteResult, Accommodation, TransportMode } from '../../types'
+import type { Trip, Day, Place, Category, Assignment, Reservation, AssignmentsMap, RouteResult, Accommodation, TransportMode, MergedItem } from '../../types'
 
 const NOTE_ICONS = [
   { id: 'FileText', Icon: FileText },
@@ -64,7 +64,7 @@ const TYPE_ICONS = {
 }
 
 interface DayPlanSidebarProps {
-  tripId: number
+  tripId: number | string
   trip: Trip
   days: Day[]
   places: Place[]
@@ -73,21 +73,21 @@ interface DayPlanSidebarProps {
   selectedDayId: number | null
   selectedPlaceId: number | null
   selectedAssignmentId: number | null
-  onSelectDay: (dayId: number | null) => void
-  onPlaceClick: (placeId: number) => void
+  onSelectDay: (dayId: number | null, ...args: any[]) => void
+  onPlaceClick: (placeId: number, ...args: any[]) => void
   onDayDetail?: (day: Day) => void
   onAccommodationChange?: () => void
   onOpenDraftBudget?: (assignmentId: number, budgetEntryId: number, isDraft: boolean) => void
   accommodations?: Accommodation[]
   onReorder: (dayId: number, orderedIds: number[]) => void
   onUpdateDayTitle: (dayId: number, title: string) => void
-  onRouteCalculated: (dayId: number, route: RouteResult | null) => void
-  onAssignToDay: (placeId: number, dayId: number) => void
-  onRemoveAssignment: (assignmentId: number, dayId: number) => void
-  onEditPlace: (place: Place) => void
+  onRouteCalculated: (route: RouteResult | null) => void
+  onAssignToDay: (placeId: number, dayId: number, ...args: any[]) => void
+  onRemoveAssignment: (assignmentId: number, dayId?: number, ...args: any[]) => void
+  onEditPlace: (place: Place, ...args: any[]) => void
   onDeletePlace: (placeId: number) => void
   reservations?: Reservation[]
-  onAddReservation: () => void
+  onAddReservation: (dayId?: number | null, ...args: any[]) => void
   transportMode?: TransportMode
   onTransportModeChange?: (mode: TransportMode) => void
   onNavigateToFiles?: () => void
@@ -146,7 +146,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   const [expandedDays, setExpandedDays] = useState(() => {
     try {
       const saved = sessionStorage.getItem(`day-expanded-${tripId}`)
-      if (saved) return new Set(JSON.parse(saved))
+      if (saved) return new Set<number>(JSON.parse(saved))
     } catch {}
     return new Set(days.map(d => d.id))
   })
@@ -449,7 +449,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     }
 
     // Insert transports among places based on per-day position or time
-    const result = [...baseItems]
+    const result: MergedItem[] = [...baseItems]
     for (let ti = 0; ti < timedTransports.length; ti++) {
       const timed = timedTransports[ti]
       const minutes = timed.minutes
@@ -536,12 +536,12 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     return !simItems.every((item, i) => i === 0 || item.minutes >= simItems[i - 1].minutes)
   }
 
-  const openEditNote = (dayId, note, e) => {
+  const openEditNote = (dayId, note, e?) => {
     e?.stopPropagation()
     _openEditNote(dayId, note)
   }
 
-  const deleteNote = async (dayId, noteId, e) => {
+  const deleteNote = async (dayId, noteId, e?) => {
     e?.stopPropagation()
     await _deleteNote(dayId, noteId)
   }
@@ -622,7 +622,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     // Check if a timed place is being moved → would it break chronological order?
     if (fromType === 'place') {
       const fromItem = m.find(i => i.type === 'place' && i.data.id === fromId)
-      const fromMinutes = parseTimeToMinutes(fromItem?.data?.place?.place_time)
+      const fromMinutes = parseTimeToMinutes((fromItem?.data as any)?.place?.place_time)
       if (fromItem && fromMinutes !== null) {
         const fromIdx = m.findIndex(i => i.type === fromType && i.data.id === fromId)
         const toIdx = m.findIndex(i => i.type === toType && i.data.id === toId)
@@ -644,7 +644,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
           const isChronological = timedInOrder.every((t, i) => i === 0 || t >= timedInOrder[i - 1])
 
           if (!isChronological) {
-            const placeTime = fromItem.data.place.place_time
+            const placeTime = (fromItem.data as any).place.place_time
             const timeStr = placeTime.includes(':') ? placeTime.substring(0, 5) : placeTime
             setTimeConfirm({ dayId, fromType, fromId, toType, toId, insertAfter, time: timeStr })
             setDraggingId(null); setDropTargetKey(null); dragDataRef.current = null
@@ -703,7 +703,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     if (reorderIds) {
       // Arrow reorder: rebuild merged list with places in the new order,
       // keeping transports and notes at their relative positions
-      const newMerged: typeof m = []
+      const newMerged: { type: string; sortKey: number; data: any; minutes?: number }[] = []
       let rIdx = 0
       for (const item of m) {
         if (item.type === 'place') {
@@ -760,7 +760,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     try {
       const result = await calculateRoute(waypoints, transportMode)
       // Luftlinien zwischen Wegpunkten anzeigen
-      const lineCoords = waypoints.map(p => [p.lat, p.lng])
+      const lineCoords = waypoints.map(p => [p.lat, p.lng] as [number, number])
       setRouteInfo({ distance: result.distanceText, duration: result.durationText })
       onRouteCalculated?.({ ...result, coordinates: lineCoords })
     } catch { toast.error(t('dayplan.toast.routeError')) }
@@ -967,8 +967,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
             }
           : null
 
-        const optimized = optimizeRoute(windowPlaces, subMatrix, startIdx)
-        optimizedWindowAssignments.push([...timedUnlocked.filter(a => windowAssignments[i].includes(a)), ...optimized.filter(p => windowPlaces.includes(windowPlaces.find(wp => wp.place === p)))])
+        const optimized = optimizeRoute(windowPlaces as any, subMatrix, startIdx)
+        optimizedWindowAssignments.push([...timedUnlocked.filter(a => windowAssignments[i].includes(a)), ...(optimized as any[]).filter(p => windowPlaces.includes(windowPlaces.find(wp => wp.place === p)))])
       }
 
       // Reconstruct full order: timed in order, with windows
@@ -1020,7 +1020,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
         toast.success(t('dayplan.toast.routeOptimized'))
       }
       if (overrunDetected) {
-        toast.warn(t('dayplan.toast.routeExceedsDayEnd'))
+        toast.warning(t('dayplan.toast.routeExceedsDayEnd'))
       }
 
       const capturedDayId = selectedDayId
@@ -1092,7 +1092,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
 
   const totalCost = useMemo(() => days.reduce((s, d) => {
     const da = assignments[String(d.id)] || []
-    return s + da.reduce((s2, a) => s2 + (parseFloat(a.place?.price) || 0), 0)
+    return s + da.reduce((s2, a) => s2 + (parseFloat(String(a.place?.price ?? 0)) || 0), 0)
   }, 0), [days, assignments])
 
   // Bester verfügbarer Standort für Wetter: zugewiesene Orte zuerst, dann beliebiger Reiseort
@@ -1122,7 +1122,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                 )
                 try {
                   const { downloadTripPDF } = await import('../PDF/TripPDF')
-                  await downloadTripPDF({ trip, days, places, assignments, categories, dayNotes: flatNotes, reservations, t, locale })
+                  await downloadTripPDF({ trip, days, places, assignments, categories, dayNotes: flatNotes as any, reservations, t, locale })
                 } catch (e) {
                   console.error('PDF error:', e)
                   toast.error(t('dayplan.pdfError') + ': ' + (e?.message || String(e)))
@@ -1251,7 +1251,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
               <div
                 onClick={() => { if (isSelected) { onSelectDay(null); setDetailOpenDayId(null) } else { onSelectDay(day.id) } }}
                 onDragOver={e => { e.preventDefault(); setDragOverDayId(day.id) }}
-                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverDayId(null) }}
+                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverDayId(null) }}
                 onDrop={e => handleDropOnDay(e, day.id)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10,
@@ -1360,8 +1360,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                     })()}
                     {day.date && anyGeoPlace && <span style={{ width: 1, height: 10, background: 'var(--text-faint)', opacity: 0.3, flexShrink: 0 }} />}
                     {day.date && anyGeoPlace && (() => {
-                      const wLat = loc?.place.lat ?? anyGeoPlace?.place?.lat ?? anyGeoPlace?.lat
-                      const wLng = loc?.place.lng ?? anyGeoPlace?.place?.lng ?? anyGeoPlace?.lng
+                      const wLat = loc?.place.lat ?? (anyGeoPlace as any)?.place?.lat ?? (anyGeoPlace as any)?.lat
+                      const wLng = loc?.place.lng ?? (anyGeoPlace as any)?.place?.lng ?? (anyGeoPlace as any)?.lng
                       return <WeatherWidget lat={wLat} lng={wLng} date={day.date} compact />
                     })()}
                   </div>
@@ -1394,8 +1394,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
               </div>
 
               {detailOpenDayId === day.id && (() => {
-                const wLat = loc?.place.lat ?? anyGeoPlace?.place?.lat ?? anyGeoPlace?.lat
-                const wLng = loc?.place.lng ?? anyGeoPlace?.place?.lng ?? anyGeoPlace?.lng
+                const wLat = loc?.place.lat ?? (anyGeoPlace as any)?.place?.lat ?? (anyGeoPlace as any)?.lat
+                const wLng = loc?.place.lng ?? (anyGeoPlace as any)?.place?.lng ?? (anyGeoPlace as any)?.lng
                 return (
                   <DayDetailPanel
                     inline
@@ -1630,7 +1630,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                               <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
                                 {cat && (() => {
                                   const CatIcon = getCategoryIcon(cat.icon)
-                                  return <CatIcon size={10} strokeWidth={2} color={cat.color || 'var(--text-muted)'} title={cat.name} style={{ flexShrink: 0 }} />
+                                  return <CatIcon size={10} strokeWidth={2} color={cat.color || 'var(--text-muted)'} style={{ flexShrink: 0 }} />
                                 })()}
                                 <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
                                   {place.name}

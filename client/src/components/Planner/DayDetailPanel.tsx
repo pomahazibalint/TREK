@@ -47,7 +47,7 @@ interface DayDetailPanelProps {
   days: Day[]
   places: Place[]
   categories?: Category[]
-  tripId: number
+  tripId: number | string
   assignments: AssignmentsMap
   reservations?: Reservation[]
   lat: number | null
@@ -75,9 +75,9 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
   const [accommodation, setAccommodation] = useState(null)
   const [dayAccommodations, setDayAccommodations] = useState<any[]>([])
   const [accommodations, setAccommodations] = useState([])
-  const [showHotelPicker, setShowHotelPicker] = useState(false)
+  const [showHotelPicker, setShowHotelPicker] = useState<boolean | 'edit'>(false)
   const [hotelDayRange, setHotelDayRange] = useState({ start: day?.id, end: day?.id })
-  const [hotelCategoryFilter, setHotelCategoryFilter] = useState('')
+  const [hotelCategoryFilter, setHotelCategoryFilter] = useState<number | ''>('')
   const [hotelForm, setHotelForm] = useState({ check_in: '', check_out: '', confirmation: '', place_id: null })
   const [startTime, setStartTime] = useState(day?.start_time ?? '09:00')
   const [endTime, setEndTime] = useState(day?.end_time ?? '20:00')
@@ -506,10 +506,10 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <CustomSelect
-                          value={hotelDayRange.start}
-                          onChange={v => setHotelDayRange(prev => ({ start: v, end: Math.max(v, prev.end) }))}
+                          value={String(hotelDayRange.start)}
+                          onChange={v => setHotelDayRange(prev => ({ start: Number(v), end: Math.max(Number(v), prev.end) }))}
                           options={days.map((d, i) => ({
-                            value: d.id,
+                            value: String(d.id),
                             label: `${d.title || t('planner.dayN', { n: i + 1 })}${d.date ? ` — ${new Date(d.date + 'T00:00:00Z').toLocaleDateString(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' })}` : ''}`,
                           }))}
                           size="sm"
@@ -518,10 +518,10 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
                       <span style={{ fontSize: 11, color: 'var(--text-faint)', flexShrink: 0 }}>→</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <CustomSelect
-                          value={hotelDayRange.end}
-                          onChange={v => setHotelDayRange(prev => ({ start: Math.min(prev.start, v), end: v }))}
+                          value={String(hotelDayRange.end)}
+                          onChange={v => setHotelDayRange(prev => ({ start: Math.min(prev.start, Number(v)), end: Number(v) }))}
                           options={days.map((d, i) => ({
-                            value: d.id,
+                            value: String(d.id),
                             label: `${d.title || t('planner.dayN', { n: i + 1 })}${d.date ? ` — ${new Date(d.date + 'T00:00:00Z').toLocaleDateString(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' })}` : ''}`,
                           }))}
                           size="sm"
@@ -662,7 +662,7 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
 }
 
 interface ChipProps {
-  icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>
+  icon: React.ComponentType<{ size?: number | string; style?: React.CSSProperties }>
   value: string
 }
 

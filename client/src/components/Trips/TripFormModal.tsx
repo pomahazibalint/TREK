@@ -13,9 +13,9 @@ import type { Trip } from '../../types'
 interface TripFormModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (data: Record<string, string | number | null>) => Promise<void> | void
+  onSave: (data: Record<string, string | number | null>) => Promise<{ trip?: { id: number; [key: string]: unknown } } | void> | void
   trip: Trip | null
-  onCoverUpdate: (tripId: number, coverUrl: string) => void
+  onCoverUpdate?: (tripId: number, coverUrl: string) => void
 }
 
 export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUpdate }: TripFormModalProps) {
@@ -108,7 +108,7 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
         ...(!formData.start_date && !formData.end_date ? { day_count: formData.day_count } : {}),
       })
       // Add selected members for newly created trips
-      if (selectedMembers.length > 0 && result?.trip?.id) {
+      if (selectedMembers.length > 0 && result && typeof result === 'object' && result.trip?.id) {
         for (const userId of selectedMembers) {
           const user = allUsers.find(u => u.id === userId)
           if (user) {
@@ -117,7 +117,7 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
         }
       }
       // Upload pending cover for newly created trips
-      if (pendingCoverFile && result?.trip?.id) {
+      if (pendingCoverFile && result && typeof result === 'object' && result.trip?.id) {
         try {
           const fd = new FormData()
           fd.append('cover', pendingCoverFile)
@@ -189,7 +189,7 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
     if (!canUploadCover) return
     const items = e.clipboardData?.items
     if (!items) return
-    for (const item of Array.from(items)) {
+    for (const item of Array.from(items) as DataTransferItem[]) {
       if (item.type.startsWith('image/')) {
         e.preventDefault()
         const file = item.getAsFile()
@@ -207,7 +207,7 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
       } else if (prev.start_date) {
         const oldStart = new Date(prev.start_date + 'T00:00:00Z')
         const oldEnd = new Date(prev.end_date + 'T00:00:00Z')
-        const duration = Math.round((oldEnd - oldStart) / 86400000)
+        const duration = Math.round((oldEnd.getTime() - oldStart.getTime()) / 86400000)
         const newEnd = new Date(value + 'T00:00:00Z')
         newEnd.setDate(newEnd.getDate() + duration)
         next.end_date = newEnd.toISOString().split('T')[0]
@@ -422,7 +422,7 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
                   if (value) { setSelectedMembers(prev => prev.includes(Number(value)) ? prev : [...prev, Number(value)]); setMemberSelectValue('') }
                 }}
                 placeholder={t('dashboard.addMember')}
-                options={allUsers.filter(u => u.id !== currentUser?.id && !selectedMembers.includes(u.id)).map(u => ({ value: u.id, label: u.username }))}
+                options={allUsers.filter(u => u.id !== currentUser?.id && !selectedMembers.includes(u.id)).map(u => ({ value: String(u.id), label: u.username }))}
                 searchable
                 size="sm"
               />

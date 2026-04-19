@@ -89,7 +89,7 @@ function dayCost(assignments, dayId, locale) {
 }
 
 // Pre-fetch Google Place photos for all assigned places
-async function fetchPlacePhotos(assignments) {
+async function fetchPlacePhotos(assignments: Record<string, { place?: { id: number; google_place_id?: string; image_url?: string } }[]>) {
   const photoMap = {} // placeId → photoUrl
   const allPlaces = Object.values(assignments).flatMap(a => a.map(x => x.place)).filter(Boolean)
   const unique = [...new Map(allPlaces.map(p => [p.id, p])).values()]
@@ -136,12 +136,12 @@ export async function downloadTripPDF({ trip, days, places, assignments, categor
     Object.values(assignments || {}).flatMap(a => a.map(x => x.place?.id)).filter(Boolean)
   ).size
   const totalCost = Object.values(assignments || {})
-    .flatMap(a => a).reduce((s, a) => s + (parseFloat(a.place?.price) || 0), 0)
+    .flatMap(a => a).reduce((s, a) => s + (parseFloat(String(a.place?.price ?? '')) || 0), 0)
 
   // Build day HTML
   const daysHtml = sorted.map((day, di) => {
     const assigned = assignments[String(day.id)] || []
-    const notes = (dayNotes || []).filter(n => n.day_id === day.id)
+    const notes = dayNotes?.[String(day.id)] || []
     const cost = dayCost(assignments, day.id, loc)
 
     // Transport bookings for this day
@@ -152,7 +152,7 @@ export async function downloadTripPDF({ trip, days, places, assignments, categor
     })
 
     const merged = []
-    assigned.forEach(a => merged.push({ type: 'place', k: a.order_index ?? a.sort_order ?? 0, data: a }))
+    assigned.forEach(a => merged.push({ type: 'place', k: a.order_index ?? 0, data: a }))
     notes.forEach(n    => merged.push({ type: 'note',  k: n.sort_order ?? 0, data: n }))
     dayTransport.forEach(r => {
       const pos = r.day_plan_position ?? (merged.length > 0 ? Math.max(...merged.map(m => m.k)) + 0.5 : 0.5)
@@ -522,6 +522,6 @@ ${daysHtml}
   overlay.appendChild(card)
   document.body.appendChild(overlay)
 
-  header.querySelector('#pdf-close-btn').onclick = () => overlay.remove()
-  header.querySelector('#pdf-print-btn').onclick = () => { iframe.contentWindow?.print() }
+  ;(header.querySelector('#pdf-close-btn') as HTMLElement).onclick = () => overlay.remove()
+  ;(header.querySelector('#pdf-print-btn') as HTMLElement).onclick = () => { iframe.contentWindow?.print() }
 }

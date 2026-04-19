@@ -34,7 +34,7 @@ function Avatar({ username, avatarUrl, size = 32 }: AvatarProps) {
   )
 }
 
-function ShareLinkSection({ tripId, t }: { tripId: number; t: (key: string, params?: Record<string, string | number>) => string }) {
+function ShareLinkSection({ tripId, t }: { tripId: number | string; t: (key: string, params?: Record<string, string | number>) => string }) {
   const [shareToken, setShareToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
@@ -160,7 +160,7 @@ function ShareLinkSection({ tripId, t }: { tripId: number; t: (key: string, para
 interface TripMembersModalProps {
   isOpen: boolean
   onClose: () => void
-  tripId: number
+  tripId: number | string
   tripTitle: string
 }
 

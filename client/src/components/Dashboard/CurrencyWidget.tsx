@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { ArrowRightLeft, RefreshCw } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 import CustomSelect from '../shared/CustomSelect'
@@ -72,13 +72,13 @@ export default function CurrencyWidget() {
 
       {/* From / Swap / To */}
       <div className="flex items-center gap-2 mb-3">
-        <div className="flex-1" style={{ '--bg-input': 'transparent', '--border-primary': 'transparent' }}>
+        <div className="flex-1" style={{ '--bg-input': 'transparent', '--border-primary': 'transparent' } as React.CSSProperties}>
           <CustomSelect value={from} onChange={setFrom} options={CURRENCY_OPTIONS} searchable size="sm" />
         </div>
         <button onClick={swap} className="p-1.5 rounded-lg shrink-0 transition-colors" style={{ color: 'var(--text-muted)' }}>
           <ArrowRightLeft size={13} />
         </button>
-        <div className="flex-1" style={{ '--bg-input': 'transparent', '--border-primary': 'transparent' }}>
+        <div className="flex-1" style={{ '--bg-input': 'transparent', '--border-primary': 'transparent' } as React.CSSProperties}>
           <CustomSelect value={to} onChange={setTo} options={CURRENCY_OPTIONS} searchable size="sm" />
         </div>
       </div>

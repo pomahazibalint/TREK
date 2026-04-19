@@ -112,7 +112,7 @@ export function handleRemoteEvent(set: SetState, event: WebSocketEvent): void {
       case 'assignment:reordered': {
         const dayKey = String(payload.dayId)
         const currentItems = state.assignments[dayKey] || []
-        const orderedIds: number[] = payload.orderedIds || []
+        const orderedIds: number[] = Array.isArray(payload.orderedIds) ? payload.orderedIds as number[] : []
         const reordered = orderedIds.map((id, idx) => {
           const item = currentItems.find(a => a.id === id)
           return item ? { ...item, order_index: idx } : null
@@ -230,10 +230,7 @@ export function handleRemoteEvent(set: SetState, event: WebSocketEvent): void {
         return {
           budgetItems: state.budgetItems.map(i =>
             i.id === payload.itemId
-              ? { ...i, members: (i.members || []).map(m => {
-                  const p = (payload.payments as { user_id: number; amount_paid_ref: number }[]).find(x => x.user_id === m.user_id)
-                  return p ? { ...m, amount_paid_ref: p.amount_paid_ref } : m
-                })}
+              ? { ...i, members: payload.members as BudgetMember[] }
               : i
           ),
         }

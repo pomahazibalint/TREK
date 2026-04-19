@@ -185,6 +185,7 @@ export interface TripFile {
   deleted_at?: string | null;
   created_at?: string;
   reservation_title?: string;
+  uploaded_by_avatar?: string | null;
   url?: string;
 }
 

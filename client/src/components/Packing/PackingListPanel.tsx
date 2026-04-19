@@ -67,7 +67,7 @@ function katColor(kat, allCategories) {
   return KAT_COLORS[Math.abs(h) % KAT_COLORS.length]
 }
 
-interface PackingBag { id: number; trip_id: number; name: string; color: string; weight_limit_grams: number | null; user_id?: number | null; assigned_username?: string | null }
+interface PackingBag { id: number; trip_id: number; name: string; color: string; weight_limit_grams: number | null; user_id?: number | null; assigned_username?: string | null; members?: { user_id: number; username: string; avatar?: string | null }[] }
 
 // ── Bag Card ──────────────────────────────────────────────────────────────
 
@@ -740,7 +740,7 @@ interface MenuItemProps {
   icon: React.ReactNode
   label: string
   onClick: () => void
-  danger: boolean
+  danger?: boolean
 }
 
 function MenuItem({ icon, label, onClick, danger }: MenuItemProps) {
@@ -816,7 +816,7 @@ export default function PackingListPanel({ tripId, items }: PackingListPanelProp
       if (filter === 'erledigt') return i.checked
       return true
     })
-    const groups = {}
+    const groups: Record<string, PackingItem[]> = {}
     for (const item of filtered) {
       const kat = item.category || t('packing.defaultCategory')
       if (!groups[kat]) groups[kat] = []

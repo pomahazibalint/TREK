@@ -8,6 +8,10 @@ import CustomSelect from '../components/shared/CustomSelect'
 import { Globe, MapPin, Briefcase, Calendar, Flag, ChevronRight, PanelLeftOpen, PanelLeftClose, X, Star, Plus, Trash2, Search } from 'lucide-react'
 import L from 'leaflet'
 import type { AtlasPlace, GeoJsonFeatureCollection, TranslationFn } from '../types'
+// Extend GeoJSONOptions to allow renderer (valid leaflet option not in @types/leaflet)
+declare module 'leaflet' {
+  interface GeoJSONOptions { renderer?: L.Renderer }
+}
 
 // Convert country code to flag emoji
 interface AtlasCountry {

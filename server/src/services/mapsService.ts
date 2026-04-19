@@ -31,6 +31,7 @@ interface GooglePlaceResult {
   websiteUri?: string;
   nationalPhoneNumber?: string;
   types?: string[];
+  regularOpeningHours?: { weekdayDescriptions?: string[]; openNow?: boolean };
 }
 
 interface GooglePlaceDetails extends GooglePlaceResult {

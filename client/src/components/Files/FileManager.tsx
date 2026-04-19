@@ -163,7 +163,7 @@ function AuthedImg({ src, style }: { src: string; style?: React.CSSProperties })
 
 // Source badge
 interface SourceBadgeProps {
-  icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>
+  icon: React.ComponentType<{ size?: number | string; style?: React.CSSProperties }>
   label: string
 }
 
@@ -234,8 +234,8 @@ interface FileManagerProps {
   days?: Day[]
   assignments?: AssignmentsMap
   reservations?: Reservation[]
-  tripId: number
-  allowedFileTypes: Record<string, string[]>
+  tripId: number | string
+  allowedFileTypes?: string | Record<string, string[]> | null
 }
 
 export default function FileManager({ files = [], onUpload, onDelete, onUpdate, places, days = [], assignments = {}, reservations = [], tripId, allowedFileTypes }: FileManagerProps) {
@@ -346,7 +346,7 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
     const items = e.clipboardData?.items
     if (!items) return
     const pastedFiles = []
-    for (const item of Array.from(items)) {
+    for (const item of Array.from(items) as DataTransferItem[]) {
       if (item.kind === 'file') {
         const file = item.getAsFile()
         if (file) pastedFiles.push(file)
@@ -396,7 +396,7 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
     }
   }
 
-  const imageFiles = filteredFiles.filter(f => isImage(f.mime_type))
+  const imageFiles = filteredFiles.filter(f => isImage(f.mime_type)) as (TripFile & { url: string })[]
 
   const openFile = (file) => {
     if (isImage(file.mime_type)) {
@@ -831,7 +831,7 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
                 <p style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500, margin: 0 }}>{t('files.dropzone')}</p>
                 <p style={{ fontSize: 11.5, color: 'var(--text-faint)', marginTop: 3 }}>{t('files.dropzoneHint')}</p>
                 <p style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 6, opacity: 0.7 }}>
-                  {(allowedFileTypes || 'jpg,jpeg,png,gif,webp,heic,pdf,doc,docx,xls,xlsx,txt,csv').toUpperCase().split(',').join(', ')} · Max 50 MB
+                  {(typeof allowedFileTypes === 'string' ? allowedFileTypes : 'jpg,jpeg,png,gif,webp,heic,pdf,doc,docx,xls,xlsx,txt,csv').toUpperCase().split(',').join(', ')} · Max 50 MB
                 </p>
               </>
             )}

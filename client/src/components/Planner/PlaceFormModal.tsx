@@ -17,22 +17,23 @@ interface PlaceFormData {
   name: string
   description: string
   address: string
-  lat: string
-  lng: string
-  category_id: string
+  lat: string | number | null
+  lng: string | number | null
+  category_id: string | number | null
   place_time: string
   end_time: string
   notes: string
   transport_mode: string
   website: string
   phone: string
-  price: string
+  price: string | number | null
   currency: string
   price_level?: number | null
-  duration_minutes: string
+  duration_minutes: string | number | null
   google_place_id?: string
   osm_id?: string
   opening_hours?: string[] | null
+  _pendingFiles?: File[]
 }
 
 const CURRENCIES = [
@@ -72,9 +73,9 @@ interface PlaceFormModalProps {
   onSave: (data: PlaceFormData, files?: File[]) => Promise<void> | void
   place: Place | null
   prefillCoords?: { lat: number; lng: number; name?: string; address?: string } | null
-  tripId: number
+  tripId: number | string
   categories: Category[]
-  onCategoryCreated: (category: Category) => void
+  onCategoryCreated: (category: Partial<Category>) => void | Category | Promise<Category | void>
   assignmentId: number | null
   dayAssignments?: Assignment[]
   tripMembers?: TripMember[]
@@ -111,9 +112,9 @@ export default function PlaceFormModal({
         name: place.name || '',
         description: place.description || '',
         address: place.address || '',
-        lat: place.lat || '',
-        lng: place.lng || '',
-        category_id: place.category_id || '',
+        lat: place.lat != null ? String(place.lat) : '',
+        lng: place.lng != null ? String(place.lng) : '',
+        category_id: place.category_id != null ? String(place.category_id) : '',
         place_time: place.place_time || '',
         end_time: place.end_time || '',
         notes: place.notes || '',
@@ -234,7 +235,7 @@ export default function PlaceFormModal({
     if (!canUploadFiles) return
     const items = e.clipboardData?.items
     if (!items) return
-    for (const item of Array.from(items)) {
+    for (const item of Array.from(items) as DataTransferItem[]) {
       if (item.type.startsWith('image/') || item.type === 'application/pdf') {
         e.preventDefault()
         const file = item.getAsFile()
@@ -273,7 +274,7 @@ export default function PlaceFormModal({
     }
     setIsSaving(true)
     try {
-      const priceVal = form.price !== '' ? parseFloat(form.price) : null
+      const priceVal = form.price !== '' && form.price != null ? parseFloat(String(form.price)) : null
 
       // In assignment context: route price to draft entry, not place
       if (assignmentId && !draftEntryIsConverted) {
@@ -292,12 +293,12 @@ export default function PlaceFormModal({
 
       await onSave({
         ...form,
-        lat: form.lat ? parseFloat(form.lat) : null,
-        lng: form.lng ? parseFloat(form.lng) : null,
+        lat: form.lat !== '' && form.lat != null ? parseFloat(String(form.lat)) : null,
+        lng: form.lng !== '' && form.lng != null ? parseFloat(String(form.lng)) : null,
         category_id: form.category_id || null,
         // Don't write price to place when in assignment context
         price: assignmentId ? null : priceVal,
-        duration_minutes: form.duration_minutes !== '' ? parseInt(form.duration_minutes, 10) : null,
+        duration_minutes: form.duration_minutes !== '' && form.duration_minutes != null ? parseInt(String(form.duration_minutes), 10) : null,
         _pendingFiles: pendingFiles.length > 0 ? pendingFiles : undefined,
       })
       onClose()
@@ -428,13 +429,13 @@ export default function PlaceFormModal({
           {!showNewCategory ? (
             <div className="flex gap-2">
               <CustomSelect
-                value={form.category_id}
+                value={form.category_id != null ? String(form.category_id) : ''}
                 onChange={value => handleChange('category_id', value)}
                 placeholder={t('places.noCategory')}
                 options={[
                   { value: '', label: t('places.noCategory') },
                   ...(categories || []).map(c => ({
-                    value: c.id,
+                    value: String(c.id),
                     label: c.name,
                   })),
                 ]}

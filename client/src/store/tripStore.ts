@@ -49,6 +49,12 @@ export interface TripStoreState
   selectedDayId: number | null
   isLoading: boolean
   error: string | null
+  tripMembers?: { id: number; username: string; avatar_url?: string | null }[]
+  photos?: import('../types').Photo[]
+  loadPhotos?: (tripId: number | string) => Promise<void>
+  addPhoto?: (tripId: number | string, formData: FormData) => Promise<void>
+  deletePhoto?: (tripId: number | string, photoId: number) => Promise<void>
+  updatePhoto?: (tripId: number | string, photoId: number, data: Record<string, string | number | null>) => Promise<void>
 
   setSelectedDay: (dayId: number | null) => void
   handleRemoteEvent: (event: WebSocketEvent) => void

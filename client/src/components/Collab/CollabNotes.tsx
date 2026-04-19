@@ -37,6 +37,7 @@ interface CollabNote {
   author?: { username: string; avatar: string | null }
   user?: { username: string; avatar: string | null }
   files?: NoteFile[]
+  attachments?: NoteFile[]
 }
 
 interface NoteAuthor {
@@ -51,7 +52,7 @@ const ogCache = {}
 
 interface WebsiteThumbnailProps {
   url: string
-  tripId: number
+  tripId: number | string
   color: string
 }
 
@@ -181,7 +182,7 @@ const formatTimestamp = (ts, t, locale) => {
   if (!ts) return ''
   const d = new Date(ts.endsWith?.('Z') ? ts : ts + 'Z')
   const now = new Date()
-  const diffMs = now - d
+  const diffMs = now.getTime() - d.getTime()
   const diffMins = Math.floor(diffMs / 60000)
   if (diffMins < 1) return t('collab.chat.justNow') || 'just now'
   if (diffMins < 60) return t('collab.chat.minutesAgo', { n: diffMins }) || `${diffMins}m ago`
@@ -241,13 +242,13 @@ function UserAvatar({ user, size = 14 }: UserAvatarProps) {
 // ── New Note Modal (portal to body) ─────────────────────────────────────────
 interface NoteFormModalProps {
   onClose: () => void
-  onSubmit: (data: { title: string; content: string; category: string; website: string; files?: File[] }) => Promise<void>
+  onSubmit: (data: { title: string; content: string; category: string; website: string; files?: File[]; color?: string; [key: string]: unknown }) => Promise<void>
   onDeleteFile?: (noteId: number, fileId: number) => Promise<void>
   existingCategories: string[]
   categoryColors: Record<string, string>
   getCategoryColor: (category: string) => string
   note: CollabNote | null
-  tripId: number
+  tripId: number | string
   t: (key: string) => string
 }
 
@@ -621,7 +622,7 @@ function CategorySettingsModal({ onClose, categories, categoryColors, onSave, on
   const handleSave = async () => {
     // Apply renames to notes in DB
     for (const [oldName, newName] of Object.entries(renames)) {
-      if (oldName !== newName) await onRenameCategory(oldName, newName)
+      if (oldName !== newName) await onRenameCategory(oldName, newName as string)
     }
     await onSave(localColors)
     onClose()
@@ -726,7 +727,7 @@ interface NoteCardProps {
   onView: (note: CollabNote) => void
   onPreviewFile: (file: NoteFile) => void
   getCategoryColor: (category: string) => string
-  tripId: number
+  tripId: number | string
   t: (key: string) => string
 }
 
@@ -812,8 +813,8 @@ function NoteCard({ note, currentUser, canEdit, onUpdate, onDelete, onEdit, onVi
             <div style={{ width: 1, height: 12, background: 'var(--border-faint)', flexShrink: 0, marginLeft: 1, marginRight: 1 }} />
             {/* Author avatar */}
             <div style={{ position: 'relative', flexShrink: 0 }}
-              onMouseEnter={e => { const tip = e.currentTarget.querySelector('[data-tip]'); if (tip) tip.style.opacity = '1' }}
-              onMouseLeave={e => { const tip = e.currentTarget.querySelector('[data-tip]'); if (tip) tip.style.opacity = '0' }}>
+              onMouseEnter={e => { const tip = e.currentTarget.querySelector('[data-tip]') as HTMLElement | null; if (tip) tip.style.opacity = '1' }}
+              onMouseLeave={e => { const tip = e.currentTarget.querySelector('[data-tip]') as HTMLElement | null; if (tip) tip.style.opacity = '0' }}>
               <UserAvatar user={author} size={16} />
               <div data-tip style={{
                 position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
@@ -904,7 +905,7 @@ function NoteCard({ note, currentUser, canEdit, onUpdate, onDelete, onEdit, onVi
 
 // ── Main Component ──────────────────────────────────────────────────────────
 interface CollabNotesProps {
-  tripId: number
+  tripId: number | string
   currentUser: User
 }
 

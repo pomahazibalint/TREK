@@ -27,7 +27,7 @@ function categoryIconSvg(iconName: string | null | undefined, size: number): str
 import type { Place } from '../../types'
 
 // Fix default marker icons for vite
-delete L.Icon.Default.prototype._getIconUrl
+delete (L.Icon.Default.prototype as any)._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
@@ -125,11 +125,12 @@ function createPlaceIcon(place, orderNumbers, isSelected, isDayPlace = true) {
   return fallbackIcon
 }
 
+type PaddingOpts = { padding?: [number, number]; paddingTopLeft?: [number, number]; paddingBottomRight?: [number, number] }
 interface SelectionControllerProps {
   places: Place[]
   selectedPlaceId: number | null
   dayPlaces: Place[]
-  paddingOpts: Record<string, number>
+  paddingOpts: PaddingOpts
 }
 
 function SelectionController({ places, selectedPlaceId, dayPlaces, paddingOpts }: SelectionControllerProps) {
@@ -174,7 +175,7 @@ interface BoundsControllerProps {
   hasDayDetail?: boolean
   places: Place[]
   fitKey: number
-  paddingOpts: Record<string, number>
+  paddingOpts: PaddingOpts
 }
 
 function BoundsController({ places, fitKey, paddingOpts, hasDayDetail }: BoundsControllerProps) {
@@ -200,7 +201,7 @@ function BoundsController({ places, fitKey, paddingOpts, hasDayDetail }: BoundsC
 }
 
 interface MapClickHandlerProps {
-  onClick: ((e: L.LeafletMouseEvent) => void) | null
+  onClick: ((...args: any[]) => void) | null | undefined
 }
 
 function ZoomTracker({ onZoomStart, onZoomEnd }: { onZoomStart: () => void; onZoomEnd: () => void }) {
@@ -218,17 +219,17 @@ function MapClickHandler({ onClick }: MapClickHandlerProps) {
   useEffect(() => {
     if (!onClick) return
     map.on('click', onClick)
-    return () => map.off('click', onClick)
+    return () => { map.off('click', onClick) }
   }, [map, onClick])
   return null
 }
 
-function MapContextMenuHandler({ onContextMenu }: { onContextMenu: ((e: L.LeafletMouseEvent) => void) | null }) {
+function MapContextMenuHandler({ onContextMenu }: { onContextMenu: ((...args: any[]) => void) | null | undefined }) {
   const map = useMap()
   useEffect(() => {
     if (!onContextMenu) return
     map.on('contextmenu', onContextMenu)
-    return () => map.off('contextmenu', onContextMenu)
+    return () => { map.off('contextmenu', onContextMenu) }
   }, [map, onContextMenu])
   return null
 }
@@ -378,7 +379,7 @@ function RouteLabel({ midpoint, walkingText, drivingText, distanceText, distance
     const check = () => setVisible(map.getZoom() >= minZoom)
     check()
     map.on('zoomend', check)
-    return () => map.off('zoomend', check)
+    return () => { map.off('zoomend', check) }
   }, [map, minZoom])
 
   if (!visible || !midpoint || distanceM < MIN_LABEL_DISTANCE_M) return null
@@ -555,12 +556,12 @@ export const MapView = memo(function MapView({
   // Dynamic padding: account for sidebars + bottom inspector + day detail panel
   const paddingOpts = useMemo(() => {
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
-    if (isMobile) return { padding: [40, 20] }
+    if (isMobile) return { padding: [40, 20] as [number, number] }
     const top = 60
     const bottom = hasInspector ? 320 : hasDayDetail ? 280 : 60
     const left = leftWidth + 40
     const right = rightWidth + 40
-    return { paddingTopLeft: [left, top], paddingBottomRight: [right, bottom] }
+    return { paddingTopLeft: [left, top] as [number, number], paddingBottomRight: [right, bottom] as [number, number] }
   }, [leftWidth, rightWidth, hasInspector, hasDayDetail])
 
   // photoUrls: only base64 thumbs for smooth map zoom

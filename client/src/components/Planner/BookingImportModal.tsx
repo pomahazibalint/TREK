@@ -23,7 +23,8 @@ interface BookingImportModalProps {
 
 export default function BookingImportModal({ tripId, isOpen, onClose, onSave }: BookingImportModalProps): React.ReactElement | null {
   const { t } = useTranslation()
-  const { showToast } = useToast()
+  const _toast = useToast()
+  const showToast = (msg: string, type: 'success' | 'error' | 'warning' | 'info') => _toast[type](msg)
 
   const [activeTab, setActiveTab] = useState<'paste' | 'file'>('paste')
   const [pastedText, setPastedText] = useState('')

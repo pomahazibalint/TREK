@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { useTranslation } from '../../i18n'
 import { MessageCircle, StickyNote, BarChart3, Sparkles } from 'lucide-react'
@@ -17,7 +17,7 @@ function useIsDesktop(breakpoint = 1024) {
   return isDesktop
 }
 
-const card = {
+const card: React.CSSProperties = {
   display: 'flex', flexDirection: 'column',
   background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border-faint)',
   overflow: 'hidden', minHeight: 0,
@@ -30,7 +30,7 @@ interface TripMember {
 }
 
 interface CollabPanelProps {
-  tripId: number
+  tripId: number | string
   tripMembers?: TripMember[]
 }
 

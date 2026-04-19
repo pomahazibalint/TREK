@@ -30,6 +30,9 @@ export interface Trip {
   created_at: string
   updated_at: string
   has_foreign_currency_expenses?: number
+  day_count?: number
+  user_id?: number
+  name?: string
 }
 
 export interface Day {
@@ -42,6 +45,8 @@ export interface Day {
   end_time: string | null
   assignments: Assignment[]
   notes_items: DayNote[]
+  day_number?: number
+  order_index?: number
 }
 
 export interface Place {
@@ -70,6 +75,7 @@ export interface Place {
   notes: string | null
   opening_hours: string[] | null
   created_at: string
+  category?: string | null
 }
 
 export interface Assignment {
@@ -79,6 +85,7 @@ export interface Assignment {
   order_index: number
   notes: string | null
   place: Place
+  participants?: { user_id: number; username: string; avatar?: string | null }[]
 }
 
 export interface DayNote {
@@ -98,6 +105,8 @@ export interface PackingItem {
   category: string | null
   checked: number
   quantity: number
+  bag_id?: number | null
+  weight_grams?: number | null
 }
 
 export interface TodoItem {
@@ -125,6 +134,7 @@ export interface Category {
   name: string
   icon: string | null
   user_id: number
+  color?: string | null
 }
 
 export interface BudgetItem {
@@ -172,6 +182,8 @@ export interface Reservation {
   assignment_id?: number | null
   accommodation_id?: number | null
   day_plan_position?: number | null
+  day_positions?: Record<string | number, number> | null
+  accommodation_name?: string | null
   metadata?: Record<string, string> | string | null
   created_at: string
 }
@@ -195,7 +207,9 @@ export interface TripFile {
   created_at: string
   reservation_title?: string
   linked_reservation_ids?: number[]
+  linked_place_ids?: number[]
   url?: string
+  assignment_id?: number | null
 }
 
 export interface Settings {
@@ -211,6 +225,8 @@ export interface Settings {
   show_place_description: boolean
   route_calculation?: boolean
   blur_booking_codes?: boolean
+  dashboard_currency?: string
+  dashboard_timezone?: string
 }
 
 export interface AssignmentsMap {
@@ -279,6 +295,7 @@ export interface TripMember {
   username: string
   email?: string
   avatar_url?: string | null
+  avatar?: string | null
   role?: string
 }
 
@@ -290,10 +307,12 @@ export interface Photo {
   original_name: string
   mime_type: string
   size: number
+  file_size?: number | null
   caption: string | null
   place_id: number | null
   day_id: number | null
   created_at: string
+  url?: string
 }
 
 // Atlas place detail
@@ -366,6 +385,7 @@ export interface VacayPlan {
   owner_id?: number
   created_at?: string
   updated_at?: string
+  weekend_days?: string | null
 }
 
 export interface VacayUser {
@@ -386,6 +406,14 @@ export interface VacayStat {
   user_id: number
   vacation_days: number
   used: number
+  person_color?: string | null
+  person_name?: string
+  remaining?: number
+  carried_over?: number
+  username?: string
+  avatar_url?: string | null
+  color?: string | null
+  total_available?: number
 }
 
 export interface HolidayInfo {
@@ -421,8 +449,7 @@ export function getApiErrorMessage(err: unknown, fallback: string): string {
 }
 
 // MergedItem used in day notes hook
-export interface MergedItem {
-  type: 'assignment' | 'note' | 'place' | 'transport'
-  sortKey: number
-  data: Assignment | DayNote | Reservation
-}
+export type MergedItem =
+  | { type: 'place'; sortKey: number; data: Assignment }
+  | { type: 'note'; sortKey: number; data: DayNote }
+  | { type: 'transport'; sortKey: number; data: Reservation; minutes?: number }

@@ -6,10 +6,14 @@ import { useTranslation } from '../../i18n'
 import type { VacayStat } from '../../types'
 
 interface VacayStatExtended extends VacayStat {
-  username: string
-  avatar_url: string | null
-  color: string | null
-  total_available: number
+  username?: string
+  avatar_url?: string | null
+  color?: string | null
+  total_available?: number
+  remaining?: number
+  carried_over?: number
+  person_color?: string | null
+  person_name?: string
 }
 
 export default function VacayStats() {
@@ -55,12 +59,12 @@ interface StatCardProps {
   canEdit: boolean
   selectedYear: number
   onSave: (userId: number, year: number, days: number) => Promise<void>
-  t: (key: string) => string
+  t: (key: string, params?: Record<string, string | number | null>) => string
 }
 
 function StatCard({ stat: s, isMe, canEdit, selectedYear, onSave, t }: StatCardProps) {
   const [editing, setEditing] = useState(false)
-  const [localDays, setLocalDays] = useState(s.vacation_days)
+  const [localDays, setLocalDays] = useState<string | number>(s.vacation_days)
   const pct = s.total_available > 0 ? Math.min(100, (s.used / s.total_available) * 100) : 0
 
   // Sync local state when stats reload from server
@@ -70,7 +74,7 @@ function StatCard({ stat: s, isMe, canEdit, selectedYear, onSave, t }: StatCardP
 
   const handleSave = () => {
     setEditing(false)
-    const days = parseInt(localDays)
+    const days = parseInt(String(localDays))
     if (!isNaN(days) && days >= 0 && days <= 365 && days !== s.vacation_days) {
       onSave(selectedYear, days, s.user_id)
     }

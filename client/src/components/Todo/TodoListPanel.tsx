@@ -39,7 +39,7 @@ interface Member { id: number; username: string; avatar: string | null }
 
 export default function TodoListPanel({ tripId, items }: { tripId: number; items: TodoItem[] }) {
   const { addTodoItem, updateTodoItem, deleteTodoItem, toggleTodoItem } = useTripStore()
-  const canEdit = useCanDo('packing_edit')
+  const canEdit = useCanDo()('packing_edit')
   const toast = useToast()
   const { t, locale } = useTranslation()
   const formatDate = (d: string) => fmtDate(d, locale) || d
@@ -444,7 +444,7 @@ function DetailPane({ item, tripId, categories, members, onClose }: {
   onClose: () => void;
 }) {
   const { updateTodoItem, deleteTodoItem } = useTripStore()
-  const canEdit = useCanDo('packing_edit')
+  const canEdit = useCanDo()('packing_edit')
   const toast = useToast()
   const { t } = useTranslation()
 

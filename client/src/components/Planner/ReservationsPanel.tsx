@@ -53,7 +53,7 @@ function buildAssignmentLookup(days, assignments) {
 
 interface ReservationCardProps {
   r: Reservation
-  tripId: number
+  tripId: number | string
   onEdit: (reservation: Reservation) => void
   onDelete: (id: number) => void
   files?: TripFile[]
@@ -336,7 +336,7 @@ function Section({ title, count, children, defaultOpen = true, accent }: Section
 }
 
 interface ReservationsPanelProps {
-  tripId: number
+  tripId: number | string
   reservations: Reservation[]
   days: Day[]
   assignments: AssignmentsMap
@@ -354,7 +354,8 @@ export default function ReservationsPanel({ tripId, reservations, days, assignme
   const canEdit = can('reservation_edit', trip)
   const [showHint, setShowHint] = useState(() => !localStorage.getItem('hideReservationHint'))
   const [showImportModal, setShowImportModal] = useState(false)
-  const { showToast } = useToast()
+  const toast = useToast()
+  const showToast = (msg: string, type: 'success' | 'error' | 'warning' | 'info') => toast[type](msg)
 
   const assignmentLookup = useMemo(() => buildAssignmentLookup(days, assignments), [days, assignments])
 
