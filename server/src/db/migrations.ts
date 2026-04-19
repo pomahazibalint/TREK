@@ -963,6 +963,80 @@ function runMigrations(db: Database.Database): void {
       try { db.exec('ALTER TABLE trip_album_links ADD COLUMN sync_from_date TEXT'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
       try { db.exec('ALTER TABLE trip_album_links ADD COLUMN sync_to_date TEXT'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
     },
+    // Migration 86: Rebuild vacay_plans — add name and is_personal, drop UNIQUE(owner_id)
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS vacay_plans_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL DEFAULT 'My Calendar',
+          is_personal INTEGER NOT NULL DEFAULT 1,
+          block_weekends INTEGER DEFAULT 1,
+          holidays_enabled INTEGER DEFAULT 0,
+          holidays_region TEXT DEFAULT '',
+          company_holidays_enabled INTEGER DEFAULT 1,
+          carry_over_enabled INTEGER DEFAULT 1,
+          weekend_days TEXT DEFAULT '0,6',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      db.exec(`
+        INSERT INTO vacay_plans_new (id, owner_id, name, is_personal, block_weekends, holidays_enabled, holidays_region, company_holidays_enabled, carry_over_enabled, weekend_days, created_at)
+        SELECT id, owner_id, 'My Calendar', 1, block_weekends, holidays_enabled, COALESCE(holidays_region, ''), company_holidays_enabled, carry_over_enabled, COALESCE(weekend_days, '0,6'), created_at
+        FROM vacay_plans
+      `);
+      db.exec('PRAGMA defer_foreign_keys = ON');
+      db.exec('DROP TABLE vacay_plans');
+      db.exec('ALTER TABLE vacay_plans_new RENAME TO vacay_plans');
+      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS vacay_plans_personal_per_owner ON vacay_plans(owner_id) WHERE is_personal = 1');
+    },
+    // Migration 87: Add show_details to vacay_entries
+    () => {
+      try { db.exec('ALTER TABLE vacay_entries ADD COLUMN show_details INTEGER NOT NULL DEFAULT 1'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+    },
+    // Migration 88: Undo existing fusions — move each member's data back to their personal plan
+    () => {
+      const fusedPlans = db.prepare(`
+        SELECT DISTINCT plan_id FROM vacay_plan_members WHERE status = 'accepted'
+      `).all() as { plan_id: number }[];
+
+      for (const { plan_id } of fusedPlans) {
+        const members = db.prepare(`
+          SELECT user_id FROM vacay_plan_members WHERE plan_id = ? AND status = 'accepted'
+        `).all(plan_id) as { user_id: number }[];
+
+        const years = db.prepare('SELECT year FROM vacay_years WHERE plan_id = ?').all(plan_id) as { year: number }[];
+
+        for (const { user_id } of members) {
+          let personalPlan = db.prepare('SELECT id FROM vacay_plans WHERE owner_id = ? AND is_personal = 1').get(user_id) as { id: number } | undefined;
+          if (!personalPlan) {
+            const result = db.prepare("INSERT INTO vacay_plans (owner_id, name, is_personal) VALUES (?, 'My Calendar', 1)").run(user_id);
+            personalPlan = { id: result.lastInsertRowid as number };
+            db.prepare('INSERT OR IGNORE INTO vacay_user_colors (user_id, plan_id, color) VALUES (?, ?, ?)').run(user_id, personalPlan.id, '#6366f1');
+          }
+
+          for (const { year } of years) {
+            db.prepare('INSERT OR IGNORE INTO vacay_years (plan_id, year) VALUES (?, ?)').run(personalPlan.id, year);
+          }
+
+          const userYears = db.prepare('SELECT year, vacation_days, carried_over FROM vacay_user_years WHERE user_id = ? AND plan_id = ?').all(user_id, plan_id) as { year: number; vacation_days: number; carried_over: number }[];
+          for (const uy of userYears) {
+            db.prepare('INSERT OR REPLACE INTO vacay_user_years (user_id, plan_id, year, vacation_days, carried_over) VALUES (?, ?, ?, ?, ?)').run(user_id, personalPlan.id, uy.year, uy.vacation_days, uy.carried_over);
+          }
+          db.prepare('DELETE FROM vacay_user_years WHERE user_id = ? AND plan_id = ?').run(user_id, plan_id);
+
+          db.prepare('UPDATE vacay_entries SET plan_id = ? WHERE user_id = ? AND plan_id = ?').run(personalPlan.id, user_id, plan_id);
+
+          const colorRow = db.prepare('SELECT color FROM vacay_user_colors WHERE user_id = ? AND plan_id = ?').get(user_id, plan_id) as { color: string } | undefined;
+          if (colorRow) {
+            db.prepare('INSERT OR REPLACE INTO vacay_user_colors (user_id, plan_id, color) VALUES (?, ?, ?)').run(user_id, personalPlan.id, colorRow.color);
+            db.prepare('DELETE FROM vacay_user_colors WHERE user_id = ? AND plan_id = ?').run(user_id, plan_id);
+          }
+
+          db.prepare('DELETE FROM vacay_plan_members WHERE plan_id = ? AND user_id = ?').run(plan_id, user_id);
+        }
+      }
+    },
   ];
 
   if (currentVersion < migrations.length) {

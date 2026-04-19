@@ -8,19 +8,26 @@ import VacayCalendar from '../components/Vacay/VacayCalendar'
 import VacayPersons from '../components/Vacay/VacayPersons'
 import VacayStats from '../components/Vacay/VacayStats'
 import VacaySettings from '../components/Vacay/VacaySettings'
-import { Plus, Minus, ChevronLeft, ChevronRight, Settings, CalendarDays, AlertTriangle, Users, Eye, Pencil, Trash2, Unlink, ShieldCheck, SlidersHorizontal } from 'lucide-react'
+import { Plus, Minus, ChevronLeft, ChevronRight, Settings, CalendarDays, AlertTriangle, Users, Eye, Pencil, Trash2, Unlink, ShieldCheck, SlidersHorizontal, Check, Loader2, X } from 'lucide-react'
 import Modal from '../components/shared/Modal'
 
 export default function VacayPage(): React.ReactElement {
   const { t } = useTranslation()
-  const { years, selectedYear, setSelectedYear, addYear, removeYear, loadAll, loadPlan, loadEntries, loadStats, loadHolidays, loading, incomingInvites, acceptInvite, declineInvite, plan } = useVacayStore()
+  const {
+    plans, selectedPlanId, selectPlan, createPlan,
+    years, selectedYear, setSelectedYear, addYear, removeYear,
+    loadAll, loadPlan, loadEntries, loadStats, loadHolidays,
+    loading, incomingInvites, acceptInvite, declineInvite, plan,
+  } = useVacayStore()
   const [showSettings, setShowSettings] = useState<boolean>(false)
   const [deleteYear, setDeleteYear] = useState<number | null>(null)
   const [showMobileSidebar, setShowMobileSidebar] = useState<boolean>(false)
+  const [showNewCalendar, setShowNewCalendar] = useState(false)
+  const [newCalendarName, setNewCalendarName] = useState('')
+  const [creatingCalendar, setCreatingCalendar] = useState(false)
 
   useEffect(() => { loadAll() }, [])
 
-  // Live sync via WebSocket
   const handleWsMessage = useCallback((msg: { type: string }) => {
     if (msg.type === 'vacay:update' || msg.type === 'vacay:settings') {
       loadPlan()
@@ -37,6 +44,7 @@ export default function VacayPage(): React.ReactElement {
     addListener(handleWsMessage)
     return () => removeListener(handleWsMessage)
   }, [handleWsMessage])
+
   useEffect(() => {
     if (selectedYear) { loadEntries(selectedYear); loadStats(selectedYear); loadHolidays(selectedYear) }
   }, [selectedYear])
@@ -51,6 +59,19 @@ export default function VacayPage(): React.ReactElement {
     addYear(prevYear)
   }
 
+  const handleCreateCalendar = async () => {
+    if (!newCalendarName.trim()) return
+    setCreatingCalendar(true)
+    try {
+      const newId = await createPlan(newCalendarName.trim())
+      await selectPlan(newId)
+      setShowNewCalendar(false)
+      setNewCalendarName('')
+    } finally {
+      setCreatingCalendar(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
@@ -62,9 +83,43 @@ export default function VacayPage(): React.ReactElement {
     )
   }
 
-  // Sidebar content (shared between desktop sidebar and mobile drawer)
   const sidebarContent = (
     <>
+      {/* Calendar switcher */}
+      <div className="rounded-xl border p-3" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{t('vacay.calendars')}</span>
+          <button
+            onClick={() => setShowNewCalendar(true)}
+            className="p-0.5 rounded transition-colors"
+            style={{ color: 'var(--text-faint)' }}
+            title={t('vacay.newCalendar')}
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          {plans.map(p => (
+            <button
+              key={p.id}
+              onClick={() => selectPlan(p.id)}
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left transition-all w-full"
+              style={{
+                background: p.id === selectedPlanId ? 'var(--bg-hover)' : 'transparent',
+                border: p.id === selectedPlanId ? '1px solid var(--border-primary)' : '1px solid transparent',
+              }}
+            >
+              <Users size={12} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
+              <span className="text-xs font-medium flex-1 truncate" style={{ color: 'var(--text-primary)' }}>{p.name}</span>
+              {p.member_count > 1 && (
+                <span className="text-[10px] px-1 rounded" style={{ background: 'var(--bg-secondary)', color: 'var(--text-faint)' }}>{p.member_count}</span>
+              )}
+              {p.id === selectedPlanId && <Check size={11} style={{ color: 'var(--text-primary)', flexShrink: 0 }} />}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Year Selector */}
       <div className="rounded-xl border p-3" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
         <div className="flex items-center mb-2">
@@ -150,7 +205,6 @@ export default function VacayPage(): React.ReactElement {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {/* Mobile sidebar toggle */}
               <button
                 onClick={() => setShowMobileSidebar(true)}
                 className="lg:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors"
@@ -171,12 +225,9 @@ export default function VacayPage(): React.ReactElement {
 
           {/* Main layout */}
           <div className="flex gap-4 items-start">
-            {/* Desktop Sidebar */}
             <div className="hidden lg:flex w-[240px] shrink-0 flex-col gap-3 sticky top-[70px]">
               {sidebarContent}
             </div>
-
-            {/* Calendar */}
             <div className="flex-1 min-w-0">
               <VacayCalendar />
             </div>
@@ -219,14 +270,54 @@ export default function VacayPage(): React.ReactElement {
             <button onClick={() => setDeleteYear(null)} className="px-4 py-2 text-sm rounded-lg transition-colors" style={{ color: 'var(--text-muted)', border: '1px solid var(--border-primary)' }}>
               {t('common.cancel')}
             </button>
-            <button onClick={async () => { await removeYear(deleteYear); setDeleteYear(null) }} className="px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors">
+            <button onClick={async () => { await removeYear(deleteYear!); setDeleteYear(null) }} className="px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors">
               {t('vacay.remove')}
             </button>
           </div>
         </div>
       </Modal>
 
-      {/* Incoming invite — forced fullscreen modal */}
+      {/* New calendar modal */}
+      {showNewCalendar && ReactDOM.createPortal(
+        <div className="fixed inset-0 flex items-center justify-center px-4" style={{ zIndex: 99990, backgroundColor: 'rgba(15,23,42,0.5)' }}
+          onClick={() => { setShowNewCalendar(false); setNewCalendarName('') }}>
+          <div className="rounded-2xl shadow-2xl w-full max-w-sm" style={{ background: 'var(--bg-card)', animation: 'modalIn 0.2s ease-out' }}
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border-secondary)' }}>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>{t('vacay.newCalendar')}</h2>
+              <button onClick={() => { setShowNewCalendar(false); setNewCalendarName('') }} className="p-1.5 rounded-lg" style={{ color: 'var(--text-faint)' }}>
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <input
+                type="text"
+                value={newCalendarName}
+                onChange={e => setNewCalendarName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleCreateCalendar() }}
+                placeholder={t('vacay.calendarNamePlaceholder')}
+                autoFocus
+                style={{ width: '100%', fontSize: 14, padding: '8px 12px', borderRadius: 8, background: 'var(--bg-input)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontFamily: 'inherit', outline: 'none' }}
+              />
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => { setShowNewCalendar(false); setNewCalendarName('') }} className="px-4 py-2 text-sm rounded-lg"
+                  style={{ color: 'var(--text-muted)', border: '1px solid var(--border-primary)' }}>
+                  {t('common.cancel')}
+                </button>
+                <button onClick={handleCreateCalendar} disabled={!newCalendarName.trim() || creatingCalendar}
+                  className="px-4 py-2 text-sm rounded-lg flex items-center gap-1.5 disabled:opacity-40"
+                  style={{ background: 'var(--text-primary)', color: 'var(--bg-card)' }}>
+                  {creatingCalendar && <Loader2 size={13} className="animate-spin" />}
+                  {t('vacay.createCalendar')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Incoming invite */}
       {incomingInvites.length > 0 && ReactDOM.createPortal(
         <div className="fixed inset-0 flex items-center justify-center px-4"
           style={{ zIndex: 99995, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
@@ -242,8 +333,15 @@ export default function VacayPage(): React.ReactElement {
                   {t('vacay.inviteTitle')}
                 </h2>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                  <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{inv.username}</span> {t('vacay.inviteWantsToFuse')}
+                  <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{inv.username}</span>{' '}
+                  {t('vacay.inviteWantsToFuse')}
                 </p>
+                {inv.plan_name && (
+                  <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                    <span style={{ color: 'var(--text-faint)' }}>{t('vacay.inviteCalendarName')}</span>{' '}
+                    <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{inv.plan_name}</span>
+                  </p>
+                )}
               </div>
               <div className="px-6 pb-4 space-y-2">
                 <InfoItem icon={Eye} text={t('vacay.fuseInfo1')} />

@@ -18,7 +18,7 @@ interface VacayStatExtended extends VacayStat {
 
 export default function VacayStats() {
   const { t } = useTranslation()
-  const { stats, selectedYear, loadStats, updateVacationDays, isFused } = useVacayStore()
+  const { stats, selectedYear, loadStats, updateVacationDays, isOwner } = useVacayStore()
   const { user: currentUser } = useAuthStore()
 
   useEffect(() => { loadStats(selectedYear) }, [selectedYear])
@@ -41,7 +41,7 @@ export default function VacayStats() {
               key={s.user_id}
               stat={s}
               isMe={s.user_id === currentUser?.id}
-              canEdit={s.user_id === currentUser?.id || isFused}
+              canEdit={s.user_id === currentUser?.id || isOwner}
               selectedYear={selectedYear}
               onSave={updateVacationDays}
               t={t}

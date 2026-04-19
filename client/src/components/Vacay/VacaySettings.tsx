@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { type LucideIcon, CalendarOff, AlertCircle, Building2, Unlink, ArrowRightLeft, Globe, Plus, Trash2 } from 'lucide-react'
+import { type LucideIcon, CalendarOff, AlertCircle, Building2, Eye, ArrowRightLeft, Globe, Plus, Trash2, LogOut } from 'lucide-react'
 import { useVacayStore } from '../../store/vacayStore'
 import { getIntlLanguage, useTranslation } from '../../i18n'
 import { useToast } from '../shared/Toast'
@@ -14,7 +14,7 @@ interface VacaySettingsProps {
 export default function VacaySettings({ onClose }: VacaySettingsProps) {
   const { t } = useTranslation()
   const toast = useToast()
-  const { plan, updatePlan, addHolidayCalendar, updateHolidayCalendar, deleteHolidayCalendar, isFused, dissolve, users } = useVacayStore()
+  const { plan, updatePlan, addHolidayCalendar, updateHolidayCalendar, deleteHolidayCalendar, shareDetailsDefault, updateShareDetailsDefault, isOwner, leaveCalendar } = useVacayStore()
   const [countries, setCountries] = useState<{ value: string; label: string }[]>([])
   const [showAddForm, setShowAddForm] = useState(false)
 
@@ -40,6 +40,15 @@ export default function VacaySettings({ onClose }: VacaySettingsProps) {
 
   return (
     <div className="space-y-5">
+      {/* Share details default */}
+      <SettingToggle
+        icon={Eye}
+        label={t('vacay.shareDetailsDefault')}
+        hint={t('vacay.shareDetailsDefaultHint')}
+        value={shareDetailsDefault}
+        onChange={() => updateShareDetailsDefault(!shareDetailsDefault)}
+      />
+
       {/* Block weekends */}
       <SettingToggle
         icon={CalendarOff}
@@ -158,37 +167,33 @@ export default function VacaySettings({ onClose }: VacaySettingsProps) {
         )}
       </div>
 
-      {/* Dissolve fusion */}
-      {isFused && (
+      {/* Leave / delete calendar — only for shared plans */}
+      {!plan.is_personal && (
         <div className="pt-4 mt-2 border-t" style={{ borderColor: 'var(--border-secondary)' }}>
           <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(239,68,68,0.2)' }}>
             <div className="px-4 py-3 flex items-center gap-3" style={{ background: 'rgba(239,68,68,0.06)' }}>
               <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(239,68,68,0.1)' }}>
-                <Unlink size={16} className="text-red-500" />
+                <LogOut size={16} className="text-red-500" />
               </div>
               <div>
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{t('vacay.dissolve')}</p>
-                <p className="text-[11px]" style={{ color: 'var(--text-faint)' }}>{t('vacay.dissolveHint')}</p>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  {isOwner ? t('vacay.deleteCalendar') : t('vacay.leaveCalendar')}
+                </p>
+                <p className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
+                  {isOwner ? t('vacay.deleteCalendarHint') : t('vacay.leaveCalendarHint')}
+                </p>
               </div>
-            </div>
-            <div className="px-4 py-3 flex items-center gap-2 flex-wrap" style={{ borderTop: '1px solid rgba(239,68,68,0.1)' }}>
-              {users.map(u => (
-                <div key={u.id} className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--bg-secondary)' }}>
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: u.color || '#6366f1' }} />
-                  <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{u.username}</span>
-                </div>
-              ))}
             </div>
             <div className="px-4 py-3" style={{ borderTop: '1px solid rgba(239,68,68,0.1)' }}>
               <button
                 onClick={async () => {
-                  await dissolve()
-                  toast.success(t('vacay.dissolved'))
+                  await leaveCalendar()
+                  toast.success(isOwner ? t('vacay.deleteAction') : t('vacay.leaveAction'))
                   onClose()
                 }}
                 className="w-full px-3 py-2 text-xs font-medium bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
               >
-                {t('vacay.dissolveAction')}
+                {isOwner ? t('vacay.deleteAction') : t('vacay.leaveAction')}
               </button>
             </div>
           </div>

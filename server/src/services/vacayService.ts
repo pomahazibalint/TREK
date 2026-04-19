@@ -7,11 +7,14 @@ import { db } from '../db/database';
 export interface VacayPlan {
   id: number;
   owner_id: number;
+  name: string;
+  is_personal: number;
   block_weekends: number;
   holidays_enabled: number;
   holidays_region: string | null;
   company_holidays_enabled: number;
   carry_over_enabled: number;
+  weekend_days?: string | null;
 }
 
 export interface VacayUserYear {
@@ -71,14 +74,36 @@ const COLORS = [
 ];
 
 // ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+function getPersonalPlanId(userId: number): number | undefined {
+  const row = db.prepare('SELECT id FROM vacay_plans WHERE owner_id = ? AND is_personal = 1').get(userId) as { id: number } | undefined;
+  return row?.id;
+}
+
+function getMemberIds(planId: number): number[] {
+  const plan = db.prepare('SELECT owner_id FROM vacay_plans WHERE id = ?').get(planId) as { owner_id: number } | undefined;
+  if (!plan) return [];
+  const members = db.prepare("SELECT user_id FROM vacay_plan_members WHERE plan_id = ? AND status = 'accepted'").all(planId) as { user_id: number }[];
+  return [plan.owner_id, ...members.map(m => m.user_id)];
+}
+
+function getUserShareDetailsDefault(userId: number): boolean {
+  const row = db.prepare("SELECT value FROM settings WHERE user_id = ? AND key = 'vacay_share_details_default'").get(userId) as { value: string } | undefined;
+  if (!row) return true;
+  return row.value !== '0';
+}
+
+// ---------------------------------------------------------------------------
 // Plan management
 // ---------------------------------------------------------------------------
 
 export function getOwnPlan(userId: number): VacayPlan {
-  let plan = db.prepare('SELECT * FROM vacay_plans WHERE owner_id = ?').get(userId) as VacayPlan | undefined;
+  let plan = db.prepare('SELECT * FROM vacay_plans WHERE owner_id = ? AND is_personal = 1').get(userId) as VacayPlan | undefined;
   if (!plan) {
-    db.prepare('INSERT INTO vacay_plans (owner_id) VALUES (?)').run(userId);
-    plan = db.prepare('SELECT * FROM vacay_plans WHERE owner_id = ?').get(userId) as VacayPlan;
+    db.prepare("INSERT INTO vacay_plans (owner_id, name, is_personal) VALUES (?, 'My Calendar', 1)").run(userId);
+    plan = db.prepare('SELECT * FROM vacay_plans WHERE owner_id = ? AND is_personal = 1').get(userId) as VacayPlan;
     const yr = new Date().getFullYear();
     db.prepare('INSERT OR IGNORE INTO vacay_years (plan_id, year) VALUES (?, ?)').run(plan.id, yr);
     db.prepare('INSERT OR IGNORE INTO vacay_user_years (user_id, plan_id, year, vacation_days, carried_over) VALUES (?, ?, ?, 30, 0)').run(userId, plan.id, yr);
@@ -87,18 +112,32 @@ export function getOwnPlan(userId: number): VacayPlan {
   return plan;
 }
 
-export function getActivePlan(userId: number): VacayPlan {
-  const membership = db.prepare(`
-    SELECT plan_id FROM vacay_plan_members WHERE user_id = ? AND status = 'accepted'
-  `).get(userId) as { plan_id: number } | undefined;
-  if (membership) {
-    return db.prepare('SELECT * FROM vacay_plans WHERE id = ?').get(membership.plan_id) as VacayPlan;
-  }
-  return getOwnPlan(userId);
+export function createPlan(userId: number, name: string): VacayPlan {
+  const result = db.prepare('INSERT INTO vacay_plans (owner_id, name, is_personal) VALUES (?, ?, 0)').run(userId, name.trim() || 'Shared Calendar');
+  const planId = result.lastInsertRowid as number;
+  const yr = new Date().getFullYear();
+  db.prepare('INSERT OR IGNORE INTO vacay_years (plan_id, year) VALUES (?, ?)').run(planId, yr);
+  db.prepare('INSERT OR IGNORE INTO vacay_user_years (user_id, plan_id, year, vacation_days, carried_over) VALUES (?, ?, ?, 30, 0)').run(userId, planId, yr);
+  db.prepare('INSERT OR IGNORE INTO vacay_user_colors (user_id, plan_id, color) VALUES (?, ?, ?)').run(userId, planId, '#6366f1');
+  return db.prepare('SELECT * FROM vacay_plans WHERE id = ?').get(planId) as VacayPlan;
 }
 
-export function getActivePlanId(userId: number): number {
-  return getActivePlan(userId).id;
+export function getAllPlansData(userId: number) {
+  const personal = getOwnPlan(userId);
+  const ownedShared = db.prepare('SELECT * FROM vacay_plans WHERE owner_id = ? AND is_personal = 0').all(userId) as VacayPlan[];
+  const memberOf = db.prepare(`
+    SELECT p.* FROM vacay_plans p
+    JOIN vacay_plan_members m ON m.plan_id = p.id
+    WHERE m.user_id = ? AND m.status = 'accepted'
+  `).all(userId) as VacayPlan[];
+
+  return [personal, ...ownedShared, ...memberOf].map(p => ({
+    id: p.id,
+    name: p.name,
+    is_personal: !!p.is_personal,
+    is_owner: p.owner_id === userId,
+    member_count: getMemberIds(p.id).length,
+  }));
 }
 
 export function getPlanUsers(planId: number): VacayUser[] {
@@ -113,6 +152,53 @@ export function getPlanUsers(planId: number): VacayUser[] {
   return [owner, ...members];
 }
 
+export function getPlanData(userId: number, planId: number) {
+  const plan = db.prepare('SELECT * FROM vacay_plans WHERE id = ?').get(planId) as VacayPlan | undefined;
+  if (!plan) return null;
+
+  const isOwner = plan.owner_id === userId;
+  const isMember = isOwner || !!db.prepare("SELECT id FROM vacay_plan_members WHERE plan_id = ? AND user_id = ? AND status = 'accepted'").get(planId, userId);
+  if (!isMember) return null;
+
+  const users = getPlanUsers(planId).map(u => {
+    const colorRow = db.prepare('SELECT color FROM vacay_user_colors WHERE user_id = ? AND plan_id = ?').get(u.id, planId) as { color: string } | undefined;
+    return { ...u, color: colorRow?.color || '#6366f1' };
+  });
+
+  const pendingInvites = isOwner ? db.prepare(`
+    SELECT m.id, m.user_id, u.username, u.email, m.created_at
+    FROM vacay_plan_members m JOIN users u ON m.user_id = u.id
+    WHERE m.plan_id = ? AND m.status = 'pending'
+  `).all(planId) : [];
+
+  const incomingInvites = db.prepare(`
+    SELECT m.id, m.plan_id, p.name as plan_name, u.username, u.email, m.created_at
+    FROM vacay_plan_members m
+    JOIN vacay_plans p ON m.plan_id = p.id
+    JOIN users u ON p.owner_id = u.id
+    WHERE m.user_id = ? AND m.status = 'pending'
+  `).all(userId);
+
+  const holidayCalendars = db.prepare('SELECT * FROM vacay_holiday_calendars WHERE plan_id = ? ORDER BY sort_order, id').all(planId) as VacayHolidayCalendar[];
+
+  return {
+    plan: {
+      ...plan,
+      block_weekends: !!plan.block_weekends,
+      holidays_enabled: !!plan.holidays_enabled,
+      company_holidays_enabled: !!plan.company_holidays_enabled,
+      carry_over_enabled: !!plan.carry_over_enabled,
+      is_personal: !!plan.is_personal,
+      holiday_calendars: holidayCalendars,
+    },
+    users,
+    pendingInvites,
+    incomingInvites,
+    isOwner,
+    shareDetailsDefault: getUserShareDetailsDefault(userId),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // WebSocket notifications
 // ---------------------------------------------------------------------------
@@ -120,11 +206,7 @@ export function getPlanUsers(planId: number): VacayUser[] {
 export function notifyPlanUsers(planId: number, excludeSid: string | undefined, event = 'vacay:update'): void {
   try {
     const { broadcastToUser } = require('../websocket');
-    const plan = db.prepare('SELECT owner_id FROM vacay_plans WHERE id = ?').get(planId) as { owner_id: number } | undefined;
-    if (!plan) return;
-    const userIds = [plan.owner_id];
-    const members = db.prepare("SELECT user_id FROM vacay_plan_members WHERE plan_id = ? AND status = 'accepted'").all(planId) as { user_id: number }[];
-    members.forEach(m => userIds.push(m.user_id));
+    const userIds = getMemberIds(planId);
     userIds.forEach(id => broadcastToUser(id, { type: event }, excludeSid));
   } catch { /* websocket not available */ }
 }
@@ -134,7 +216,7 @@ export function notifyPlanUsers(planId: number, excludeSid: string | undefined, 
 // ---------------------------------------------------------------------------
 
 export async function applyHolidayCalendars(planId: number): Promise<void> {
-  const plan = db.prepare('SELECT holidays_enabled FROM vacay_plans WHERE id = ?').get(planId) as { holidays_enabled: number } | undefined;
+  const plan = db.prepare('SELECT holidays_enabled, is_personal FROM vacay_plans WHERE id = ?').get(planId) as { holidays_enabled: number; is_personal: number } | undefined;
   if (!plan?.holidays_enabled) return;
   const calendars = db.prepare('SELECT * FROM vacay_holiday_calendars WHERE plan_id = ? ORDER BY sort_order, id').all(planId) as VacayHolidayCalendar[];
   if (calendars.length === 0) return;
@@ -155,7 +237,14 @@ export async function applyHolidayCalendars(planId: number): Promise<void> {
         if (hasRegions && !region) continue;
         for (const h of holidays) {
           if (h.global || !h.counties || (region && h.counties.includes(region))) {
-            db.prepare('DELETE FROM vacay_entries WHERE plan_id = ? AND date = ?').run(planId, h.date);
+            if (plan.is_personal) {
+              db.prepare('DELETE FROM vacay_entries WHERE plan_id = ? AND date = ?').run(planId, h.date);
+            } else {
+              for (const uid of getMemberIds(planId)) {
+                const ppId = getPersonalPlanId(uid);
+                if (ppId) db.prepare('DELETE FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?').run(uid, ppId, h.date);
+              }
+            }
             db.prepare('DELETE FROM vacay_company_holidays WHERE plan_id = ? AND date = ?').run(planId, h.date);
           }
         }
@@ -185,13 +274,15 @@ export interface UpdatePlanBody {
   company_holidays_enabled?: boolean;
   carry_over_enabled?: boolean;
   weekend_days?: string;
+  name?: string;
 }
 
 export async function updatePlan(planId: number, body: UpdatePlanBody, socketId: string | undefined) {
-  const { block_weekends, holidays_enabled, holidays_region, company_holidays_enabled, carry_over_enabled, weekend_days } = body;
+  const { block_weekends, holidays_enabled, holidays_region, company_holidays_enabled, carry_over_enabled, weekend_days, name } = body;
 
   const updates: string[] = [];
   const params: (string | number)[] = [];
+  if (name !== undefined) { updates.push('name = ?'); params.push(name.trim() || 'Shared Calendar'); }
   if (block_weekends !== undefined) { updates.push('block_weekends = ?'); params.push(block_weekends ? 1 : 0); }
   if (holidays_enabled !== undefined) { updates.push('holidays_enabled = ?'); params.push(holidays_enabled ? 1 : 0); }
   if (holidays_region !== undefined) { updates.push('holidays_region = ?'); params.push(holidays_region); }
@@ -204,15 +295,23 @@ export async function updatePlan(planId: number, body: UpdatePlanBody, socketId:
     db.prepare(`UPDATE vacay_plans SET ${updates.join(', ')} WHERE id = ?`).run(...params);
   }
 
+  const currentPlan = db.prepare('SELECT * FROM vacay_plans WHERE id = ?').get(planId) as VacayPlan;
+
   if (company_holidays_enabled === true) {
     const companyDates = db.prepare('SELECT date FROM vacay_company_holidays WHERE plan_id = ?').all(planId) as { date: string }[];
     for (const { date } of companyDates) {
-      db.prepare('DELETE FROM vacay_entries WHERE plan_id = ? AND date = ?').run(planId, date);
+      if (currentPlan.is_personal) {
+        db.prepare('DELETE FROM vacay_entries WHERE plan_id = ? AND date = ?').run(planId, date);
+      } else {
+        for (const uid of getMemberIds(planId)) {
+          const ppId = getPersonalPlanId(uid);
+          if (ppId) db.prepare('DELETE FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?').run(uid, ppId, date);
+        }
+      }
     }
   }
 
-  const updatedPlan = db.prepare('SELECT * FROM vacay_plans WHERE id = ?').get(planId) as VacayPlan;
-  await migrateHolidayCalendars(planId, updatedPlan);
+  await migrateHolidayCalendars(planId, currentPlan);
   await applyHolidayCalendars(planId);
 
   if (carry_over_enabled === false) {
@@ -226,7 +325,8 @@ export async function updatePlan(planId: number, body: UpdatePlanBody, socketId:
       const yr = years[i].year;
       const nextYr = years[i + 1].year;
       for (const u of users) {
-        const used = (db.prepare("SELECT COUNT(*) as count FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date LIKE ?").get(u.id, planId, `${yr}-%`) as { count: number }).count;
+        const ppId = getPersonalPlanId(u.id) ?? planId;
+        const used = (db.prepare("SELECT COUNT(*) as count FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date LIKE ?").get(u.id, ppId, `${yr}-%`) as { count: number }).count;
         const config = db.prepare('SELECT * FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = ?').get(u.id, planId, yr) as VacayUserYear | undefined;
         const total = (config ? config.vacation_days : 30) + (config ? config.carried_over : 0);
         const carry = Math.max(0, total - used);
@@ -249,6 +349,7 @@ export async function updatePlan(planId: number, body: UpdatePlanBody, socketId:
       holidays_enabled: !!updated.holidays_enabled,
       company_holidays_enabled: !!updated.company_holidays_enabled,
       carry_over_enabled: !!updated.carry_over_enabled,
+      is_personal: !!updated.is_personal,
       holiday_calendars: updatedCalendars,
     },
   };
@@ -318,17 +419,18 @@ export function setUserColor(userId: number, planId: number, color: string | und
 export function sendInvite(planId: number, inviterId: number, inviterUsername: string, inviterEmail: string, targetUserId: number): { error?: string; status?: number } {
   if (targetUserId === inviterId) return { error: 'Cannot invite yourself', status: 400 };
 
+  const plan = db.prepare('SELECT is_personal, name FROM vacay_plans WHERE id = ?').get(planId) as { is_personal: number; name: string } | undefined;
+  if (!plan) return { error: 'Calendar not found', status: 404 };
+  if (plan.is_personal) return { error: 'Cannot invite to a personal calendar', status: 400 };
+
   const targetUser = db.prepare('SELECT id, username FROM users WHERE id = ?').get(targetUserId);
   if (!targetUser) return { error: 'User not found', status: 404 };
 
   const existing = db.prepare('SELECT id, status FROM vacay_plan_members WHERE plan_id = ? AND user_id = ?').get(planId, targetUserId) as { id: number; status: string } | undefined;
   if (existing) {
-    if (existing.status === 'accepted') return { error: 'Already fused', status: 400 };
+    if (existing.status === 'accepted') return { error: 'Already a member', status: 400 };
     if (existing.status === 'pending') return { error: 'Invite already pending', status: 400 };
   }
-
-  const targetFusion = db.prepare("SELECT id FROM vacay_plan_members WHERE user_id = ? AND status = 'accepted'").get(targetUserId);
-  if (targetFusion) return { error: 'User is already fused with another plan', status: 400 };
 
   db.prepare('INSERT INTO vacay_plan_members (plan_id, user_id, status) VALUES (?, ?, ?)').run(planId, targetUserId, 'pending');
 
@@ -338,10 +440,10 @@ export function sendInvite(planId: number, inviterId: number, inviterUsername: s
       type: 'vacay:invite',
       from: { id: inviterId, username: inviterUsername },
       planId,
+      planName: plan.name,
     });
   } catch { /* websocket not available */ }
 
-  // Notify invited user
   import('../services/notificationService').then(({ send }) => {
     send({ event: 'vacay_invite', actorId: inviterId, scope: 'user', targetId: targetUserId, params: { actor: inviterEmail, planId: String(planId) } }).catch(() => {});
   });
@@ -355,21 +457,6 @@ export function acceptInvite(userId: number, planId: number, socketId: string | 
 
   db.prepare("UPDATE vacay_plan_members SET status = 'accepted' WHERE id = ?").run(invite.id);
 
-  // Migrate data from user's own plan
-  const ownPlan = db.prepare('SELECT id FROM vacay_plans WHERE owner_id = ?').get(userId) as { id: number } | undefined;
-  if (ownPlan && ownPlan.id !== planId) {
-    db.prepare('UPDATE vacay_entries SET plan_id = ? WHERE plan_id = ? AND user_id = ?').run(planId, ownPlan.id, userId);
-    const ownYears = db.prepare('SELECT * FROM vacay_user_years WHERE user_id = ? AND plan_id = ?').all(userId, ownPlan.id) as VacayUserYear[];
-    for (const y of ownYears) {
-      db.prepare('INSERT OR IGNORE INTO vacay_user_years (user_id, plan_id, year, vacation_days, carried_over) VALUES (?, ?, ?, ?, ?)').run(userId, planId, y.year, y.vacation_days, y.carried_over);
-    }
-    const colorRow = db.prepare('SELECT color FROM vacay_user_colors WHERE user_id = ? AND plan_id = ?').get(userId, ownPlan.id) as { color: string } | undefined;
-    if (colorRow) {
-      db.prepare('INSERT OR IGNORE INTO vacay_user_colors (user_id, plan_id, color) VALUES (?, ?, ?)').run(userId, planId, colorRow.color);
-    }
-  }
-
-  // Auto-assign unique color
   const existingColors = (db.prepare('SELECT color FROM vacay_user_colors WHERE plan_id = ? AND user_id != ?').all(planId, userId) as { color: string }[]).map(r => r.color);
   const myColor = db.prepare('SELECT color FROM vacay_user_colors WHERE user_id = ? AND plan_id = ?').get(userId, planId) as { color: string } | undefined;
   const effectiveColor = myColor?.color || '#6366f1';
@@ -383,7 +470,6 @@ export function acceptInvite(userId: number, planId: number, socketId: string | 
     db.prepare('INSERT OR IGNORE INTO vacay_user_colors (user_id, plan_id, color) VALUES (?, ?, ?)').run(userId, planId, effectiveColor);
   }
 
-  // Ensure user has rows for all plan years
   const targetYears = db.prepare('SELECT year FROM vacay_years WHERE plan_id = ?').all(planId) as { year: number }[];
   for (const y of targetYears) {
     db.prepare('INSERT OR IGNORE INTO vacay_user_years (user_id, plan_id, year, vacation_days, carried_over) VALUES (?, ?, ?, 30, 0)').run(userId, planId, y.year);
@@ -400,7 +486,6 @@ export function declineInvite(userId: number, planId: number, socketId: string |
 
 export function cancelInvite(planId: number, targetUserId: number): void {
   db.prepare("DELETE FROM vacay_plan_members WHERE plan_id = ? AND user_id = ? AND status = 'pending'").run(planId, targetUserId);
-
   try {
     const { broadcastToUser } = require('../websocket');
     broadcastToUser(targetUserId, { type: 'vacay:cancelled' });
@@ -408,39 +493,30 @@ export function cancelInvite(planId: number, targetUserId: number): void {
 }
 
 // ---------------------------------------------------------------------------
-// Plan dissolution
+// Leave / delete calendar
 // ---------------------------------------------------------------------------
 
-export function dissolvePlan(userId: number, socketId: string | undefined): void {
-  const plan = getActivePlan(userId);
-  const isOwnerFlag = plan.owner_id === userId;
+export function leaveCalendar(userId: number, planId: number, socketId: string | undefined): { error?: string; status?: number } {
+  const plan = db.prepare('SELECT * FROM vacay_plans WHERE id = ?').get(planId) as VacayPlan | undefined;
+  if (!plan) return { error: 'Not found', status: 404 };
+  if (plan.is_personal) return { error: 'Cannot leave personal calendar', status: 400 };
 
-  const allUserIds = getPlanUsers(plan.id).map(u => u.id);
-  const companyHolidays = db.prepare('SELECT date, note FROM vacay_company_holidays WHERE plan_id = ?').all(plan.id) as { date: string; note: string }[];
+  const allUserIds = getMemberIds(planId);
 
-  if (isOwnerFlag) {
-    const members = db.prepare("SELECT user_id FROM vacay_plan_members WHERE plan_id = ? AND status = 'accepted'").all(plan.id) as { user_id: number }[];
-    for (const m of members) {
-      const memberPlan = getOwnPlan(m.user_id);
-      db.prepare('UPDATE vacay_entries SET plan_id = ? WHERE plan_id = ? AND user_id = ?').run(memberPlan.id, plan.id, m.user_id);
-      for (const ch of companyHolidays) {
-        db.prepare('INSERT OR IGNORE INTO vacay_company_holidays (plan_id, date, note) VALUES (?, ?, ?)').run(memberPlan.id, ch.date, ch.note);
-      }
-    }
-    db.prepare('DELETE FROM vacay_plan_members WHERE plan_id = ?').run(plan.id);
+  if (plan.owner_id === userId) {
+    db.prepare('DELETE FROM vacay_plans WHERE id = ?').run(planId);
   } else {
-    const ownPlan = getOwnPlan(userId);
-    db.prepare('UPDATE vacay_entries SET plan_id = ? WHERE plan_id = ? AND user_id = ?').run(ownPlan.id, plan.id, userId);
-    for (const ch of companyHolidays) {
-      db.prepare('INSERT OR IGNORE INTO vacay_company_holidays (plan_id, date, note) VALUES (?, ?, ?)').run(ownPlan.id, ch.date, ch.note);
-    }
-    db.prepare("DELETE FROM vacay_plan_members WHERE plan_id = ? AND user_id = ?").run(plan.id, userId);
+    db.prepare('DELETE FROM vacay_plan_members WHERE plan_id = ? AND user_id = ?').run(planId, userId);
+    db.prepare('DELETE FROM vacay_user_years WHERE plan_id = ? AND user_id = ?').run(planId, userId);
+    db.prepare('DELETE FROM vacay_user_colors WHERE plan_id = ? AND user_id = ?').run(planId, userId);
   }
 
   try {
     const { broadcastToUser } = require('../websocket');
     allUserIds.filter(id => id !== userId).forEach(id => broadcastToUser(id, { type: 'vacay:dissolved' }));
   } catch { /* */ }
+
+  return {};
 }
 
 // ---------------------------------------------------------------------------
@@ -451,13 +527,10 @@ export function getAvailableUsers(userId: number, planId: number) {
   return db.prepare(`
     SELECT u.id, u.username, u.email FROM users u
     WHERE u.id != ?
-    AND u.id NOT IN (SELECT user_id FROM vacay_plan_members WHERE plan_id = ?)
-    AND u.id NOT IN (SELECT user_id FROM vacay_plan_members WHERE status = 'accepted')
-    AND u.id NOT IN (SELECT owner_id FROM vacay_plans WHERE id IN (
-      SELECT plan_id FROM vacay_plan_members WHERE status = 'accepted'
-    ))
+    AND u.id NOT IN (SELECT user_id FROM vacay_plan_members WHERE plan_id = ? AND status != 'declined')
+    AND u.id != (SELECT owner_id FROM vacay_plans WHERE id = ?)
     ORDER BY u.username
-  `).all(userId, planId);
+  `).all(userId, planId, planId);
 }
 
 // ---------------------------------------------------------------------------
@@ -478,9 +551,10 @@ export function addYear(planId: number, year: number, socketId: string | undefin
     for (const u of users) {
       let carriedOver = 0;
       if (carryOverEnabled) {
+        const ppId = getPersonalPlanId(u.id) ?? planId;
         const prevConfig = db.prepare('SELECT * FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = ?').get(u.id, planId, year - 1) as VacayUserYear | undefined;
         if (prevConfig) {
-          const used = (db.prepare("SELECT COUNT(*) as count FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date LIKE ?").get(u.id, planId, `${year - 1}-%`) as { count: number }).count;
+          const used = (db.prepare("SELECT COUNT(*) as count FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date LIKE ?").get(u.id, ppId, `${year - 1}-%`) as { count: number }).count;
           const total = prevConfig.vacation_days + prevConfig.carried_over;
           carriedOver = Math.max(0, total - used);
         }
@@ -493,25 +567,34 @@ export function addYear(planId: number, year: number, socketId: string | undefin
 }
 
 export function deleteYear(planId: number, year: number, socketId: string | undefined): number[] {
+  const plan = db.prepare('SELECT is_personal FROM vacay_plans WHERE id = ?').get(planId) as { is_personal: number } | undefined;
+
   db.prepare('DELETE FROM vacay_years WHERE plan_id = ? AND year = ?').run(planId, year);
-  db.prepare("DELETE FROM vacay_entries WHERE plan_id = ? AND date LIKE ?").run(planId, `${year}-%`);
   db.prepare("DELETE FROM vacay_company_holidays WHERE plan_id = ? AND date LIKE ?").run(planId, `${year}-%`);
   db.prepare('DELETE FROM vacay_user_years WHERE plan_id = ? AND year = ?').run(planId, year);
 
-  // Recalculate carry-over for year+1 if it exists, since its previous year has changed
+  if (plan?.is_personal) {
+    db.prepare("DELETE FROM vacay_entries WHERE plan_id = ? AND date LIKE ?").run(planId, `${year}-%`);
+  } else {
+    for (const uid of getMemberIds(planId)) {
+      const ppId = getPersonalPlanId(uid);
+      if (ppId) db.prepare("DELETE FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date LIKE ?").run(uid, ppId, `${year}-%`);
+    }
+  }
+
   const nextYearExists = db.prepare('SELECT id FROM vacay_years WHERE plan_id = ? AND year = ?').get(planId, year + 1);
   if (nextYearExists) {
-    const plan = db.prepare('SELECT * FROM vacay_plans WHERE id = ?').get(planId) as VacayPlan | undefined;
-    const carryOverEnabled = plan ? !!plan.carry_over_enabled : true;
+    const carryOverEnabled = plan ? !!(db.prepare('SELECT carry_over_enabled FROM vacay_plans WHERE id = ?').get(planId) as VacayPlan).carry_over_enabled : true;
     const users = getPlanUsers(planId);
     const prevYear = db.prepare('SELECT year FROM vacay_years WHERE plan_id = ? AND year < ? ORDER BY year DESC LIMIT 1').get(planId, year + 1) as { year: number } | undefined;
 
     for (const u of users) {
       let carry = 0;
       if (carryOverEnabled && prevYear) {
+        const ppId = getPersonalPlanId(u.id) ?? planId;
         const prevConfig = db.prepare('SELECT * FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = ?').get(u.id, planId, prevYear.year) as VacayUserYear | undefined;
         if (prevConfig) {
-          const used = (db.prepare("SELECT COUNT(*) as count FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date LIKE ?").get(u.id, planId, `${prevYear.year}-%`) as { count: number }).count;
+          const used = (db.prepare("SELECT COUNT(*) as count FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date LIKE ?").get(u.id, ppId, `${prevYear.year}-%`) as { count: number }).count;
           const total = prevConfig.vacation_days + prevConfig.carried_over;
           carry = Math.max(0, total - used);
         }
@@ -528,32 +611,66 @@ export function deleteYear(planId: number, year: number, socketId: string | unde
 // Entries
 // ---------------------------------------------------------------------------
 
-export function getEntries(planId: number, year: string) {
-  const entries = db.prepare(`
-    SELECT e.*, u.username as person_name, COALESCE(c.color, '#6366f1') as person_color
-    FROM vacay_entries e
-    JOIN users u ON e.user_id = u.id
-    LEFT JOIN vacay_user_colors c ON c.user_id = e.user_id AND c.plan_id = e.plan_id
-    WHERE e.plan_id = ? AND e.date LIKE ?
-  `).all(planId, `${year}-%`);
+export function getEntries(planId: number, year: string, requestingUserId?: number) {
+  const plan = db.prepare('SELECT is_personal FROM vacay_plans WHERE id = ?').get(planId) as { is_personal: number } | undefined;
+  if (!plan) return { entries: [], companyHolidays: [] };
+
+  let entries: unknown[];
+
+  if (plan.is_personal) {
+    entries = db.prepare(`
+      SELECT e.*, u.username as person_name, COALESCE(c.color, '#6366f1') as person_color
+      FROM vacay_entries e
+      JOIN users u ON e.user_id = u.id
+      LEFT JOIN vacay_user_colors c ON c.user_id = e.user_id AND c.plan_id = e.plan_id
+      WHERE e.plan_id = ? AND e.date LIKE ?
+    `).all(planId, `${year}-%`);
+  } else {
+    const memberIds = getMemberIds(planId);
+    if (memberIds.length === 0) {
+      return { entries: [], companyHolidays: [] };
+    }
+    const placeholders = memberIds.map(() => '?').join(',');
+    const rawEntries = db.prepare(`
+      SELECT e.*, u.username as person_name, COALESCE(c.color, '#6366f1') as person_color
+      FROM vacay_entries e
+      JOIN users u ON e.user_id = u.id
+      LEFT JOIN vacay_user_colors c ON c.user_id = e.user_id AND c.plan_id = ?
+      JOIN vacay_plans pp ON pp.owner_id = e.user_id AND pp.is_personal = 1 AND pp.id = e.plan_id
+      WHERE e.user_id IN (${placeholders}) AND e.date LIKE ?
+    `).all(planId, ...memberIds, `${year}-%`) as Record<string, unknown>[];
+
+    entries = rawEntries.map(e => {
+      if (requestingUserId && e.user_id !== requestingUserId && !e.show_details) {
+        return { ...e, note: null, busy_only: true };
+      }
+      return e;
+    });
+  }
+
   const companyHolidays = db.prepare("SELECT * FROM vacay_company_holidays WHERE plan_id = ? AND date LIKE ?").all(planId, `${year}-%`);
   return { entries, companyHolidays };
 }
 
 export function toggleEntry(userId: number, planId: number, date: string, socketId: string | undefined): { action: string } {
-  const existing = db.prepare('SELECT id FROM vacay_entries WHERE user_id = ? AND date = ? AND plan_id = ?').get(userId, date, planId) as { id: number } | undefined;
+  const personalPlan = db.prepare('SELECT id FROM vacay_plans WHERE owner_id = ? AND is_personal = 1').get(userId) as { id: number } | undefined;
+  if (!personalPlan) return { action: 'error' };
+
+  const existing = db.prepare('SELECT id FROM vacay_entries WHERE user_id = ? AND date = ? AND plan_id = ?').get(userId, date, personalPlan.id) as { id: number } | undefined;
   if (existing) {
     db.prepare('DELETE FROM vacay_entries WHERE id = ?').run(existing.id);
     notifyPlanUsers(planId, socketId);
     return { action: 'removed' };
   } else {
-    db.prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note) VALUES (?, ?, ?, ?)').run(planId, userId, date, '');
+    const showDetails = getUserShareDetailsDefault(userId) ? 1 : 0;
+    db.prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note, show_details) VALUES (?, ?, ?, ?, ?)').run(personalPlan.id, userId, date, '', showDetails);
     notifyPlanUsers(planId, socketId);
     return { action: 'added' };
   }
 }
 
 export function toggleCompanyHoliday(planId: number, date: string, note: string | undefined, socketId: string | undefined): { action: string } {
+  const plan = db.prepare('SELECT is_personal FROM vacay_plans WHERE id = ?').get(planId) as { is_personal: number } | undefined;
   const existing = db.prepare('SELECT id FROM vacay_company_holidays WHERE plan_id = ? AND date = ?').get(planId, date) as { id: number } | undefined;
   if (existing) {
     db.prepare('DELETE FROM vacay_company_holidays WHERE id = ?').run(existing.id);
@@ -561,7 +678,14 @@ export function toggleCompanyHoliday(planId: number, date: string, note: string 
     return { action: 'removed' };
   } else {
     db.prepare('INSERT INTO vacay_company_holidays (plan_id, date, note) VALUES (?, ?, ?)').run(planId, date, note || '');
-    db.prepare('DELETE FROM vacay_entries WHERE plan_id = ? AND date = ?').run(planId, date);
+    if (plan?.is_personal) {
+      db.prepare('DELETE FROM vacay_entries WHERE plan_id = ? AND date = ?').run(planId, date);
+    } else {
+      for (const uid of getMemberIds(planId)) {
+        const ppId = getPersonalPlanId(uid);
+        if (ppId) db.prepare('DELETE FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?').run(uid, ppId, date);
+      }
+    }
     notifyPlanUsers(planId, socketId);
     return { action: 'added' };
   }
@@ -577,7 +701,8 @@ export function getStats(planId: number, year: number) {
   const users = getPlanUsers(planId);
 
   return users.map(u => {
-    const used = (db.prepare("SELECT COUNT(*) as count FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date LIKE ?").get(u.id, planId, `${year}-%`) as { count: number }).count;
+    const ppId = getPersonalPlanId(u.id) ?? planId;
+    const used = (db.prepare("SELECT COUNT(*) as count FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date LIKE ?").get(u.id, ppId, `${year}-%`) as { count: number }).count;
     const config = db.prepare('SELECT * FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = ?').get(u.id, planId, year) as VacayUserYear | undefined;
     const vacationDays = config ? config.vacation_days : 30;
     const carriedOver = carryOverEnabled ? (config ? config.carried_over : 0) : 0;
@@ -611,49 +736,14 @@ export function updateStats(userId: number, planId: number, year: number, vacati
 }
 
 // ---------------------------------------------------------------------------
-// GET /plan composite
+// Share details default
 // ---------------------------------------------------------------------------
 
-export function getPlanData(userId: number) {
-  const plan = getActivePlan(userId);
-  const activePlanId = plan.id;
-
-  const users = getPlanUsers(activePlanId).map(u => {
-    const colorRow = db.prepare('SELECT color FROM vacay_user_colors WHERE user_id = ? AND plan_id = ?').get(u.id, activePlanId) as { color: string } | undefined;
-    return { ...u, color: colorRow?.color || '#6366f1' };
-  });
-
-  const pendingInvites = db.prepare(`
-    SELECT m.id, m.user_id, u.username, u.email, m.created_at
-    FROM vacay_plan_members m JOIN users u ON m.user_id = u.id
-    WHERE m.plan_id = ? AND m.status = 'pending'
-  `).all(activePlanId);
-
-  const incomingInvites = db.prepare(`
-    SELECT m.id, m.plan_id, u.username, u.email, m.created_at
-    FROM vacay_plan_members m
-    JOIN vacay_plans p ON m.plan_id = p.id
-    JOIN users u ON p.owner_id = u.id
-    WHERE m.user_id = ? AND m.status = 'pending'
-  `).all(userId);
-
-  const holidayCalendars = db.prepare('SELECT * FROM vacay_holiday_calendars WHERE plan_id = ? ORDER BY sort_order, id').all(activePlanId) as VacayHolidayCalendar[];
-
-  return {
-    plan: {
-      ...plan,
-      block_weekends: !!plan.block_weekends,
-      holidays_enabled: !!plan.holidays_enabled,
-      company_holidays_enabled: !!plan.company_holidays_enabled,
-      carry_over_enabled: !!plan.carry_over_enabled,
-      holiday_calendars: holidayCalendars,
-    },
-    users,
-    pendingInvites,
-    incomingInvites,
-    isOwner: plan.owner_id === userId,
-    isFused: users.length > 1,
-  };
+export function setShareDetailsDefault(userId: number, value: boolean): void {
+  db.prepare(`
+    INSERT INTO settings (user_id, key, value) VALUES (?, 'vacay_share_details_default', ?)
+    ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value
+  `).run(userId, value ? '1' : '0');
 }
 
 // ---------------------------------------------------------------------------

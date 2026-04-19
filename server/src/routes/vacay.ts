@@ -6,64 +6,114 @@ import * as svc from '../services/vacayService';
 const router = express.Router();
 router.use(authenticate);
 
-router.get('/plan', (req: Request, res: Response) => {
+// ---------------------------------------------------------------------------
+// Plan list and creation
+// ---------------------------------------------------------------------------
+
+router.get('/plans', (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  res.json(svc.getPlanData(authReq.user.id));
+  res.json({ plans: svc.getAllPlansData(authReq.user.id) });
 });
 
-router.put('/plan', async (req: Request, res: Response) => {
+router.post('/plans', (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  const planId = svc.getActivePlanId(authReq.user.id);
-  const result = await svc.updatePlan(planId, req.body, req.headers['x-socket-id'] as string);
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'name required' });
+  const plan = svc.createPlan(authReq.user.id, name);
+  res.json({ plan });
+});
+
+// ---------------------------------------------------------------------------
+// Per-plan middleware — resolves planId and checks access
+// ---------------------------------------------------------------------------
+
+function requirePlanAccess(req: Request, res: Response, next: () => void) {
+  const authReq = req as AuthRequest;
+  const planId = parseInt(req.params.planId);
+  if (isNaN(planId)) return res.status(400).json({ error: 'Invalid plan id' });
+
+  const data = svc.getPlanData(authReq.user.id, planId);
+  if (!data) return res.status(404).json({ error: 'Not found' });
+
+  (req as AuthRequest & { planId: number; planData: ReturnType<typeof svc.getPlanData> }).planId = planId;
+  (req as AuthRequest & { planId: number; planData: ReturnType<typeof svc.getPlanData> }).planData = data;
+  next();
+}
+
+function requireOwner(req: Request, res: Response, next: () => void) {
+  const authReq = req as AuthRequest & { planData: ReturnType<typeof svc.getPlanData> };
+  if (!authReq.planData?.isOwner) return res.status(403).json({ error: 'Owner only' });
+  next();
+}
+
+// ---------------------------------------------------------------------------
+// Plan data
+// ---------------------------------------------------------------------------
+
+router.get('/plans/:planId', requirePlanAccess as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planData: ReturnType<typeof svc.getPlanData> };
+  res.json(r.planData);
+});
+
+router.put('/plans/:planId', requirePlanAccess as express.RequestHandler, requireOwner as express.RequestHandler, async (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
+  const result = await svc.updatePlan(r.planId, req.body, req.headers['x-socket-id'] as string);
   res.json(result);
 });
 
-router.post('/plan/holiday-calendars', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+// ---------------------------------------------------------------------------
+// Holiday calendars
+// ---------------------------------------------------------------------------
+
+router.post('/plans/:planId/holiday-calendars', requirePlanAccess as express.RequestHandler, requireOwner as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
   const { region, label, color, sort_order } = req.body;
   if (!region) return res.status(400).json({ error: 'region required' });
-  const planId = svc.getActivePlanId(authReq.user.id);
-  const calendar = svc.addHolidayCalendar(planId, region, label, color, sort_order, req.headers['x-socket-id'] as string);
+  const calendar = svc.addHolidayCalendar(r.planId, region, label, color, sort_order, req.headers['x-socket-id'] as string);
   res.json({ calendar });
 });
 
-router.put('/plan/holiday-calendars/:id', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+router.put('/plans/:planId/holiday-calendars/:id', requirePlanAccess as express.RequestHandler, requireOwner as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
   const id = parseInt(req.params.id);
-  const planId = svc.getActivePlanId(authReq.user.id);
-  const calendar = svc.updateHolidayCalendar(id, planId, req.body, req.headers['x-socket-id'] as string);
+  const calendar = svc.updateHolidayCalendar(id, r.planId, req.body, req.headers['x-socket-id'] as string);
   if (!calendar) return res.status(404).json({ error: 'Calendar not found' });
   res.json({ calendar });
 });
 
-router.delete('/plan/holiday-calendars/:id', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+router.delete('/plans/:planId/holiday-calendars/:id', requirePlanAccess as express.RequestHandler, requireOwner as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
   const id = parseInt(req.params.id);
-  const planId = svc.getActivePlanId(authReq.user.id);
-  const deleted = svc.deleteHolidayCalendar(id, planId, req.headers['x-socket-id'] as string);
+  const deleted = svc.deleteHolidayCalendar(id, r.planId, req.headers['x-socket-id'] as string);
   if (!deleted) return res.status(404).json({ error: 'Calendar not found' });
   res.json({ success: true });
 });
 
-router.put('/color', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+// ---------------------------------------------------------------------------
+// Colors
+// ---------------------------------------------------------------------------
+
+router.put('/plans/:planId/color', requirePlanAccess as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
   const { color, target_user_id } = req.body;
-  const planId = svc.getActivePlanId(authReq.user.id);
-  const userId = target_user_id ? parseInt(target_user_id) : authReq.user.id;
-  const planUsers = svc.getPlanUsers(planId);
+  const userId = target_user_id ? parseInt(target_user_id) : r.user.id;
+  const planUsers = svc.getPlanUsers(r.planId);
   if (!planUsers.find(u => u.id === userId)) {
     return res.status(403).json({ error: 'User not in plan' });
   }
-  svc.setUserColor(userId, planId, color, req.headers['x-socket-id'] as string);
+  svc.setUserColor(userId, r.planId, color, req.headers['x-socket-id'] as string);
   res.json({ success: true });
 });
 
-router.post('/invite', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+// ---------------------------------------------------------------------------
+// Invitations
+// ---------------------------------------------------------------------------
+
+router.post('/plans/:planId/invite', requirePlanAccess as express.RequestHandler, requireOwner as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
   const { user_id } = req.body;
   if (!user_id) return res.status(400).json({ error: 'user_id required' });
-  const plan = svc.getActivePlan(authReq.user.id);
-  const result = svc.sendInvite(plan.id, authReq.user.id, authReq.user.username, authReq.user.email, user_id);
+  const result = svc.sendInvite(r.planId, r.user.id, r.user.username, r.user.email, user_id);
   if (result.error) return res.status(result.status!).json({ error: result.error });
   res.json({ success: true });
 });
@@ -83,100 +133,126 @@ router.post('/invite/decline', (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
-router.post('/invite/cancel', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+router.post('/plans/:planId/invite/cancel', requirePlanAccess as express.RequestHandler, requireOwner as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
   const { user_id } = req.body;
-  const plan = svc.getActivePlan(authReq.user.id);
-  svc.cancelInvite(plan.id, user_id);
+  svc.cancelInvite(r.planId, user_id);
   res.json({ success: true });
 });
 
-router.post('/dissolve', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  svc.dissolvePlan(authReq.user.id, req.headers['x-socket-id'] as string);
+// ---------------------------------------------------------------------------
+// Leave / delete calendar
+// ---------------------------------------------------------------------------
+
+router.post('/plans/:planId/leave', requirePlanAccess as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
+  const result = svc.leaveCalendar(r.user.id, r.planId, req.headers['x-socket-id'] as string);
+  if (result.error) return res.status(result.status!).json({ error: result.error });
   res.json({ success: true });
 });
 
-router.get('/available-users', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const planId = svc.getActivePlanId(authReq.user.id);
-  const users = svc.getAvailableUsers(authReq.user.id, planId);
+// ---------------------------------------------------------------------------
+// Available users
+// ---------------------------------------------------------------------------
+
+router.get('/plans/:planId/available-users', requirePlanAccess as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
+  const users = svc.getAvailableUsers(r.user.id, r.planId);
   res.json({ users });
 });
 
-router.get('/years', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const planId = svc.getActivePlanId(authReq.user.id);
-  res.json({ years: svc.listYears(planId) });
+// ---------------------------------------------------------------------------
+// Years
+// ---------------------------------------------------------------------------
+
+router.get('/plans/:planId/years', requirePlanAccess as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
+  res.json({ years: svc.listYears(r.planId) });
 });
 
-router.post('/years', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+router.post('/plans/:planId/years', requirePlanAccess as express.RequestHandler, requireOwner as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
   const { year } = req.body;
   if (!year) return res.status(400).json({ error: 'Year required' });
-  const planId = svc.getActivePlanId(authReq.user.id);
-  const years = svc.addYear(planId, year, req.headers['x-socket-id'] as string);
+  const years = svc.addYear(r.planId, year, req.headers['x-socket-id'] as string);
   res.json({ years });
 });
 
-router.delete('/years/:year', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+router.delete('/plans/:planId/years/:year', requirePlanAccess as express.RequestHandler, requireOwner as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
   const year = parseInt(req.params.year);
-  const planId = svc.getActivePlanId(authReq.user.id);
-  const years = svc.deleteYear(planId, year, req.headers['x-socket-id'] as string);
+  const years = svc.deleteYear(r.planId, year, req.headers['x-socket-id'] as string);
   res.json({ years });
 });
 
-router.get('/entries/:year', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const planId = svc.getActivePlanId(authReq.user.id);
-  res.json(svc.getEntries(planId, req.params.year));
+// ---------------------------------------------------------------------------
+// Entries
+// ---------------------------------------------------------------------------
+
+router.get('/plans/:planId/entries/:year', requirePlanAccess as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
+  res.json(svc.getEntries(r.planId, req.params.year, r.user.id));
 });
 
-router.post('/entries/toggle', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+router.post('/plans/:planId/entries/toggle', requirePlanAccess as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
   const { date, target_user_id } = req.body;
   if (!date) return res.status(400).json({ error: 'date required' });
-  const planId = svc.getActivePlanId(authReq.user.id);
-  let userId = authReq.user.id;
-  if (target_user_id && parseInt(target_user_id) !== authReq.user.id) {
-    const planUsers = svc.getPlanUsers(planId);
+  let userId = r.user.id;
+  if (target_user_id && parseInt(target_user_id) !== r.user.id) {
+    const planUsers = svc.getPlanUsers(r.planId);
     const tid = parseInt(target_user_id);
     if (!planUsers.find(u => u.id === tid)) {
       return res.status(403).json({ error: 'User not in plan' });
     }
     userId = tid;
   }
-  res.json(svc.toggleEntry(userId, planId, date, req.headers['x-socket-id'] as string));
+  res.json(svc.toggleEntry(userId, r.planId, date, req.headers['x-socket-id'] as string));
 });
 
-router.post('/entries/company-holiday', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+router.post('/plans/:planId/entries/company-holiday', requirePlanAccess as express.RequestHandler, requireOwner as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
   const { date, note } = req.body;
-  const planId = svc.getActivePlanId(authReq.user.id);
-  res.json(svc.toggleCompanyHoliday(planId, date, note, req.headers['x-socket-id'] as string));
+  res.json(svc.toggleCompanyHoliday(r.planId, date, note, req.headers['x-socket-id'] as string));
 });
 
-router.get('/stats/:year', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+// ---------------------------------------------------------------------------
+// Stats
+// ---------------------------------------------------------------------------
+
+router.get('/plans/:planId/stats/:year', requirePlanAccess as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
   const year = parseInt(req.params.year);
-  const planId = svc.getActivePlanId(authReq.user.id);
-  res.json({ stats: svc.getStats(planId, year) });
+  res.json({ stats: svc.getStats(r.planId, year) });
 });
 
-router.put('/stats/:year', (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+router.put('/plans/:planId/stats/:year', requirePlanAccess as express.RequestHandler, requireOwner as express.RequestHandler, (req: Request, res: Response) => {
+  const r = req as AuthRequest & { planId: number };
   const year = parseInt(req.params.year);
   const { vacation_days, target_user_id } = req.body;
-  const planId = svc.getActivePlanId(authReq.user.id);
-  const userId = target_user_id ? parseInt(target_user_id) : authReq.user.id;
-  const planUsers = svc.getPlanUsers(planId);
+  const userId = target_user_id ? parseInt(target_user_id) : r.user.id;
+  const planUsers = svc.getPlanUsers(r.planId);
   if (!planUsers.find(u => u.id === userId)) {
     return res.status(403).json({ error: 'User not in plan' });
   }
-  svc.updateStats(userId, planId, year, vacation_days, req.headers['x-socket-id'] as string);
+  svc.updateStats(userId, r.planId, year, vacation_days, req.headers['x-socket-id'] as string);
   res.json({ success: true });
 });
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+router.put('/settings/share-details-default', (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { value } = req.body;
+  svc.setShareDetailsDefault(authReq.user.id, !!value);
+  res.json({ success: true });
+});
+
+// ---------------------------------------------------------------------------
+// Holidays proxy
+// ---------------------------------------------------------------------------
 
 router.get('/holidays/countries', async (_req: Request, res: Response) => {
   const result = await svc.getCountries();

@@ -1,7 +1,6 @@
 import ReactDOM from 'react-dom'
 import { useState, useEffect } from 'react'
-import DOM from 'react-dom'
-import { UserPlus, Unlink, Check, Loader2, Clock, X } from 'lucide-react'
+import { UserPlus, Check, Loader2, Clock, X } from 'lucide-react'
 import { useVacayStore } from '../../store/vacayStore'
 import { useAuthStore } from '../../store/authStore'
 import { useTranslation } from '../../i18n'
@@ -19,7 +18,7 @@ const PRESET_COLORS = [
 export default function VacayPersons() {
   const { t } = useTranslation()
   const toast = useToast()
-  const { users, pendingInvites, invite, cancelInvite, updateColor, selectedUserId, setSelectedUserId, isFused } = useVacayStore()
+  const { users, pendingInvites, invite, cancelInvite, updateColor, selectedUserId, setSelectedUserId, selectedPlanId } = useVacayStore()
   const { user: currentUser } = useAuthStore()
 
   // Default selectedUserId to current user
@@ -34,8 +33,9 @@ export default function VacayPersons() {
   const [inviting, setInviting] = useState(false)
 
   const loadAvailable = async () => {
+    if (!selectedPlanId) return
     try {
-      const data = await apiClient.get('/addons/vacay/available-users').then(r => r.data)
+      const data = await apiClient.get(`/addons/vacay/plans/${selectedPlanId}/available-users`).then(r => r.data)
       setAvailableUsers(data.users)
     } catch { /* */ }
   }
@@ -78,12 +78,12 @@ export default function VacayPersons() {
           const isSelected = selectedUserId === u.id
           return (
             <div key={u.id}
-              onClick={() => { if (isFused) setSelectedUserId(u.id) }}
+              onClick={() => { if (users.length > 1) setSelectedUserId(u.id) }}
               className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg group transition-all"
               style={{
                 background: isSelected ? 'var(--bg-hover)' : 'transparent',
                 border: isSelected ? '1px solid var(--border-primary)' : '1px solid transparent',
-                cursor: isFused ? 'pointer' : 'default',
+                cursor: users.length > 1 ? 'pointer' : 'default',
               }}>
               <button
                 onClick={(e) => { e.stopPropagation(); setColorEditUserId(u.id); setShowColorPicker(true) }}
@@ -95,7 +95,7 @@ export default function VacayPersons() {
                 {u.username}
                 {u.id === currentUser?.id && <span style={{ color: 'var(--text-faint)' }}> ({t('vacay.you')})</span>}
               </span>
-              {isSelected && isFused && (
+              {isSelected && users.length > 1 && (
                 <Check size={12} style={{ color: 'var(--text-primary)' }} />
               )}
             </div>

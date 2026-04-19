@@ -376,18 +376,25 @@ export interface VacayHolidayCalendar {
 
 export interface VacayPlan {
   id: number
+  name: string
+  is_personal: boolean
   holidays_enabled: boolean
   holidays_region: string | null
   holiday_calendars: VacayHolidayCalendar[]
   block_weekends: boolean
   carry_over_enabled: boolean
   company_holidays_enabled: boolean
-  name?: string
-  year?: number
   owner_id?: number
   created_at?: string
-  updated_at?: string
   weekend_days?: string | null
+}
+
+export interface VacayPlanSummary {
+  id: number
+  name: string
+  is_personal: boolean
+  is_owner: boolean
+  member_count: number
 }
 
 export interface VacayUser {
@@ -402,6 +409,8 @@ export interface VacayEntry {
   plan_id?: number
   person_color?: string
   person_name?: string
+  show_details?: number
+  busy_only?: boolean
 }
 
 export interface VacayStat {
