@@ -827,7 +827,7 @@ export function enableMfa(userId: number, code?: string): { error?: string; stat
     return { error: 'No MFA setup in progress. Start the setup again.', status: 400 };
   }
   const tokenStr = String(code).replace(/\s/g, '');
-  const ok = otpVerifySync({ token: tokenStr, secret: pending, window: OTP_WINDOW }).valid;
+  const ok = otpVerifySync({ token: tokenStr, secret: pending, epochTolerance: OTP_WINDOW }).valid;
   if (!ok) {
     return { error: 'Invalid verification code', status: 401 };
   }
@@ -868,7 +868,7 @@ export function disableMfa(
   }
   const secret = decryptMfaSecret(user.mfa_secret);
   const tokenStr = String(code).replace(/\s/g, '');
-  const ok = otpVerifySync({ token: tokenStr, secret, window: OTP_WINDOW }).valid;
+  const ok = otpVerifySync({ token: tokenStr, secret, epochTolerance: OTP_WINDOW }).valid;
   if (!ok) {
     return { error: 'Invalid verification code', status: 401 };
   }
@@ -904,7 +904,7 @@ export function verifyMfaLogin(body: {
     }
     const secret = decryptMfaSecret(user.mfa_secret);
     const tokenStr = String(code).trim();
-    const okTotp = otpVerifySync({ token: tokenStr.replace(/\s/g, ''), secret, window: OTP_WINDOW }).valid;
+    const okTotp = otpVerifySync({ token: tokenStr.replace(/\s/g, ''), secret, epochTolerance: OTP_WINDOW }).valid;
     if (!okTotp) {
       const hashes = parseBackupCodeHashes(user.mfa_backup_codes);
       const candidateHash = hashBackupCode(tokenStr);
