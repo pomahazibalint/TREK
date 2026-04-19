@@ -536,6 +536,55 @@ export function convertDraftToReal(id: string | number, tripId: string | number)
   return updated;
 }
 
+export function settleBudget(
+  tripId: string | number,
+  actorUserId: number,
+): { error: 'already_settled' } | { error: 'has_drafts'; count: number } | { settled_at: string; settled_by: number; settled_by_username: string } {
+  const trip = db.prepare('SELECT id, settled_at FROM trips WHERE id = ?').get(tripId) as { id: number; settled_at: string | null } | undefined;
+  if (!trip) return { error: 'already_settled' };
+  if (trip.settled_at) return { error: 'already_settled' };
+
+  const draftCount = (db.prepare('SELECT COUNT(*) as cnt FROM budget_items WHERE trip_id = ? AND is_draft = 1').get(tripId) as { cnt: number }).cnt;
+  if (draftCount > 0) return { error: 'has_drafts', count: draftCount };
+
+  const result = db.prepare(
+    'UPDATE trips SET settled_at = CURRENT_TIMESTAMP, settled_by = ? WHERE id = ? AND settled_at IS NULL'
+  ).run(actorUserId, tripId);
+
+  if (result.changes === 0) return { error: 'already_settled' };
+
+  const updated = db.prepare('SELECT settled_at, settled_by, (SELECT username FROM users WHERE id = settled_by) as settled_by_username FROM trips WHERE id = ?').get(tripId) as { settled_at: string; settled_by: number; settled_by_username: string };
+  return updated;
+}
+
+export function discardDraft(
+  id: string | number,
+  tripId: string | number,
+): { success: true; assignmentUpdate?: { assignmentId: number; draft_budget_entry_id: null; budget_entry_is_draft: null; budget_entry_price: null; budget_entry_currency: null } } | { error: 'not_found' | 'not_a_draft' } {
+  const draft = db.prepare('SELECT id, linked_assignment_id FROM budget_items WHERE id = ? AND trip_id = ? AND is_draft = 1').get(id, tripId) as { id: number; linked_assignment_id: number | null } | undefined;
+  if (!draft) {
+    const exists = db.prepare('SELECT is_draft FROM budget_items WHERE id = ? AND trip_id = ?').get(id, tripId);
+    return exists ? { error: 'not_a_draft' } : { error: 'not_found' };
+  }
+
+  if (draft.linked_assignment_id) {
+    setAssignmentDraftPrice(tripId, draft.linked_assignment_id, null, null);
+    return {
+      success: true,
+      assignmentUpdate: {
+        assignmentId: draft.linked_assignment_id,
+        draft_budget_entry_id: null,
+        budget_entry_is_draft: null,
+        budget_entry_price: null,
+        budget_entry_currency: null,
+      },
+    };
+  }
+
+  db.prepare('DELETE FROM budget_items WHERE id = ?').run(id);
+  return { success: true };
+}
+
 export function deleteDraftForAssignment(assignmentId: number): void {
   const draft = db.prepare('SELECT id FROM budget_items WHERE linked_assignment_id = ? AND is_draft = 1').get(assignmentId) as { id: number } | undefined;
   if (draft) db.prepare('DELETE FROM budget_items WHERE id = ?').run(draft.id);

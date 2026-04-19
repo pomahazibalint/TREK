@@ -33,6 +33,9 @@ export interface Trip {
   day_count?: number
   user_id?: number
   name?: string
+  settled_at?: string | null
+  settled_by?: number | null
+  settled_by_username?: string | null
 }
 
 export interface Day {

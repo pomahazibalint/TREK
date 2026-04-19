@@ -18,7 +18,8 @@ export const TRIP_SELECT = `
     CASE WHEN t.user_id = :userId THEN 1 ELSE 0 END as is_owner,
     u.username as owner_username,
     (SELECT COUNT(*) FROM trip_members tm WHERE tm.trip_id = t.id) as shared_count,
-    (SELECT COUNT(*) FROM budget_items bi WHERE bi.trip_id = t.id AND bi.currency != t.currency) as has_foreign_currency_expenses
+    (SELECT COUNT(*) FROM budget_items bi WHERE bi.trip_id = t.id AND bi.currency != t.currency) as has_foreign_currency_expenses,
+    (SELECT username FROM users WHERE id = t.settled_by) as settled_by_username
   FROM trips t
   JOIN users u ON u.id = t.user_id
 `;

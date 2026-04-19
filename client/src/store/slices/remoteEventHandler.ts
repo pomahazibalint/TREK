@@ -266,6 +266,8 @@ export function handleRemoteEvent(set: SetState, event: WebSocketEvent): void {
       // Trip
       case 'trip:updated':
         return { trip: payload.trip as Trip }
+      case 'trip:settled':
+        return state.trip ? { trip: { ...state.trip, settled_at: payload.settled_at as string, settled_by: payload.settled_by as number, settled_by_username: payload.settled_by_username as string } } : {}
 
       // Files
       case 'file:created':

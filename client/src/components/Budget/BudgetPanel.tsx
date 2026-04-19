@@ -4,8 +4,9 @@ import { useTripStore } from '../../store/tripStore'
 import { useAuthStore } from '../../store/authStore'
 import { useCanDo } from '../../store/permissionsStore'
 import { useTranslation } from '../../i18n'
-import { Plus, Trash2, Calculator, Wallet, Pencil, Info, ChevronDown, ChevronRight, Download, X, RefreshCw, Paperclip, Upload, FileEdit } from 'lucide-react'
+import { Plus, Trash2, Calculator, Wallet, Pencil, Info, ChevronDown, ChevronRight, Download, X, RefreshCw, Paperclip, Upload, FileEdit, CheckCircle } from 'lucide-react'
 import ExpenseModal from './ExpenseModal'
+import SettlementModal from './SettlementModal'
 import { budgetApi } from '../../api/client'
 import { CustomDatePicker } from '../shared/CustomDateTimePicker'
 import type { BudgetItem, BudgetMember } from '../../types'
@@ -165,12 +166,15 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
   const [editingCat, setEditingCat] = useState<{ name: string; value: string } | null>(null)
   const [settlement, setSettlement] = useState<{ settlement_currency: string; balances: any[]; flows: any[]; incomplete: { id: number; name: string; reason: string }[] } | null>(null)
   const [settlementOpen, setSettlementOpen] = useState(false)
+  const [settleModalOpen, setSettleModalOpen] = useState(false)
   const [modal, setModal] = useState<{ item: BudgetItem | null; category: string } | null>(null)
   const [draftModal, setDraftModal] = useState<BudgetItem | null>(null)
   const [drafts, setDrafts] = useState<BudgetItem[]>([])
   const [expandedRows, setExpandedRows] = useState<number[]>([])
   const currency = trip?.currency || 'EUR'
-  const canEdit = can('budget_edit', trip)
+  const isSettled = !!trip?.settled_at
+  const canEdit = can('budget_edit', trip) && !isSettled
+  const isOwner = trip?.user_id === currentUser?.id
 
   const fmt = (v: number | null | undefined, cur?: string) => fmtNum(v, locale, cur || currency)
   const hasMultipleMembers = tripMembers.length > 1
@@ -293,11 +297,32 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
           <Calculator size={20} color="var(--text-primary)" />
           <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{t('budget.title')}</h2>
         </div>
-        <button onClick={handleExportCsv} title={t('budget.exportCsv')}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'none', color: 'var(--text-muted)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-          <Download size={13} /> CSV
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {isSettled ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.25)', fontSize: 12, fontWeight: 600, color: '#4ade80' }}>
+              <CheckCircle size={13} />
+              {t('budget.settledBadge', { date: new Date(trip!.settled_at!).toLocaleDateString(locale), name: trip?.settled_by_username || '' })}
+            </div>
+          ) : (
+            isOwner && hasMultipleMembers && (
+              <button onClick={() => setSettleModalOpen(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'none', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {t('budget.settle')}
+              </button>
+            )
+          )}
+          <button onClick={handleExportCsv} title={t('budget.exportCsv')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'none', color: 'var(--text-muted)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <Download size={13} /> CSV
+          </button>
+        </div>
       </div>
+
+      {isSettled && (
+        <div style={{ margin: '0 16px 12px', padding: '10px 14px', borderRadius: 10, background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)', fontSize: 13, color: 'var(--text-secondary)' }}>
+          {t('budget.settledBanner')}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 20, padding: '0 16px 40px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -693,6 +718,13 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
           t={t}
           onSave={() => setModal(null)}
           onClose={() => setModal(null)}
+        />
+      )}
+
+      {settleModalOpen && (
+        <SettlementModal
+          tripId={tripId}
+          onClose={() => { setSettleModalOpen(false); budgetApi.listDrafts(tripId).then((d: any) => setDrafts(d.items || [])).catch(() => {}) }}
         />
       )}
 

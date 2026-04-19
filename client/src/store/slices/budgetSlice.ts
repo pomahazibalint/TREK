@@ -24,6 +24,7 @@ export interface BudgetSlice {
     itemId: number,
     payments: { user_id: number; amount_paid: number }[],
   ) => Promise<{ members: BudgetMember[] }>
+  settleBudget: (tripId: number | string) => Promise<void>
 }
 
 export const createBudgetSlice = (set: SetState, get: GetState): BudgetSlice => ({
@@ -92,5 +93,12 @@ export const createBudgetSlice = (set: SetState, get: GetState): BudgetSlice => 
       )
     }))
     return result
+  },
+
+  settleBudget: async (tripId) => {
+    const result = await budgetApi.settle(tripId)
+    if (result.trip) {
+      set({ trip: result.trip })
+    }
   },
 })

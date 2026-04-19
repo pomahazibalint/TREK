@@ -303,14 +303,28 @@ router.post('/:id/copy', authenticate, (req: Request, res: Response) => {
         r.metadata, r.day_plan_position);
     }
 
-    // 8. Copy budget_items (paid_by_user_id reset to null)
-    const oldBudget = db.prepare('SELECT * FROM budget_items WHERE trip_id = ?').all(req.params.id) as any[];
+    // 8. Copy budget_items (skip drafts; paid_by_user_id reset to null)
+    const oldBudget = db.prepare('SELECT * FROM budget_items WHERE trip_id = ? AND is_draft = 0').all(req.params.id) as any[];
+    const budgetMap = new Map<number, number | bigint>();
     const insertBudget = db.prepare(`
-      INSERT INTO budget_items (trip_id, category, name, total_price, persons, days, note, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO budget_items (trip_id, category, name, total_price, currency, total_price_ref, exchange_rate, tip, tip_ref, note, sort_order, expense_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const b of oldBudget) {
-      insertBudget.run(newTripId, b.category, b.name, b.total_price, b.persons, b.days, b.note, b.sort_order);
+      const r = insertBudget.run(newTripId, b.category, b.name, b.total_price, b.currency, b.total_price_ref, b.exchange_rate, b.tip ?? 0, b.tip_ref ?? 0, b.note, b.sort_order, b.expense_date);
+      budgetMap.set(b.id, r.lastInsertRowid);
+    }
+
+    // Copy budget_item_members for copied items
+    const insertBudgetMember = db.prepare(`
+      INSERT INTO budget_item_members (budget_item_id, user_id, amount_owed, amount_owed_ref, amount_paid, amount_paid_ref)
+      VALUES (?, ?, ?, ?, 0, 0)
+    `);
+    for (const [oldId, newId] of budgetMap) {
+      const members = db.prepare('SELECT * FROM budget_item_members WHERE budget_item_id = ?').all(oldId) as any[];
+      for (const m of members) {
+        insertBudgetMember.run(newId, m.user_id, m.amount_owed, m.amount_owed_ref);
+      }
     }
 
     // 9. Copy packing_bags → build ID map

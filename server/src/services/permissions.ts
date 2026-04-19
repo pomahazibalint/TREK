@@ -37,6 +37,7 @@ export const PERMISSION_ACTIONS: PermissionAction[] = [
 
   // Budget
   { key: 'budget_edit',        defaultLevel: 'trip_member',  allowedLevels: ['trip_owner', 'trip_member'] },
+  { key: 'budget_settle',      defaultLevel: 'trip_owner',   allowedLevels: ['trip_owner'] },
 
   // Packing
   { key: 'packing_edit',       defaultLevel: 'trip_member',  allowedLevels: ['trip_owner', 'trip_member'] },

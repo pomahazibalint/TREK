@@ -12,6 +12,8 @@ export const budgetApi = {
   settlement: (tripId: number | string) => apiClient.get(`/trips/${tripId}/budget/settlement`).then(r => r.data),
   listDrafts: (tripId: number | string) => apiClient.get(`/trips/${tripId}/budget/drafts`).then(r => r.data),
   convertDraft: (tripId: number | string, id: number) => apiClient.post(`/trips/${tripId}/budget/${id}/convert`).then(r => r.data),
+  settle: (tripId: number | string) => apiClient.post(`/trips/${tripId}/budget/settle`).then(r => r.data),
+  discardDraft: (tripId: number | string, id: number) => apiClient.delete(`/trips/${tripId}/budget/${id}/draft`).then(r => r.data),
   listFiles: (tripId: number | string, itemId: number) => apiClient.get(`/trips/${tripId}/budget/${itemId}/files`).then(r => r.data),
   uploadReceipt: (tripId: number | string, itemId: number, file: File) => {
     const fd = new FormData(); fd.append('file', file)

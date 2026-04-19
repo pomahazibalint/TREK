@@ -1042,6 +1042,11 @@ function runMigrations(db: Database.Database): void {
       try { db.exec("ALTER TABLE vacay_entries ADD COLUMN event_name TEXT DEFAULT ''"); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
       try { db.exec("ALTER TABLE vacay_entries ADD COLUMN location TEXT DEFAULT ''"); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
     },
+    // Migration 90: Budget settlement state on trips
+    () => {
+      try { db.exec('ALTER TABLE trips ADD COLUMN settled_at DATETIME DEFAULT NULL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec('ALTER TABLE trips ADD COLUMN settled_by INTEGER REFERENCES users(id) ON DELETE SET NULL DEFAULT NULL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+    },
   ];
 
   if (currentVersion < migrations.length) {

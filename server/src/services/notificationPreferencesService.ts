@@ -13,7 +13,8 @@ export type NotifEventType =
   | 'photos_shared'
   | 'collab_message'
   | 'packing_tagged'
-  | 'version_available';
+  | 'version_available'
+  | 'budget_settlement';
 
 export interface AvailableChannels {
   email: boolean;
@@ -24,14 +25,15 @@ export interface AvailableChannels {
 // Which channels are implemented for each event type.
 // Only implemented combos show toggles in the user preferences UI.
 const IMPLEMENTED_COMBOS: Record<NotifEventType, NotifChannel[]> = {
-  trip_invite:       ['inapp', 'email', 'webhook'],
-  booking_change:    ['inapp', 'email', 'webhook'],
-  trip_reminder:     ['inapp', 'email', 'webhook'],
-  vacay_invite:      ['inapp', 'email', 'webhook'],
-  photos_shared:     ['inapp', 'email', 'webhook'],
-  collab_message:    ['inapp', 'email', 'webhook'],
-  packing_tagged:    ['inapp', 'email', 'webhook'],
-  version_available: ['inapp', 'email', 'webhook'],
+  trip_invite:        ['inapp', 'email', 'webhook'],
+  booking_change:     ['inapp', 'email', 'webhook'],
+  trip_reminder:      ['inapp', 'email', 'webhook'],
+  vacay_invite:       ['inapp', 'email', 'webhook'],
+  photos_shared:      ['inapp', 'email', 'webhook'],
+  collab_message:     ['inapp', 'email', 'webhook'],
+  packing_tagged:     ['inapp', 'email', 'webhook'],
+  version_available:  ['inapp', 'email', 'webhook'],
+  budget_settlement:  ['inapp', 'email', 'webhook'],
 };
 
 /** Events that target admins only (shown in admin panel, not in user settings). */

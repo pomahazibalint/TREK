@@ -15,7 +15,11 @@ import {
   updateMemberPayments,
   calculateSettlement,
   convertDraftToReal,
+  settleBudget,
+  discardDraft,
 } from '../services/budgetService';
+import { send } from '../services/notificationService';
+import { resolveRecipients } from '../services/inAppNotifications';
 import { listFilesForBudgetItem } from '../services/fileService';
 
 const router = express.Router({ mergeParams: true });
@@ -133,6 +137,68 @@ router.put('/:id/members/payments', authenticate, (req: Request, res: Response) 
   broadcast(Number(tripId), 'budget:members-payments-updated', { itemId: Number(id), members: result.members }, req.headers['x-socket-id'] as string);
 });
 
+router.post('/settle', authenticate, async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { tripId } = req.params;
+
+  const trip = verifyTripAccess(tripId, authReq.user.id);
+  if (!trip) return res.status(404).json({ error: 'Trip not found' });
+
+  if (!checkPermission('budget_settle', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+    return res.status(403).json({ error: 'No permission' });
+
+  const result = settleBudget(tripId, authReq.user.id);
+  if ('error' in result) {
+    if (result.error === 'has_drafts') return res.status(409).json({ error: 'has_drafts', count: (result as any).count });
+    return res.status(409).json({ error: result.error });
+  }
+
+  const settlement = calculateSettlement(tripId);
+  const participants = resolveRecipients('trip', Number(tripId), null);
+  const actorUsername = (db.prepare('SELECT username FROM users WHERE id = ?').get(authReq.user.id) as { username: string } | undefined)?.username || '';
+  const tripTitle = (db.prepare('SELECT title FROM trips WHERE id = ?').get(tripId) as { title: string } | undefined)?.title || '';
+
+  broadcast(tripId, 'trip:settled', { settled_at: result.settled_at, settled_by: result.settled_by, settled_by_username: result.settled_by_username }, req.headers['x-socket-id'] as string);
+
+  setImmediate(async () => {
+    for (const participantId of participants) {
+      const owing = settlement.flows.filter(f => f.from.user_id === participantId);
+      const owed = settlement.flows.filter(f => f.to.user_id === participantId);
+      let balanceText = '';
+      if (owing.length === 0 && owed.length === 0) {
+        balanceText = "You're all settled!";
+      } else {
+        const parts: string[] = [];
+        for (const f of owing) parts.push(`You owe ${f.to.username} ${f.amount.toFixed(2)} ${settlement.settlement_currency}`);
+        for (const f of owed) parts.push(`${f.from.username} owes you ${f.amount.toFixed(2)} ${settlement.settlement_currency}`);
+        balanceText = parts.join('; ');
+      }
+
+      await send({
+        event: 'budget_settlement',
+        actorId: authReq.user.id,
+        params: { actor: actorUsername, trip: tripTitle, tripId: String(tripId), balance_text: balanceText },
+        scope: 'user',
+        targetId: participantId,
+        inApp: {
+          type: 'boolean',
+          positiveTextKey: 'notif.action.ive_paid',
+          negativeTextKey: 'notif.action.dismiss',
+          positiveCallback: { action: 'budget_settlement_ack', payload: { tripId: Number(tripId), userId: participantId } },
+          negativeCallback: { action: 'noop', payload: {} },
+          navigateTarget: `/trips/${tripId}?tab=budget`,
+        },
+      });
+    }
+  });
+
+  const updatedTrip = db.prepare(`
+    SELECT t.*, (SELECT username FROM users WHERE id = t.settled_by) as settled_by_username
+    FROM trips t WHERE t.id = ?
+  `).get(tripId);
+  res.json({ trip: updatedTrip });
+});
+
 router.get('/settlement', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const { tripId } = req.params;
@@ -172,6 +238,24 @@ router.get('/drafts', authenticate, (req: Request, res: Response) => {
   const { tripId } = req.params;
   if (!verifyTripAccess(tripId, authReq.user.id)) return res.status(404).json({ error: 'Trip not found' });
   res.json({ items: listDraftBudgetItems(tripId) });
+});
+
+router.delete('/:id/draft', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { tripId, id } = req.params;
+  const trip = verifyTripAccess(tripId, authReq.user.id);
+  if (!trip) return res.status(404).json({ error: 'Trip not found' });
+  if (!checkPermission('budget_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+    return res.status(403).json({ error: 'No permission' });
+
+  const result = discardDraft(id, tripId);
+  if ('error' in result) return res.status(result.error === 'not_found' ? 404 : 400).json({ error: result.error });
+
+  res.json({ success: true });
+  broadcast(tripId, 'budget:deleted', { itemId: Number(id) }, req.headers['x-socket-id'] as string);
+  if ('assignmentUpdate' in result && result.assignmentUpdate) {
+    broadcast(tripId, 'assignment:draft-price', result.assignmentUpdate, req.headers['x-socket-id'] as string);
+  }
 });
 
 router.post('/:id/convert', authenticate, (req: Request, res: Response) => {

@@ -19,4 +19,10 @@ registerAction('test_deny', async () => {
   console.log('[notifications] Test deny action executed');
 });
 
+registerAction('noop', async () => {});
+
+registerAction('budget_settlement_ack', async (_payload, _respondingUserId) => {
+  // Acknowledgement is recorded on the notification row's response column by the caller.
+});
+
 export { registerAction, getAction };

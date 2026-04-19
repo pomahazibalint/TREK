@@ -28,6 +28,7 @@ const EVENT_LABEL_KEYS: Record<string, string> = {
   collab_message: 'settings.notifyCollabMessage',
   packing_tagged: 'settings.notifyPackingTagged',
   version_available: 'settings.notifyVersionAvailable',
+  budget_settlement: 'settings.notifyBudgetSettlement',
 }
 
 export default function NotificationsTab(): React.ReactElement {

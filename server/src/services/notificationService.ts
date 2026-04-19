@@ -112,6 +112,13 @@ const EVENT_NOTIFICATION_CONFIG: Record<string, EventNotifConfig> = {
     navigateTextKey: 'notif.action.view_admin',
     navigateTarget: () => '/admin',
   },
+  budget_settlement: {
+    inAppType: 'navigate',
+    titleKey: 'notif.budget_settlement.title',
+    textKey: 'notif.budget_settlement.text',
+    navigateTextKey: 'notif.action.view_budget',
+    navigateTarget: p => (p.tripId ? `/trips/${p.tripId}?tab=budget` : null),
+  },
 };
 
 // ── Fallback config for unknown event types ────────────────────────────────
