@@ -571,9 +571,9 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
                   <div style={{ width: 20, height: 20, border: '2px solid var(--border-primary)', borderTopColor: 'var(--text-primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                   {dateRangePreview.map(asset => (
-                    <div key={asset.id} style={{ aspectRatio: '1', borderRadius: 6, overflow: 'hidden', background: 'var(--bg-tertiary)' }}>
+                    <div key={asset.id} style={{ width: 72, height: 72, borderRadius: 6, overflow: 'hidden', background: 'var(--bg-tertiary)', flexShrink: 0 }}>
                       <ProviderImg
                         baseUrl={`${ADDON_PREFIX}/${asset.provider}/assets/${tripId}/${asset.id}/${currentUser?.id}/thumbnail`}
                         provider={asset.provider}
