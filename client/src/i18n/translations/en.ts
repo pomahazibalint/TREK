@@ -1482,6 +1482,7 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'memories.noAlbums': 'No albums found',
   'memories.syncAlbum': 'Sync album',
   'memories.unlinkAlbum': 'Unlink album',
+  'memories.linkDateRange': 'Link date range',
   'memories.enableAutoSync': 'Enable auto-sync',
   'memories.disableAutoSync': 'Disable auto-sync',
   'memories.addDateSync': 'Add date sync',

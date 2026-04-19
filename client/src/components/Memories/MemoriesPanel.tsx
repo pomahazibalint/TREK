@@ -89,6 +89,8 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
   const [albumLinks, setAlbumLinks] = useState<{ id: number; provider: string; album_id: string; album_name: string; user_id: number; username: string; sync_enabled: number; auto_sync: number; sync_type: string; sync_from_date: string | null; sync_to_date: string | null; last_synced_at: string | null }[]>([])
   const [dateSyncFrom, setDateSyncFrom] = useState(startDate || '')
   const [dateSyncTo, setDateSyncTo] = useState(endDate || '')
+  const [showDateRangePicker, setShowDateRangePicker] = useState(false)
+  const [newLinkAutoSync, setNewLinkAutoSync] = useState(false)
   const [syncing, setSyncing] = useState<number | null>(null)
 
 
@@ -145,10 +147,16 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
   }
 
   const openAlbumPicker = async () => {
-    setDateSyncFrom(startDate || '')
-    setDateSyncTo(endDate || '')
+    setNewLinkAutoSync(false)
     setShowAlbumPicker(true)
     await loadAlbums(selectedProvider)
+  }
+
+  const openDateRangePicker = () => {
+    setDateSyncFrom(startDate || '')
+    setDateSyncTo(endDate || '')
+    setNewLinkAutoSync(false)
+    setShowDateRangePicker(true)
   }
 
   const linkAlbum = async (albumId: string, albumName: string) => {
@@ -168,7 +176,10 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
       // Auto-sync after linking
       const linksRes = await apiClient.get(buildUnifiedUrl('album-links'))
       const newLink = (linksRes.data.links || []).find((l: any) => l.album_id === albumId && l.provider === selectedProvider)
-      if (newLink) await syncAlbum(newLink.id)
+      if (newLink) {
+        await syncAlbum(newLink.id)
+        if (newLinkAutoSync) await toggleAutoSync(newLink.id, 0)
+      }
     } catch { toast.error(t('memories.error.linkAlbum')) }
   }
 
@@ -212,11 +223,14 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
         sync_from_date: dateSyncFrom,
         sync_to_date: dateSyncTo,
       })
-      setShowAlbumPicker(false)
+      setShowDateRangePicker(false)
       await loadAlbumLinks()
       const linksRes = await apiClient.get(buildUnifiedUrl('album-links'))
       const newLink = (linksRes.data.links || []).find((l: any) => l.album_id === albumId && l.provider === selectedProvider)
-      if (newLink) await syncAlbum(newLink.id, selectedProvider)
+      if (newLink) {
+        await syncAlbum(newLink.id, selectedProvider)
+        if (newLinkAutoSync) await toggleAutoSync(newLink.id, 0)
+      }
     } catch { toast.error(t('memories.error.linkAlbum')) }
   }
 
@@ -497,6 +511,57 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
     )
   }
 
+  // ── Date Range Picker Modal ─────────────────────────────────────────────
+
+  if (showDateRangePicker) {
+    const canLink = !!dateSyncFrom && !!dateSyncTo
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', ...font }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-secondary)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CalendarRange size={15} /> {t('memories.dateSyncLabel')}
+            </h3>
+            <button onClick={() => setShowDateRangePicker(false)}
+              style={{ padding: '7px 14px', borderRadius: 10, border: '1px solid var(--border-primary)', background: 'none', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--text-muted)' }}>
+              {t('common.cancel')}
+            </button>
+          </div>
+          <ProviderTabs />
+        </div>
+        <div style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>From</div>
+            <input type="date" value={dateSyncFrom} onChange={e => setDateSyncFrom(e.target.value)}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>To</div>
+            <input type="date" value={dateSyncTo} onChange={e => setDateSyncTo(e.target.value)}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box' }} />
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)', userSelect: 'none' }}>
+            <input type="checkbox" checked={newLinkAutoSync} onChange={e => setNewLinkAutoSync(e.target.checked)} style={{ cursor: 'pointer', width: 14, height: 14 }} />
+            <Timer size={13} color={newLinkAutoSync ? 'var(--text-primary)' : 'var(--text-faint)'} />
+            {t('memories.enableAutoSync')}
+          </label>
+        </div>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-secondary)', flexShrink: 0 }}>
+          <button onClick={linkDateRange} disabled={!canLink}
+            style={{
+              width: '100%', padding: '10px', borderRadius: 10, border: 'none', fontSize: 13, fontWeight: 600,
+              cursor: canLink ? 'pointer' : 'default', fontFamily: 'inherit',
+              background: canLink ? 'var(--text-primary)' : 'var(--border-primary)',
+              color: canLink ? 'var(--bg-primary)' : 'var(--text-faint)',
+            }}>
+            <Link2 size={13} style={{ display: 'inline', verticalAlign: '-2px', marginRight: 6 }} />
+            {t('memories.linkDateRange')}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   // ── Album Picker Modal ──────────────────────────────────────────────────
 
   if (showAlbumPicker) {
@@ -557,32 +622,13 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
               })}
             </div>
           )}
-
-          {/* Date-range sync section */}
-          <div style={{ marginTop: 16, padding: '14px', borderRadius: 10, border: '1px solid var(--border-secondary)', background: 'var(--bg-tertiary)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
-              <CalendarRange size={13} />
-              {t('memories.addDateSync')}
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <input type="date" value={dateSyncFrom} onChange={e => setDateSyncFrom(e.target.value)}
-                style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'inherit', flex: 1, minWidth: 120 }} />
-              <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>–</span>
-              <input type="date" value={dateSyncTo} onChange={e => setDateSyncTo(e.target.value)}
-                style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'inherit', flex: 1, minWidth: 120 }} />
-              <button onClick={linkDateRange} disabled={!dateSyncFrom || !dateSyncTo}
-                style={{
-                  padding: '6px 14px', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 600,
-                  cursor: dateSyncFrom && dateSyncTo ? 'pointer' : 'default', fontFamily: 'inherit',
-                  background: dateSyncFrom && dateSyncTo ? 'var(--text-primary)' : 'var(--border-primary)',
-                  color: dateSyncFrom && dateSyncTo ? 'var(--bg-primary)' : 'var(--text-faint)',
-                  whiteSpace: 'nowrap',
-                }}>
-                <Link2 size={11} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 5 }} />
-                {t('memories.linkAlbum')}
-              </button>
-            </div>
-          </div>
+        </div>
+        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-secondary)', flexShrink: 0 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', userSelect: 'none' }}>
+            <input type="checkbox" checked={newLinkAutoSync} onChange={e => setNewLinkAutoSync(e.target.checked)} style={{ cursor: 'pointer', width: 13, height: 13 }} />
+            <Timer size={12} color={newLinkAutoSync ? 'var(--text-primary)' : 'var(--text-faint)'} />
+            {t('memories.enableAutoSync')}
+          </label>
         </div>
       </div>
     )
@@ -793,6 +839,14 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
                   fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
                 }}>
                 <Link2 size={13} /> {t('memories.linkAlbum')}
+              </button>
+              <button onClick={openDateRangePicker}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 10,
+                  border: '1px solid var(--border-primary)', background: 'none', color: 'var(--text-muted)',
+                  fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+                }}>
+                <CalendarRange size={13} /> {t('memories.linkDateRange')}
               </button>
               <button onClick={openPicker}
                 style={{

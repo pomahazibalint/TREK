@@ -1435,6 +1435,7 @@ const de: Record<string, string | { name: string; category: string }[]> = {
   'memories.noAlbums': 'Keine Alben gefunden',
   'memories.syncAlbum': 'Album synchronisieren',
   'memories.unlinkAlbum': 'Album trennen',
+  'memories.linkDateRange': 'Datumsbereich verknüpfen',
   'memories.enableAutoSync': 'Auto-Sync aktivieren',
   'memories.disableAutoSync': 'Auto-Sync deaktivieren',
   'memories.addDateSync': 'Datumssync hinzufügen',

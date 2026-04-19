@@ -1433,6 +1433,7 @@ const nl: Record<string, string | { name: string; category: string }[]> = {
   'memories.noAlbums': 'Geen albums gevonden',
   'memories.syncAlbum': 'Album synchroniseren',
   'memories.unlinkAlbum': 'Ontkoppelen',
+  'memories.linkDateRange': 'Datumbereik koppelen',
   'memories.enableAutoSync': 'Auto-sync inschakelen',
   'memories.disableAutoSync': 'Auto-sync uitschakelen',
   'memories.addDateSync': 'Datumsynchronisatie toevoegen',

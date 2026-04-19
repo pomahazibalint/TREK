@@ -1386,6 +1386,7 @@ const es: Record<string, string | { name: string; category: string }[]> = {
   'memories.noAlbums': 'No se encontraron álbumes',
   'memories.syncAlbum': 'Sincronizar álbum',
   'memories.unlinkAlbum': 'Desvincular',
+  'memories.linkDateRange': 'Vincular rango de fechas',
   'memories.enableAutoSync': 'Activar sincronización automática',
   'memories.disableAutoSync': 'Desactivar sincronización automática',
   'memories.addDateSync': 'Añadir sincronización por fecha',

@@ -1433,6 +1433,7 @@ const ru: Record<string, string | { name: string; category: string }[]> = {
   'memories.noAlbums': 'Альбомы не найдены',
   'memories.syncAlbum': 'Синхронизировать',
   'memories.unlinkAlbum': 'Отвязать',
+  'memories.linkDateRange': 'Связать диапазон дат',
   'memories.enableAutoSync': 'Включить авто-синхронизацию',
   'memories.disableAutoSync': 'Отключить авто-синхронизацию',
   'memories.addDateSync': 'Добавить синхронизацию по датам',

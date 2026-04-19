@@ -1433,6 +1433,7 @@ const zh: Record<string, string | { name: string; category: string }[]> = {
   'memories.noAlbums': '未找到相册',
   'memories.syncAlbum': '同步相册',
   'memories.unlinkAlbum': '取消关联',
+  'memories.linkDateRange': '关联日期范围',
   'memories.enableAutoSync': '启用自动同步',
   'memories.disableAutoSync': '禁用自动同步',
   'memories.addDateSync': '添加日期同步',
