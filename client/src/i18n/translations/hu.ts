@@ -1503,6 +1503,7 @@ const hu: Record<string, string | { name: string; category: string }[]> = {
   'memories.syncAlbum': 'Album szinkronizálása',
   'memories.unlinkAlbum': 'Leválasztás',
   'memories.linkDateRange': 'Dátumtartomány csatolása',
+  'memories.preview': 'Előnézet',
   'memories.enableAutoSync': 'Automatikus szinkronizálás bekapcsolása',
   'memories.disableAutoSync': 'Automatikus szinkronizálás kikapcsolása',
   'memories.addDateSync': 'Dátum-szinkronizálás hozzáadása',

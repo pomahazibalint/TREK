@@ -1434,6 +1434,7 @@ const nl: Record<string, string | { name: string; category: string }[]> = {
   'memories.syncAlbum': 'Album synchroniseren',
   'memories.unlinkAlbum': 'Ontkoppelen',
   'memories.linkDateRange': 'Datumbereik koppelen',
+  'memories.preview': 'Voorbeeld',
   'memories.enableAutoSync': 'Auto-sync inschakelen',
   'memories.disableAutoSync': 'Auto-sync uitschakelen',
   'memories.addDateSync': 'Datumsynchronisatie toevoegen',

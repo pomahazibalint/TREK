@@ -1538,6 +1538,7 @@ const pl: Record<string, string | { name: string; category: string }[]> = {
   'memories.syncAlbum': 'Synchronizuj album',
   'memories.unlinkAlbum': 'Odłącz album',
   'memories.linkDateRange': 'Połącz zakres dat',
+  'memories.preview': 'Podgląd',
   'memories.enableAutoSync': 'Włącz automatyczną synchronizację',
   'memories.disableAutoSync': 'Wyłącz automatyczną synchronizację',
   'memories.addDateSync': 'Dodaj synchronizację dat',

@@ -1495,6 +1495,7 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'memories.syncAlbum': 'Sync album',
   'memories.unlinkAlbum': 'Unlink album',
   'memories.linkDateRange': 'Link date range',
+  'memories.preview': 'Preview',
   'memories.enableAutoSync': 'Enable auto-sync',
   'memories.disableAutoSync': 'Disable auto-sync',
   'memories.addDateSync': 'Add date sync',

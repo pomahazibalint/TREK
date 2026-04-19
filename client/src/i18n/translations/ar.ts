@@ -1438,6 +1438,7 @@ const ar: Record<string, string | { name: string; category: string }[]> = {
   'memories.syncAlbum': 'مزامنة الألبوم',
   'memories.unlinkAlbum': 'إلغاء الربط',
   'memories.linkDateRange': 'ربط نطاق التاريخ',
+  'memories.preview': 'معاينة',
   'memories.enableAutoSync': 'تفعيل المزامنة التلقائية',
   'memories.disableAutoSync': 'تعطيل المزامنة التلقائية',
   'memories.addDateSync': 'إضافة مزامنة بالتاريخ',

@@ -84,12 +84,14 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
 
   // Album linking
   const [showAlbumPicker, setShowAlbumPicker] = useState(false)
-  const [albums, setAlbums] = useState<{ id: string; albumName: string; assetCount: number }[]>([])
+  const [albums, setAlbums] = useState<{ id: string; albumName: string; assetCount: number; albumThumbnailAssetId?: string }[]>([])
   const [albumsLoading, setAlbumsLoading] = useState(false)
   const [albumLinks, setAlbumLinks] = useState<{ id: number; provider: string; album_id: string; album_name: string; user_id: number; username: string; sync_enabled: number; auto_sync: number; sync_type: string; sync_from_date: string | null; sync_to_date: string | null; last_synced_at: string | null }[]>([])
   const [dateSyncFrom, setDateSyncFrom] = useState(startDate || '')
   const [dateSyncTo, setDateSyncTo] = useState(endDate || '')
   const [showDateRangePicker, setShowDateRangePicker] = useState(false)
+  const [dateRangePreview, setDateRangePreview] = useState<Asset[]>([])
+  const [dateRangePreviewLoading, setDateRangePreviewLoading] = useState(false)
   const [newLinkAutoSync, setNewLinkAutoSync] = useState(false)
   const [syncing, setSyncing] = useState<number | null>(null)
 
@@ -156,8 +158,29 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
     setDateSyncFrom(startDate || '')
     setDateSyncTo(endDate || '')
     setNewLinkAutoSync(false)
+    setDateRangePreview([])
     setShowDateRangePicker(true)
   }
+
+  const loadDateRangePreview = async (from: string, to: string) => {
+    if (!from || !to || !selectedProvider) return
+    setDateRangePreviewLoading(true)
+    try {
+      const res = await apiClient.post(buildProviderUrl(selectedProvider, 'search'), { from, to })
+      const assets: Asset[] = (res.data.assets || []).slice(0, 6).map((a: Asset) => ({ ...a, provider: selectedProvider }))
+      setDateRangePreview(assets)
+    } catch {
+      setDateRangePreview([])
+    } finally {
+      setDateRangePreviewLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!showDateRangePicker) return
+    const timer = setTimeout(() => loadDateRangePreview(dateSyncFrom, dateSyncTo), 400)
+    return () => clearTimeout(timer)
+  }, [showDateRangePicker, dateSyncFrom, dateSyncTo, selectedProvider])
 
   const linkAlbum = async (albumId: string, albumName: string) => {
     if (!selectedProvider) {
@@ -540,6 +563,29 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
             <input type="date" value={dateSyncTo} onChange={e => setDateSyncTo(e.target.value)}
               style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box' }} />
           </div>
+          {(dateRangePreviewLoading || dateRangePreview.length > 0) && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>{t('memories.preview')}</div>
+              {dateRangePreviewLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 80 }}>
+                  <div style={{ width: 20, height: 20, border: '2px solid var(--border-primary)', borderTopColor: 'var(--text-primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+                  {dateRangePreview.map(asset => (
+                    <div key={asset.id} style={{ aspectRatio: '1', borderRadius: 6, overflow: 'hidden', background: 'var(--bg-tertiary)' }}>
+                      <ProviderImg
+                        baseUrl={`${ADDON_PREFIX}/${asset.provider}/assets/${tripId}/${asset.id}/${currentUser?.id}/thumbnail`}
+                        provider={asset.provider}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        loading="lazy"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)', userSelect: 'none' }}>
             <input type="checkbox" checked={newLinkAutoSync} onChange={e => setNewLinkAutoSync(e.target.checked)} style={{ cursor: 'pointer', width: 14, height: 14 }} />
             <Timer size={13} color={newLinkAutoSync ? 'var(--text-primary)' : 'var(--text-faint)'} />
@@ -597,7 +643,7 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
                   <button key={album.id} onClick={() => !isLinked && linkAlbum(album.id, album.albumName)}
                     disabled={isLinked}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '12px 14px',
+                      display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '8px 10px',
                       borderRadius: 10, border: 'none', cursor: isLinked ? 'default' : 'pointer',
                       background: isLinked ? 'var(--bg-tertiary)' : 'transparent', fontFamily: 'inherit', textAlign: 'left',
                       opacity: isLinked ? 0.5 : 1,
@@ -605,10 +651,21 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
                     onMouseEnter={e => { if (!isLinked) e.currentTarget.style.background = 'var(--bg-hover)' }}
                     onMouseLeave={e => { if (!isLinked) e.currentTarget.style.background = 'transparent' }}
                   >
-                    <FolderOpen size={20} color="var(--text-muted)" />
+                    <div style={{ width: 56, height: 56, borderRadius: 8, overflow: 'hidden', background: 'var(--bg-tertiary)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {album.albumThumbnailAssetId ? (
+                        <ProviderImg
+                          baseUrl={`${ADDON_PREFIX}/${selectedProvider}/assets/${tripId}/${album.albumThumbnailAssetId}/${currentUser?.id}/thumbnail`}
+                          provider={selectedProvider}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          loading="lazy"
+                        />
+                      ) : (
+                        <FolderOpen size={22} color="var(--text-muted)" />
+                      )}
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{album.albumName}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 1 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
                         {album.assetCount} {t('memories.photos')}
                       </div>
                     </div>

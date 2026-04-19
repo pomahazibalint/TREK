@@ -1388,6 +1388,7 @@ const zhTw: Record<string, string | { name: string; category: string }[]> = {
   'memories.syncAlbum': '同步相簿',
   'memories.unlinkAlbum': '取消關聯',
   'memories.linkDateRange': '關聯日期範圍',
+  'memories.preview': '預覽',
   'memories.enableAutoSync': '啟用自動同步',
   'memories.disableAutoSync': '停用自動同步',
   'memories.addDateSync': '新增日期同步',

@@ -1433,6 +1433,7 @@ const cs: Record<string, string | { name: string; category: string }[]> = {
   'memories.syncAlbum': 'Synchronizovat album',
   'memories.unlinkAlbum': 'Odpojit',
   'memories.linkDateRange': 'Propojit rozsah dat',
+  'memories.preview': 'Náhled',
   'memories.enableAutoSync': 'Povolit automatickou synchronizaci',
   'memories.disableAutoSync': 'Zakázat automatickou synchronizaci',
   'memories.addDateSync': 'Přidat synchronizaci dat',
