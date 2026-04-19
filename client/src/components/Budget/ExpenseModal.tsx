@@ -95,17 +95,13 @@ export default function ExpenseModal({
 
   type MemberRow = { user_id: number; owed: number; paid: number }
   const initRows = useCallback((): MemberRow[] => {
-    const rate = (item?.currency !== tripCurrency && item?.exchange_rate) ? item.exchange_rate : 1
-    const storedIsForeign = item?.currency !== tripCurrency
     if (!item || !item.members?.length) return tripMembers.map(m => ({ user_id: m.id, owed: 0, paid: 0 }))
     const rowsByUser = new Map(item.members.map(m => [m.user_id, m]))
     return tripMembers.map(m => {
       const stored = rowsByUser.get(m.id)
-      const o = stored?.amount_owed_ref || 0
-      const p = stored?.amount_paid_ref || 0
-      return { user_id: m.id, owed: storedIsForeign ? Math.round(o / rate * 100) / 100 : o, paid: storedIsForeign ? Math.round(p / rate * 100) / 100 : p }
+      return { user_id: m.id, owed: stored?.amount_owed ?? 0, paid: stored?.amount_paid ?? 0 }
     })
-  }, [item, tripMembers, tripCurrency])
+  }, [item, tripMembers])
 
   const [rows, setRows] = useState<MemberRow[]>(initRows)
 

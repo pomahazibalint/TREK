@@ -941,6 +941,21 @@ function runMigrations(db: Database.Database): void {
         END;
       `);
     },
+    // Migration 84: Store original item-currency amounts on budget_item_members and budget_items
+    () => {
+      try { db.exec('ALTER TABLE budget_item_members ADD COLUMN amount_owed REAL NOT NULL DEFAULT 0'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec('ALTER TABLE budget_item_members ADD COLUMN amount_paid REAL NOT NULL DEFAULT 0'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec('ALTER TABLE budget_items ADD COLUMN tip REAL NOT NULL DEFAULT 0'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+
+      // Backfill: reverse-convert ref amounts using stored exchange rate
+      db.exec(`
+        UPDATE budget_item_members
+        SET
+          amount_owed = ROUND(amount_owed_ref / COALESCE((SELECT exchange_rate FROM budget_items WHERE id = budget_item_id), 1) * 100) / 100,
+          amount_paid = ROUND(amount_paid_ref / COALESCE((SELECT exchange_rate FROM budget_items WHERE id = budget_item_id), 1) * 100) / 100
+      `);
+      db.exec(`UPDATE budget_items SET tip = ROUND(tip_ref / COALESCE(exchange_rate, 1) * 100) / 100`);
+    },
   ];
 
   if (currentVersion < migrations.length) {

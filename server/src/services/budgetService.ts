@@ -16,7 +16,7 @@ export function verifyTripAccess(tripId: string | number, userId: number) {
 
 function loadItemMembers(itemId: number | string) {
   return db.prepare(`
-    SELECT bm.user_id, bm.amount_owed_ref, bm.amount_paid_ref, u.username, u.avatar
+    SELECT bm.user_id, bm.amount_owed, bm.amount_paid, bm.amount_owed_ref, bm.amount_paid_ref, u.username, u.avatar
     FROM budget_item_members bm
     JOIN users u ON bm.user_id = u.id
     WHERE bm.budget_item_id = ?
@@ -37,7 +37,7 @@ export function listBudgetItems(tripId: string | number) {
 
   if (itemIds.length > 0) {
     const allMembers = db.prepare(`
-      SELECT bm.budget_item_id, bm.user_id, bm.amount_owed_ref, bm.amount_paid_ref, u.username, u.avatar
+      SELECT bm.budget_item_id, bm.user_id, bm.amount_owed, bm.amount_paid, bm.amount_owed_ref, bm.amount_paid_ref, u.username, u.avatar
       FROM budget_item_members bm
       JOIN users u ON bm.user_id = u.id
       WHERE bm.budget_item_id IN (${itemIds.map(() => '?').join(',')})
@@ -92,8 +92,8 @@ export async function createBudgetItem(
 
   const result = db.prepare(
     `INSERT INTO budget_items
-      (trip_id, category, name, total_price, currency, total_price_ref, exchange_rate, tip_ref, note, sort_order, expense_date)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      (trip_id, category, name, total_price, currency, total_price_ref, exchange_rate, tip, tip_ref, note, sort_order, expense_date)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     tripId,
     data.category || 'Other',
@@ -102,6 +102,7 @@ export async function createBudgetItem(
     itemCurrency,
     totalPriceRef,
     exchangeRate,
+    0,
     0,
     data.note || null,
     sortOrder,
@@ -180,6 +181,22 @@ export async function updateBudgetItem(
     id,
   );
 
+  // Recalculate member ref amounts from stored originals when the exchange rate changed
+  if (hasRateUpdate) {
+    const effectiveNewRate = (exchangeRate as number | null) ?? 1;
+    const members = db.prepare('SELECT user_id, amount_owed, amount_paid FROM budget_item_members WHERE budget_item_id = ?').all(id) as { user_id: number; amount_owed: number; amount_paid: number }[];
+    const update = db.prepare('UPDATE budget_item_members SET amount_owed_ref = ?, amount_paid_ref = ? WHERE budget_item_id = ? AND user_id = ?');
+    db.transaction(() => {
+      for (const m of members) {
+        const owedRef = Math.round(m.amount_owed * effectiveNewRate * 100) / 100;
+        const paidRef = Math.round(m.amount_paid * effectiveNewRate * 100) / 100;
+        update.run(owedRef, paidRef, id, m.user_id);
+      }
+      const newTipRef = Math.round(item.tip * effectiveNewRate * 100) / 100;
+      db.prepare('UPDATE budget_items SET tip_ref = ? WHERE id = ?').run(newTipRef, id);
+    })();
+  }
+
   const updated = db.prepare('SELECT * FROM budget_items WHERE id = ?').get(id) as BudgetItem & { members?: BudgetItemMember[] };
   updated.members = loadItemMembers(id);
   return updated;
@@ -213,23 +230,25 @@ export function updateMemberOwed(
     return { error: 'Owed amounts plus tip must sum to the total expense value' };
   }
 
-  const tip_ref = Math.round((tip || 0) * rate * 100) / 100;
+  const tipValue = tip || 0;
+  const tip_ref = Math.round(tipValue * rate * 100) / 100;
 
   db.transaction(() => {
-    // Preserve existing amount_paid_ref values
-    const existing = db.prepare('SELECT user_id, amount_paid_ref FROM budget_item_members WHERE budget_item_id = ?').all(id) as { user_id: number; amount_paid_ref: number }[];
-    const paidByUser: Record<number, number> = {};
-    for (const e of existing) paidByUser[e.user_id] = e.amount_paid_ref;
+    // Preserve existing paid values
+    const existing = db.prepare('SELECT user_id, amount_paid, amount_paid_ref FROM budget_item_members WHERE budget_item_id = ?').all(id) as { user_id: number; amount_paid: number; amount_paid_ref: number }[];
+    const paidByUser: Record<number, { amount_paid: number; amount_paid_ref: number }> = {};
+    for (const e of existing) paidByUser[e.user_id] = { amount_paid: e.amount_paid, amount_paid_ref: e.amount_paid_ref };
 
     db.prepare('DELETE FROM budget_item_members WHERE budget_item_id = ?').run(id);
 
-    const insert = db.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, amount_owed_ref, amount_paid_ref) VALUES (?, ?, ?, ?)');
+    const insert = db.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, amount_owed, amount_owed_ref, amount_paid, amount_paid_ref) VALUES (?, ?, ?, ?, ?, ?)');
     for (const m of members) {
       const amount_owed_ref = Math.round((m.amount_owed || 0) * rate * 100) / 100;
-      insert.run(id, m.user_id, amount_owed_ref, paidByUser[m.user_id] || 0);
+      const prev = paidByUser[m.user_id];
+      insert.run(id, m.user_id, m.amount_owed || 0, amount_owed_ref, prev?.amount_paid || 0, prev?.amount_paid_ref || 0);
     }
 
-    db.prepare('UPDATE budget_items SET tip_ref = ? WHERE id = ?').run(tip_ref, id);
+    db.prepare('UPDATE budget_items SET tip = ?, tip_ref = ? WHERE id = ?').run(tipValue, tip_ref, id);
   })();
 
   const updatedMembers = loadItemMembers(id).map(m => ({ ...m, avatar_url: avatarUrl(m) }));
@@ -257,14 +276,22 @@ export function updateMemberPayments(
     return { error: 'Paid amounts must sum to the total expense value, or all be zero' };
   }
 
+  const existingMemberIds = new Set(
+    (db.prepare('SELECT user_id FROM budget_item_members WHERE budget_item_id = ?').all(id) as { user_id: number }[]).map(r => r.user_id)
+  );
+  const unknownPayers = payments.filter(p => Number(p.amount_paid) > 0.001 && !existingMemberIds.has(p.user_id));
+  if (unknownPayers.length > 0) {
+    return { error: 'Payer is not in the owed-amounts list for this expense' };
+  }
+
   const upsert = db.prepare(`
-    INSERT INTO budget_item_members (budget_item_id, user_id, amount_owed_ref, amount_paid_ref)
-    VALUES (?, ?, 0, ?)
-    ON CONFLICT(budget_item_id, user_id) DO UPDATE SET amount_paid_ref = excluded.amount_paid_ref
+    INSERT INTO budget_item_members (budget_item_id, user_id, amount_owed, amount_owed_ref, amount_paid, amount_paid_ref)
+    VALUES (?, ?, 0, 0, ?, ?)
+    ON CONFLICT(budget_item_id, user_id) DO UPDATE SET amount_paid = excluded.amount_paid, amount_paid_ref = excluded.amount_paid_ref
   `);
   for (const p of payments) {
     const amount_paid_ref = Math.round((p.amount_paid || 0) * rate * 100) / 100;
-    upsert.run(id, p.user_id, amount_paid_ref);
+    upsert.run(id, p.user_id, p.amount_paid || 0, amount_paid_ref);
   }
 
   const members = loadItemMembers(id).map(m => ({ ...m, avatar_url: avatarUrl(m) }));
@@ -281,7 +308,7 @@ export function calculateSettlement(tripId: string | number) {
 
   const items = db.prepare('SELECT * FROM budget_items WHERE trip_id = ? AND is_draft = 0').all(tripId) as BudgetItem[];
   const allMembers = db.prepare(`
-    SELECT bm.budget_item_id, bm.user_id, bm.amount_owed_ref, bm.amount_paid_ref, u.username, u.avatar
+    SELECT bm.budget_item_id, bm.user_id, bm.amount_owed, bm.amount_paid, bm.amount_owed_ref, bm.amount_paid_ref, u.username, u.avatar
     FROM budget_item_members bm
     JOIN users u ON bm.user_id = u.id
     WHERE bm.budget_item_id IN (SELECT id FROM budget_items WHERE trip_id = ? AND is_draft = 0)
@@ -297,19 +324,34 @@ export function calculateSettlement(tripId: string | number) {
     balance: number;
   }> = {};
 
+  const incomplete: { id: number; name: string; reason: 'no_members' | 'no_owed' | 'no_paid' }[] = [];
+
   for (const item of items) {
     const members = allMembers.filter(m => m.budget_item_id === item.id);
-    if (members.length === 0) continue;
+    if (members.length === 0) {
+      incomplete.push({ id: item.id, name: item.name, reason: 'no_members' });
+      continue;
+    }
 
     const totalOwed = members.reduce((s, m) => s + m.amount_owed_ref, 0);
     const totalPaid = members.reduce((s, m) => s + m.amount_paid_ref, 0);
 
-    // Skip items not yet fully configured on either side
-    if (totalOwed < 0.01 || totalPaid < 0.01) continue;
+    if (totalOwed < 0.01) {
+      incomplete.push({ id: item.id, name: item.name, reason: 'no_owed' });
+      continue;
+    }
+    if (totalPaid < 0.01) {
+      incomplete.push({ id: item.id, name: item.name, reason: 'no_paid' });
+      continue;
+    }
 
-    const tipPerMember = Math.round(((item.tip_ref ?? 0) / members.length) * 100) / 100;
+    const tipRef = item.tip_ref ?? 0;
+    const tipPerMember = Math.round((tipRef / members.length) * 100) / 100;
+    const tipRemainder = Math.round((tipRef - tipPerMember * (members.length - 1)) * 100) / 100;
 
-    for (const m of members) {
+    for (let mi = 0; mi < members.length; mi++) {
+      const m = members[mi];
+      const memberTip = mi === members.length - 1 ? tipRemainder : tipPerMember;
       if (!balances[m.user_id]) {
         balances[m.user_id] = {
           user_id: m.user_id,
@@ -320,7 +362,7 @@ export function calculateSettlement(tripId: string | number) {
           balance: 0,
         };
       }
-      const charged = m.amount_owed_ref + tipPerMember;
+      const charged = m.amount_owed_ref + memberTip;
       balances[m.user_id].total_charged += charged;
       balances[m.user_id].total_paid += m.amount_paid_ref;
       balances[m.user_id].balance -= charged;
@@ -352,8 +394,8 @@ export function calculateSettlement(tripId: string | number) {
         amount: transfer,
       });
     }
-    debtors[di].amount -= transfer;
-    creditors[ci].amount -= transfer;
+    debtors[di].amount = Math.round((debtors[di].amount - transfer) * 100) / 100;
+    creditors[ci].amount = Math.round((creditors[ci].amount - transfer) * 100) / 100;
     if (debtors[di].amount < 0.01) di++;
     if (creditors[ci].amount < 0.01) ci++;
   }
@@ -367,6 +409,7 @@ export function calculateSettlement(tripId: string | number) {
       balance: Math.round(b.balance * 100) / 100,
     })),
     flows,
+    incomplete,
   };
 }
 
@@ -414,12 +457,12 @@ export function createDraftFromAssignment(
     const share = Math.round(price / n * 100) / 100;
     const lastShare = Math.round((price - share * (n - 1)) * 100) / 100;
     const insert = db.prepare(`
-      INSERT INTO budget_item_members (budget_item_id, user_id, amount_owed_ref, amount_paid_ref, synced_amount_owed_ref)
-      VALUES (?, ?, ?, 0, ?)
+      INSERT INTO budget_item_members (budget_item_id, user_id, amount_owed, amount_owed_ref, amount_paid, amount_paid_ref, synced_amount_owed_ref)
+      VALUES (?, ?, ?, ?, 0, 0, ?)
     `);
     memberIds.forEach((uid, i) => {
       const amount = i === n - 1 ? lastShare : share;
-      insert.run(draftId, uid, amount, amount);
+      insert.run(draftId, uid, amount, amount, amount);
     });
   }
 
@@ -466,14 +509,14 @@ export function syncDraftMembers(
   const n = nonEditedIds.length;
 
   const upsert = db.prepare(`
-    INSERT INTO budget_item_members (budget_item_id, user_id, amount_owed_ref, amount_paid_ref, synced_amount_owed_ref)
-    VALUES (?, ?, ?, 0, ?)
-    ON CONFLICT(budget_item_id, user_id) DO UPDATE SET amount_owed_ref = excluded.amount_owed_ref, synced_amount_owed_ref = excluded.synced_amount_owed_ref
+    INSERT INTO budget_item_members (budget_item_id, user_id, amount_owed, amount_owed_ref, amount_paid, amount_paid_ref, synced_amount_owed_ref)
+    VALUES (?, ?, ?, ?, 0, 0, ?)
+    ON CONFLICT(budget_item_id, user_id) DO UPDATE SET amount_owed = excluded.amount_owed, amount_owed_ref = excluded.amount_owed_ref, synced_amount_owed_ref = excluded.synced_amount_owed_ref
   `);
   nonEditedIds.forEach((uid, i) => {
     const share = n > 0 ? Math.round(remaining / n * 100) / 100 : 0;
     const amount = n > 0 && i === n - 1 ? Math.round((remaining - share * (n - 1)) * 100) / 100 : share;
-    upsert.run(draftId, uid, amount, amount);
+    upsert.run(draftId, uid, amount, amount, amount);
   });
 }
 

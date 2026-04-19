@@ -35,14 +35,23 @@ import type { BudgetItem, BudgetItemMember } from '../../../src/types';
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeItem(id: number, total_price: number, trip_id = 1): BudgetItem {
-  return { id, trip_id, name: `Item ${id}`, total_price, category: 'Other' } as BudgetItem;
+  return { id, trip_id, name: `Item ${id}`, total_price, tip: 0, tip_ref: 0, category: 'Other' } as BudgetItem;
 }
 
-function makeMember(budget_item_id: number, user_id: number, paid: boolean | 0 | 1, username: string): BudgetItemMember & { budget_item_id: number } {
+function makeMember(
+  budget_item_id: number,
+  user_id: number,
+  owed: number,
+  paid: number,
+  username: string,
+): BudgetItemMember & { budget_item_id: number } {
   return {
     budget_item_id,
     user_id,
-    paid: paid ? 1 : 0,
+    amount_owed: owed,
+    amount_owed_ref: owed,
+    amount_paid: paid,
+    amount_paid_ref: paid,
     username,
     avatar: null,
   } as BudgetItemMember & { budget_item_id: number };
@@ -97,20 +106,23 @@ describe('calculateSettlement', () => {
     expect(result.flows).toEqual([]);
   });
 
-  it('returns no flows when no one is marked as paid', () => {
+  it('returns no flows when no one has recorded a payment', () => {
+    // owed set, but paid=0 on both → item is incomplete (no_paid), excluded from settlement
     setupDb(
       [makeItem(1, 100)],
-      [makeMember(1, 1, 0, 'alice'), makeMember(1, 2, 0, 'bob')],
+      [makeMember(1, 1, 50, 0, 'alice'), makeMember(1, 2, 50, 0, 'bob')],
     );
     const result = calculateSettlement(1);
     expect(result.flows).toEqual([]);
+    expect(result.incomplete).toHaveLength(1);
+    expect(result.incomplete[0].reason).toBe('no_paid');
   });
 
   it('2 members, 1 payer: payer is owed half, non-payer owes half', () => {
-    // Item: $100. Alice paid, Bob did not. Each owes $50. Alice net: +$50. Bob net: -$50.
+    // Item: $100. Alice paid $100, each owes $50. Alice net: +$50. Bob net: -$50.
     setupDb(
       [makeItem(1, 100)],
-      [makeMember(1, 1, 1, 'alice'), makeMember(1, 2, 0, 'bob')],
+      [makeMember(1, 1, 50, 100, 'alice'), makeMember(1, 2, 50, 0, 'bob')],
     );
     const result = calculateSettlement(1);
     const alice = result.balances.find(b => b.user_id === 1)!;
@@ -124,10 +136,10 @@ describe('calculateSettlement', () => {
   });
 
   it('3 members, 1 payer: correct 3-way split', () => {
-    // Item: $90. Alice paid. Each of 3 owes $30. Alice net: +$60. Bob: -$30. Carol: -$30.
+    // Item: $90. Alice paid $90. Each owes $30. Alice net: +$60. Bob/Carol: -$30 each.
     setupDb(
       [makeItem(1, 90)],
-      [makeMember(1, 1, 1, 'alice'), makeMember(1, 2, 0, 'bob'), makeMember(1, 3, 0, 'carol')],
+      [makeMember(1, 1, 30, 90, 'alice'), makeMember(1, 2, 30, 0, 'bob'), makeMember(1, 3, 30, 0, 'carol')],
     );
     const result = calculateSettlement(1);
     const alice = result.balances.find(b => b.user_id === 1)!;
@@ -140,12 +152,10 @@ describe('calculateSettlement', () => {
   });
 
   it('all paid equally: all balances are zero, no flows', () => {
-    // Item: $60. 3 members, all paid equally (each paid $20, each owes $20). Net: 0.
-    // Actually with "paid" flag it means: paidPerPayer = item.total / numPayers.
-    // If all 3 paid: each gets +20 credit, each owes -20 = net 0 for everyone.
+    // Item: $60. Each of 3 owes $20 and paid $20. Net: 0 for everyone.
     setupDb(
       [makeItem(1, 60)],
-      [makeMember(1, 1, 1, 'alice'), makeMember(1, 2, 1, 'bob'), makeMember(1, 3, 1, 'carol')],
+      [makeMember(1, 1, 20, 20, 'alice'), makeMember(1, 2, 20, 20, 'bob'), makeMember(1, 3, 20, 20, 'carol')],
     );
     const result = calculateSettlement(1);
     for (const b of result.balances) {
@@ -158,7 +168,7 @@ describe('calculateSettlement', () => {
     // Alice paid $100 for 2 people. Bob owes Alice $50.
     setupDb(
       [makeItem(1, 100)],
-      [makeMember(1, 1, 1, 'alice'), makeMember(1, 2, 0, 'bob')],
+      [makeMember(1, 1, 50, 100, 'alice'), makeMember(1, 2, 50, 0, 'bob')],
     );
     const result = calculateSettlement(1);
     const flow = result.flows[0];
@@ -167,10 +177,10 @@ describe('calculateSettlement', () => {
   });
 
   it('amounts are rounded to 2 decimal places', () => {
-    // Item: $10. 3 members, 1 payer. Share = 3.333... Each rounded to 3.33.
+    // Item: $10. 3 members, alice paid. Shares: 3.33, 3.33, 3.34.
     setupDb(
       [makeItem(1, 10)],
-      [makeMember(1, 1, 1, 'alice'), makeMember(1, 2, 0, 'bob'), makeMember(1, 3, 0, 'carol')],
+      [makeMember(1, 1, 3.33, 10, 'alice'), makeMember(1, 2, 3.33, 0, 'bob'), makeMember(1, 3, 3.34, 0, 'carol')],
     );
     const result = calculateSettlement(1);
     for (const b of result.balances) {
@@ -186,14 +196,14 @@ describe('calculateSettlement', () => {
   });
 
   it('2 items with different payers: aggregates balances correctly', () => {
-    // Item 1: $100, Alice paid, [Alice, Bob] (Alice net: +50, Bob: -50)
-    // Item 2: $60, Bob paid, [Alice, Bob] (Bob net: +30, Alice: -30)
-    // Final: Alice: +50 - 30 = +20, Bob: -50 + 30 = -20
+    // Item 1: $100, Alice paid $100, [Alice $50, Bob $50] → Alice +50, Bob -50
+    // Item 2: $60, Bob paid $60, [Alice $30, Bob $30] → Alice -30, Bob +30
+    // Final: Alice +20, Bob -20
     setupDb(
       [makeItem(1, 100), makeItem(2, 60)],
       [
-        makeMember(1, 1, 1, 'alice'), makeMember(1, 2, 0, 'bob'),
-        makeMember(2, 1, 0, 'alice'), makeMember(2, 2, 1, 'bob'),
+        makeMember(1, 1, 50, 100, 'alice'), makeMember(1, 2, 50, 0, 'bob'),
+        makeMember(2, 1, 30, 0, 'alice'), makeMember(2, 2, 30, 60, 'bob'),
       ],
     );
     const result = calculateSettlement(1);

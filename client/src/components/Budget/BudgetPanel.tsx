@@ -163,7 +163,7 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
   const { t, locale } = useTranslation()
   const [newCategoryName, setNewCategoryName] = useState('')
   const [editingCat, setEditingCat] = useState<{ name: string; value: string } | null>(null)
-  const [settlement, setSettlement] = useState<{ settlement_currency: string; balances: any[]; flows: any[] } | null>(null)
+  const [settlement, setSettlement] = useState<{ settlement_currency: string; balances: any[]; flows: any[]; incomplete: { id: number; name: string; reason: string }[] } | null>(null)
   const [settlementOpen, setSettlementOpen] = useState(false)
   const [modal, setModal] = useState<{ item: BudgetItem | null; category: string } | null>(null)
   const [draftModal, setDraftModal] = useState<BudgetItem | null>(null)
@@ -520,6 +520,21 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                     <span style={{ flex: 1, fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.65)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.username}</span>
                     <span style={{ fontSize: 11, fontWeight: 700, color: b.balance > 0 ? '#4ade80' : b.balance < 0 ? '#f87171' : 'rgba(255,255,255,0.4)' }}>
                       {b.balance > 0 ? '+' : ''}{fmtNum(b.balance, locale, settlement.settlement_currency)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Incomplete expenses warning */}
+            {hasMultipleMembers && settlement && settlement.incomplete.length > 0 && (
+              <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 8, background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.25)' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: '#fbbf24', marginBottom: 4 }}>{settlement.incomplete.length} expense{settlement.incomplete.length > 1 ? 's' : ''} excluded from settlement</div>
+                {settlement.incomplete.map(item => (
+                  <div key={item.id} style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'flex', gap: 4 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{item.name}</span>
+                    <span style={{ flexShrink: 0, color: 'rgba(251,191,36,0.6)' }}>
+                      {item.reason === 'no_members' ? 'no split' : item.reason === 'no_owed' ? 'owed not set' : 'payment not recorded'}
                     </span>
                   </div>
                 ))}

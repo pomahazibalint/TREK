@@ -156,6 +156,8 @@ export interface BudgetItem {
 
 export interface BudgetMember {
   user_id: number
+  amount_owed: number
+  amount_paid: number
   amount_owed_ref: number
   amount_paid_ref: number
   username?: string

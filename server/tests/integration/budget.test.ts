@@ -206,7 +206,7 @@ describe('Budget item members', () => {
     const res = await request(app)
       .put(`/api/trips/${trip.id}/budget/${item.id}/members`)
       .set('Cookie', authCookie(user.id))
-      .send({ members: [{ user_id: user.id, amount_owed_ref: 50 }, { user_id: member.id, amount_owed_ref: 50 }], tip_ref: 0 });
+      .send({ members: [{ user_id: user.id, amount_owed: 50 }, { user_id: member.id, amount_owed: 50 }], tip_ref: 0 });
     expect(res.status).toBe(200);
     expect(res.body.members).toBeDefined();
   });
@@ -232,12 +232,12 @@ describe('Budget item members', () => {
     await request(app)
       .put(`/api/trips/${trip.id}/budget/${item.id}/members`)
       .set('Cookie', authCookie(user.id))
-      .send({ members: [{ user_id: user.id, amount_owed_ref: 100 }] });
+      .send({ members: [{ user_id: user.id, amount_owed: 100 }] });
 
     const res = await request(app)
       .put(`/api/trips/${trip.id}/budget/${item.id}/members/payments`)
       .set('Cookie', authCookie(user.id))
-      .send({ payments: [{ user_id: user.id, amount_paid_ref: 100 }] });
+      .send({ payments: [{ user_id: user.id, amount_paid: 100 }] });
     expect(res.status).toBe(200);
     expect(res.body.members).toBeDefined();
   });

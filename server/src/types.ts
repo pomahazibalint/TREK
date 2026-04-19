@@ -127,6 +127,7 @@ export interface BudgetItem {
   currency: string;
   total_price_ref: number | null;
   exchange_rate: number | null;
+  tip: number;
   tip_ref: number;
   note?: string | null;
   sort_order: number;
@@ -139,6 +140,8 @@ export interface BudgetItem {
 
 export interface BudgetItemMember {
   user_id: number;
+  amount_owed: number;
+  amount_paid: number;
   amount_owed_ref: number;
   amount_paid_ref: number;
   username: string;
