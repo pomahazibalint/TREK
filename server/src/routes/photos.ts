@@ -45,13 +45,15 @@ router.get('/', authenticate, (req: Request, res: Response) => {
   if (!access) return res.status(404).json({ error: 'Trip not found' });
 
   const photos = db.prepare(`
-    SELECT id, trip_id, day_id, place_id, filename, original_name, file_size, mime_type,
-           caption, taken_at, latitude, longitude, city, country,
-           camera_make, camera_model, width, height, created_at,
-           '/uploads/photos/' || filename AS url
-    FROM photos
-    WHERE trip_id = ?
-    ORDER BY COALESCE(taken_at, created_at) ASC
+    SELECT p.id, p.trip_id, p.day_id, p.place_id, p.filename, p.original_name, p.file_size, p.mime_type,
+           p.caption, p.taken_at, p.latitude, p.longitude, p.city, p.country,
+           p.camera_make, p.camera_model, p.width, p.height, p.created_at, p.user_id,
+           u.username, u.avatar AS user_avatar,
+           '/uploads/photos/' || p.filename AS url
+    FROM photos p
+    LEFT JOIN users u ON p.user_id = u.id
+    WHERE p.trip_id = ?
+    ORDER BY COALESCE(p.taken_at, p.created_at) ASC
   `).all(tripId);
 
   res.json({ photos });
@@ -77,11 +79,11 @@ router.post('/', authenticate, demoUploadBlock, uploadPhotos.array('photos', 30)
   for (const file of files) {
     const exif = await extractExif(file.path);
     const result = db.prepare(`
-      INSERT INTO photos (trip_id, day_id, place_id, filename, original_name, file_size, mime_type,
+      INSERT INTO photos (trip_id, user_id, day_id, place_id, filename, original_name, file_size, mime_type,
                           caption, taken_at, latitude, longitude, camera_make, camera_model, width, height)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      tripId, dayId, placeId,
+      tripId, authReq.user.id, dayId, placeId,
       file.filename, file.originalname, file.size, file.mimetype,
       caption, exif.takenAt,
       exif.latitude, exif.longitude,
@@ -92,17 +94,15 @@ router.post('/', authenticate, demoUploadBlock, uploadPhotos.array('photos', 30)
   }
 
   // Return immediately — geocoding happens async
-  res.json({
-    photos: inserted.map(p => ({
-      ...db.prepare(`
-        SELECT id, trip_id, day_id, place_id, filename, original_name, file_size, mime_type,
-               caption, taken_at, latitude, longitude, city, country,
-               camera_make, camera_model, width, height, created_at,
-               '/uploads/photos/' || filename AS url
-        FROM photos WHERE id = ?
-      `).get(p.id),
-    })),
-  });
+  const photoSelect = db.prepare(`
+    SELECT p.id, p.trip_id, p.day_id, p.place_id, p.filename, p.original_name, p.file_size, p.mime_type,
+           p.caption, p.taken_at, p.latitude, p.longitude, p.city, p.country,
+           p.camera_make, p.camera_model, p.width, p.height, p.created_at, p.user_id,
+           u.username, u.avatar AS user_avatar,
+           '/uploads/photos/' || p.filename AS url
+    FROM photos p LEFT JOIN users u ON p.user_id = u.id WHERE p.id = ?
+  `);
+  res.json({ photos: inserted.map(p => photoSelect.get(p.id)) });
 
   // Geocode in background, sequentially to respect rate limit
   setImmediate(async () => {
@@ -141,11 +141,12 @@ router.put('/:photoId', authenticate, (req: Request, res: Response) => {
 
   db.prepare(`UPDATE photos SET ${updates.join(', ')} WHERE id = ?`).run(...values);
   const updated = db.prepare(`
-    SELECT id, trip_id, day_id, place_id, filename, original_name, file_size, mime_type,
-           caption, taken_at, latitude, longitude, city, country,
-           camera_make, camera_model, width, height, created_at,
-           '/uploads/photos/' || filename AS url
-    FROM photos WHERE id = ?
+    SELECT p.id, p.trip_id, p.day_id, p.place_id, p.filename, p.original_name, p.file_size, p.mime_type,
+           p.caption, p.taken_at, p.latitude, p.longitude, p.city, p.country,
+           p.camera_make, p.camera_model, p.width, p.height, p.created_at, p.user_id,
+           u.username, u.avatar AS user_avatar,
+           '/uploads/photos/' || p.filename AS url
+    FROM photos p LEFT JOIN users u ON p.user_id = u.id WHERE p.id = ?
   `).get(photoId);
 
   res.json({ photo: updated });

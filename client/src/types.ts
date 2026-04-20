@@ -346,6 +346,9 @@ export interface Photo {
   camera_model: string | null
   width: number | null
   height: number | null
+  user_id: number | null
+  username: string | null
+  user_avatar: string | null
   created_at: string
   url?: string
 }
