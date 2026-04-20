@@ -34,8 +34,8 @@ export const TRIP_SELECT = `
     CASE WHEN
       t.start_date IS NOT NULL
       AND t.start_date > date('now')
-      AND CAST(julianday(t.start_date) - julianday('now') AS INTEGER) <= 7
-    THEN CAST(julianday(t.start_date) - julianday('now') AS INTEGER)
+      AND CAST(julianday(t.start_date) - julianday(date('now')) AS INTEGER) <= 7
+    THEN CAST(julianday(t.start_date) - julianday(date('now')) AS INTEGER)
     ELSE NULL END as upcoming_days
   FROM trips t
   JOIN users u ON u.id = t.user_id
