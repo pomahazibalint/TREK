@@ -8,12 +8,14 @@ import type { Photo, Place, Day, Assignment } from '../../types'
 
 interface PhotoGalleryProps {
   photos: Photo[]
-  onUpload: (fd: FormData) => Promise<void>
-  onDelete: (photoId: number) => Promise<void>
-  onUpdate: (photoId: number, data: Partial<Photo>) => Promise<void>
+  onUpload?: (fd: FormData) => Promise<void>
+  onDelete?: (photoId: number) => Promise<void>
+  onUpdate?: (photoId: number, data: Partial<Photo>) => Promise<void>
   places: Place[]
   days: Day[]
   tripId: number
+  onPhotoClick?: (photo: Photo) => void
+  headerActions?: React.ReactNode
 }
 
 // ── Data helpers ─────────────────────────────────────────────────────────────
@@ -64,6 +66,7 @@ interface Section {
 
 function buildSections(photos: Photo[], days: Day[]): Section[] {
   const dayById = new Map(days.map(d => [d.id, d]))
+  const dayByDate = new Map(days.filter(d => d.date).map(d => [d.date, d]))
   const sections = new Map<string, Section>()
 
   // Preserve trip day order — create sections for all days upfront (empty ones too)
@@ -80,7 +83,10 @@ function buildSections(photos: Photo[], days: Day[]): Section[] {
       sections.get(`day-${p.day_id}`)!.photos.push(p)
     } else {
       const date = photoDate(p)
-      if (date) {
+      if (date && dayByDate.has(date)) {
+        // Photo date matches a trip day — put it in that day's section
+        sections.get(`day-${dayByDate.get(date)!.id}`)!.photos.push(p)
+      } else if (date) {
         if (!dateGroups.has(date)) dateGroups.set(date, { key: `date-${date}`, type: 'date-group', date, photos: [] })
         dateGroups.get(date)!.photos.push(p)
       } else {
@@ -399,7 +405,7 @@ function TimelineDaySection({ section, expanded, onToggle, filteredPhotos, place
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, places, days, tripId }: PhotoGalleryProps) {
+export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, places, days, tripId, onPhotoClick: onPhotoClickProp, headerActions }: PhotoGalleryProps) {
   const { t, language } = useTranslation()
   const locale = getLocaleForLanguage(language)
 
@@ -441,8 +447,8 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
     })
   }, [filteredPhotos, allSections, days])
 
-  // For lightbox: use flat filtered array
   const handlePhotoClick = (photo: Photo) => {
+    if (onPhotoClickProp) { onPhotoClickProp(photo); return }
     const idx = filteredPhotos.findIndex(p => p.id === photo.id)
     setLightboxIndex(idx >= 0 ? idx : null)
   }
@@ -529,11 +535,14 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
           ))}
         </div>
 
-        <button onClick={() => setShowUpload(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--accent)', color: 'var(--accent-text)', padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
-        >
-          <Upload size={14} /> {t('common.upload')}
-        </button>
+        {headerActions}
+        {onUpload && (
+          <button onClick={() => setShowUpload(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--accent)', color: 'var(--accent-text)', padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+          >
+            <Upload size={14} /> {t('common.upload')}
+          </button>
+        )}
       </div>
 
       {/* Filter bar */}
@@ -656,8 +665,8 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
         )}
       </div>
 
-      {/* Lightbox */}
-      {lightboxIndex !== null && (
+      {/* Lightbox — only for direct upload photos (provider photos use their own lightbox) */}
+      {lightboxIndex !== null && !onPhotoClickProp && onDelete && onUpdate && (
         <PhotoLightbox
           photos={filteredPhotos}
           initialIndex={lightboxIndex}
@@ -671,15 +680,17 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
       )}
 
       {/* Upload modal */}
-      <Modal isOpen={showUpload} onClose={() => setShowUpload(false)} title={t('common.upload')} size="lg">
-        <PhotoUpload
-          tripId={tripId}
-          days={days}
-          places={places}
-          onUpload={async fd => { await onUpload(fd); setShowUpload(false) }}
-          onClose={() => setShowUpload(false)}
-        />
-      </Modal>
+      {onUpload && (
+        <Modal isOpen={showUpload} onClose={() => setShowUpload(false)} title={t('common.upload')} size="lg">
+          <PhotoUpload
+            tripId={tripId}
+            days={days}
+            places={places}
+            onUpload={async fd => { await onUpload(fd); setShowUpload(false) }}
+            onClose={() => setShowUpload(false)}
+          />
+        </Modal>
+      )}
     </div>
   )
 }

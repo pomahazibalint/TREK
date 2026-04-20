@@ -1070,7 +1070,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
 
         {activeTab === 'memories' && (
           <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-            <MemoriesPanel tripId={Number(tripId)} startDate={trip?.start_date || null} endDate={trip?.end_date || null} />
+            <MemoriesPanel tripId={Number(tripId)} startDate={trip?.start_date || null} endDate={trip?.end_date || null} days={days} places={places} />
           </div>
         )}
 

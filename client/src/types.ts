@@ -351,6 +351,9 @@ export interface Photo {
   user_avatar: string | null
   created_at: string
   url?: string
+  // provider photos (Immich/Synology) adapted to this shape
+  provider?: string
+  asset_id?: string
 }
 
 // Atlas place detail

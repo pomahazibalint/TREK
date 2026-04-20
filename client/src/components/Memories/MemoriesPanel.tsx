@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import apiClient, { addonsApi } from '../../api/client'
-import { Camera, Plus, Share2, EyeOff, Eye, X, Check, Search, ArrowUpDown, MapPin, Filter, Link2, RefreshCw, Unlink, FolderOpen, Info, ChevronLeft, ChevronRight, CalendarRange, Timer } from 'lucide-react'
+import { Camera, Plus, Share2, EyeOff, Eye, X, Check, Search, ArrowUpDown, MapPin, Filter, Link2, RefreshCw, Unlink, FolderOpen, Info, ChevronLeft, ChevronRight, CalendarRange, Timer, Settings } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useTranslation } from '../../i18n'
 import { fetchImageAsBlob, clearImageQueue } from '../../api/authUrl'
 import { useToast } from '../shared/Toast'
+import PhotoGallery from '../Photos/PhotoGallery'
+import type { Photo, Day, Place } from '../../types'
 
 interface PhotoProvider {
   id: string
@@ -34,9 +36,12 @@ interface TripPhoto {
   provider: string
   user_id: number
   username: string
+  avatar?: string | null
   shared: number
   added_at: string
   city?: string | null
+  country?: string | null
+  taken_at?: string | null
 }
 
 interface Asset {
@@ -51,11 +56,44 @@ interface MemoriesPanelProps {
   tripId: number
   startDate: string | null
   endDate: string | null
+  days?: Day[]
+  places?: Place[]
 }
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
-export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPanelProps) {
+function adaptToPhoto(p: TripPhoto, tripId: number, idx: number): Photo {
+  return {
+    id: -(idx + 1),
+    trip_id: tripId,
+    filename: p.asset_id,
+    original_name: p.asset_id,
+    mime_type: 'image/jpeg',
+    size: 0,
+    file_size: null,
+    caption: null,
+    place_id: null,
+    day_id: null,
+    taken_at: p.taken_at || null,
+    latitude: null,
+    longitude: null,
+    city: p.city || null,
+    country: p.country || null,
+    camera_make: null,
+    camera_model: null,
+    width: null,
+    height: null,
+    user_id: p.user_id,
+    username: p.username,
+    user_avatar: p.avatar || null,
+    created_at: p.added_at,
+    url: `/api/integrations/memories/${p.provider}/assets/${tripId}/${p.asset_id}/${p.user_id}/thumbnail`,
+    provider: p.provider,
+    asset_id: p.asset_id,
+  }
+}
+
+export default function MemoriesPanel({ tripId, startDate, endDate, days = [], places = [] }: MemoriesPanelProps) {
   const { t } = useTranslation()
   const toast = useToast()
   const currentUser = useAuthStore(s => s.user)
@@ -81,6 +119,8 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
   // Filters & sort
   const [sortAsc, setSortAsc] = useState(true)
   const [locationFilter, setLocationFilter] = useState('')
+
+  const [showManage, setShowManage] = useState(false)
 
   // Album linking
   const [showAlbumPicker, setShowAlbumPicker] = useState(false)
@@ -872,216 +912,84 @@ export default function MemoriesPanel({ tripId, startDate, endDate }: MemoriesPa
 
   // ── Main Gallery ──────────────────────────────────────────────────────────
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', ...font }}>
+  const galleryPhotos = allVisible.map((p, i) => adaptToPhoto(p, tripId, i))
 
-      {/* Header */}
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-secondary)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {t('memories.title')}
-            </h2>
-            <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-faint)' }}>
-              {allVisible.length} {t('memories.photosFound')}
-              {othersPhotos.length > 0 && ` · ${othersPhotos.length} ${t('memories.fromOthers')}`}
-            </p>
-          </div>
-          {connected && (
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={openAlbumPicker}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 10,
-                  border: '1px solid var(--border-primary)', background: 'none', color: 'var(--text-muted)',
-                  fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
-                }}>
-                <Link2 size={13} /> {t('memories.linkAlbum')}
-              </button>
-              <button onClick={openDateRangePicker}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 10,
-                  border: '1px solid var(--border-primary)', background: 'none', color: 'var(--text-muted)',
-                  fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
-                }}>
-                <CalendarRange size={13} /> {t('memories.linkDateRange')}
-              </button>
-              <button onClick={openPicker}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 10,
-                  border: 'none', background: 'var(--text-primary)', color: 'var(--bg-primary)',
-                  fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-                }}>
-                <Plus size={14} /> {t('memories.addPhotos')}
-              </button>
-            </div>
-          )}
-        </div>
+  const openLightboxForPhoto = (photo: Photo) => {
+    const tripPhoto = allVisible.find(p => p.asset_id === photo.asset_id && p.provider === photo.provider)
+    if (!tripPhoto) return
+    setLightboxId(tripPhoto.asset_id)
+    setLightboxUserId(tripPhoto.user_id)
+    setLightboxInfo(null)
+    if (lightboxOriginalSrc) URL.revokeObjectURL(lightboxOriginalSrc)
+    setLightboxOriginalSrc('')
+    fetchImageAsBlob('/api' + buildProviderAssetUrl(tripPhoto, 'original')).then(setLightboxOriginalSrc)
+    setLightboxInfoLoading(true)
+    apiClient.get(buildProviderAssetUrl(tripPhoto, 'info'))
+      .then(r => setLightboxInfo(r.data)).catch(() => {}).finally(() => setLightboxInfoLoading(false))
+  }
 
-        {/* Linked Albums */}
-        {albumLinks.length > 0 && (
-          <div style={{ padding: '8px 20px', borderBottom: '1px solid var(--border-secondary)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {albumLinks.map(link => (
-              <div key={link.id} style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8,
-                background: 'var(--bg-tertiary)', fontSize: 11, color: 'var(--text-muted)',
-              }}>
-                {link.sync_type === 'date_range' ? <CalendarRange size={11} /> : <FolderOpen size={11} />}
-                <span style={{ fontWeight: 500 }}>{link.album_name}</span>
-                {link.username !== currentUser?.username && <span style={{ color: 'var(--text-faint)' }}>({link.username})</span>}
-                <button onClick={() => syncAlbum(link.id, link.provider)} disabled={syncing === link.id} title={t('memories.syncAlbum')}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: 'var(--text-faint)' }}>
-                  <RefreshCw size={11} style={{ animation: syncing === link.id ? 'spin 1s linear infinite' : 'none' }} />
-                </button>
-                {link.user_id === currentUser?.id && (
-                  <button onClick={() => toggleAutoSync(link.id, link.auto_sync)}
-                    title={link.auto_sync ? t('memories.disableAutoSync') : t('memories.enableAutoSync')}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: link.auto_sync ? 'var(--text-primary)' : 'var(--text-faint)' }}>
-                    <Timer size={11} />
-                  </button>
-                )}
-                {link.user_id === currentUser?.id && (
-                  <button onClick={() => unlinkAlbum(link.id)} title={t('memories.unlinkAlbum')}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: 'var(--text-faint)' }}>
-                    <X size={11} />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Filter & Sort bar */}
-      {allVisibleRaw.length > 0 && (
-        <div style={{ display: 'flex', gap: 6, padding: '8px 20px', borderBottom: '1px solid var(--border-secondary)', flexShrink: 0, flexWrap: 'wrap' }}>
-          <button onClick={() => setSortAsc(v => !v)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 8,
-              border: '1px solid var(--border-primary)', background: 'var(--bg-card)',
-              fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--text-muted)',
-            }}>
-            <ArrowUpDown size={11} /> {sortAsc ? t('memories.oldest') : t('memories.newest')}
+  const manageActions = connected ? (
+    <div style={{ position: 'relative' }}>
+      <button onClick={() => setShowManage(v => !v)}
+        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border-primary)', background: showManage ? 'var(--bg-secondary)' : 'none', color: 'var(--text-muted)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+        <Settings size={13} /> Manage
+      </button>
+      {showManage && (
+        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 6, background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 50, minWidth: 200, overflow: 'hidden' }}>
+          <button onClick={() => { setShowManage(false); openPicker() }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: 'var(--text-primary)', textAlign: 'left' }}>
+            <Plus size={14} /> {t('memories.addPhotos')}
           </button>
-          {locations.length > 1 && (
-            <select value={locationFilter} onChange={e => setLocationFilter(e.target.value)}
-              style={{
-                padding: '4px 10px', borderRadius: 8, border: '1px solid var(--border-primary)',
-                background: 'var(--bg-card)', fontSize: 11, fontFamily: 'inherit', color: 'var(--text-muted)',
-                cursor: 'pointer', outline: 'none',
-              }}>
-              <option value="">{t('memories.allLocations')}</option>
-              {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
-            </select>
+          <button onClick={() => { setShowManage(false); openAlbumPicker() }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: 'var(--text-primary)', textAlign: 'left' }}>
+            <Link2 size={14} /> {t('memories.linkAlbum')}
+          </button>
+          <button onClick={() => { setShowManage(false); openDateRangePicker() }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: 'var(--text-primary)', textAlign: 'left' }}>
+            <CalendarRange size={14} /> {t('memories.linkDateRange')}
+          </button>
+          {albumLinks.length > 0 && (
+            <>
+              <div style={{ height: 1, background: 'var(--border-primary)', margin: '4px 0' }} />
+              {albumLinks.map(link => (
+                <div key={link.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', fontSize: 12, color: 'var(--text-muted)' }}>
+                  {link.sync_type === 'date_range' ? <CalendarRange size={11} /> : <FolderOpen size={11} />}
+                  <span style={{ flex: 1, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.album_name}</span>
+                  <button onClick={() => syncAlbum(link.id, link.provider)} disabled={syncing === link.id} title={t('memories.syncAlbum')}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: 'var(--text-faint)', flexShrink: 0 }}>
+                    <RefreshCw size={11} style={{ animation: syncing === link.id ? 'spin 1s linear infinite' : 'none' }} />
+                  </button>
+                  {link.user_id === currentUser?.id && (
+                    <button onClick={() => toggleAutoSync(link.id, link.auto_sync)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: link.auto_sync ? 'var(--text-primary)' : 'var(--text-faint)', flexShrink: 0 }}>
+                      <Timer size={11} />
+                    </button>
+                  )}
+                  {link.user_id === currentUser?.id && (
+                    <button onClick={() => unlinkAlbum(link.id)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: 'var(--text-faint)', flexShrink: 0 }}>
+                      <X size={11} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </>
           )}
         </div>
       )}
+    </div>
+  ) : null
 
-      {/* Gallery */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
-        {allVisible.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-            <Camera size={40} style={{ color: 'var(--text-faint)', margin: '0 auto 12px', display: 'block' }} />
-            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', margin: '0 0 12px' }}>
-              {t('memories.noPhotos')}
-            </p>
-            <button onClick={openPicker}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '9px 18px', borderRadius: 10,
-                border: 'none', background: 'var(--text-primary)', color: 'var(--bg-primary)',
-                fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-              }}>
-              <Plus size={15} /> {t('memories.addPhotos')}
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 6 }}>
-            {allVisible.map(photo => {
-              const isOwn = photo.user_id === currentUser?.id
-              return (
-                <div key={`${photo.provider}:${photo.asset_id}`} className="group"
-                  style={{ position: 'relative', aspectRatio: '1', borderRadius: 10, overflow: 'visible', cursor: 'pointer' }}
-                  onClick={() => {
-                    setLightboxId(photo.asset_id); setLightboxUserId(photo.user_id); setLightboxInfo(null)
-                    if (lightboxOriginalSrc) URL.revokeObjectURL(lightboxOriginalSrc)
-                    setLightboxOriginalSrc('')
-                    fetchImageAsBlob('/api' + buildProviderAssetUrl(photo, 'original')).then(setLightboxOriginalSrc)
-                    setLightboxInfoLoading(true)
-                    apiClient.get(buildProviderAssetUrl(photo, 'info'))
-                      .then(r => setLightboxInfo(r.data)).catch(() => {}).finally(() => setLightboxInfoLoading(false))
-                  }}>
-
-                  <ProviderImg baseUrl={buildProviderAssetUrl(photo, 'thumbnail')} provider={photo.provider} loading="lazy"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 10 }} />
-
-                  {/* Other user's avatar */}
-                  {!isOwn && (
-                    <div className="memories-avatar" style={{ position: 'absolute', bottom: 6, left: 6, zIndex: 10 }}>
-                      <div style={{
-                        width: 22, height: 22, borderRadius: '50%',
-                        background: `hsl(${photo.username.charCodeAt(0) * 37 % 360}, 55%, 55%)`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 10, fontWeight: 700, color: 'white', textTransform: 'uppercase',
-                        border: '2px solid white', boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
-                      }}>
-                        {photo.username[0]}
-                      </div>
-                      <div className="memories-avatar-tooltip" style={{
-                        position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
-                        marginBottom: 6, padding: '3px 8px', borderRadius: 6,
-                        background: 'var(--text-primary)', color: 'var(--bg-primary)',
-                        fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
-                        pointerEvents: 'none', opacity: 0, transition: 'opacity 0.15s',
-                      }}>
-                        {photo.username}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Own photo actions (hover) */}
-                  {isOwn && (
-                    <div className="opacity-0 group-hover:opacity-100"
-                      style={{ position: 'absolute', top: 4, right: 4, display: 'flex', gap: 3, transition: 'opacity 0.15s' }}>
-                      <button onClick={e => { e.stopPropagation(); toggleSharing(photo, !photo.shared) }}
-                        title={photo.shared ? t('memories.stopSharing') : t('memories.sharePhotos')}
-                        style={{
-                          width: 26, height: 26, borderRadius: '50%', border: 'none', cursor: 'pointer',
-                          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>
-                        {photo.shared ? <Eye size={12} color="white" /> : <EyeOff size={12} color="white" />}
-                      </button>
-                      <button onClick={e => { e.stopPropagation(); removePhoto(photo) }}
-                        style={{
-                          width: 26, height: 26, borderRadius: '50%', border: 'none', cursor: 'pointer',
-                          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>
-                        <X size={12} color="white" />
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Not shared indicator */}
-                  {isOwn && !photo.shared && (
-                    <div style={{
-                      position: 'absolute', bottom: 6, right: 6, padding: '2px 6px', borderRadius: 6,
-                      background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
-                      fontSize: 9, color: 'rgba(255,255,255,0.7)', fontWeight: 500,
-                    }}>
-                      <EyeOff size={9} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 3 }} />
-                      {t('memories.private')}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      <style>{`
-        .memories-avatar:hover .memories-avatar-tooltip { opacity: 1 !important; }
-      `}</style>
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', ...font }}>
+      <PhotoGallery
+        photos={galleryPhotos}
+        places={places}
+        days={days}
+        tripId={tripId}
+        onPhotoClick={openLightboxForPhoto}
+        headerActions={manageActions}
+      />
 
       {/* Confirm share popup */}
       {showConfirmShare && (

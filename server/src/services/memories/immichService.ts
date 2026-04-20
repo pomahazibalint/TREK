@@ -346,11 +346,15 @@ export async function syncAlbumAssets(
       a.id,
       { city: a.exifInfo?.city || null, country: a.exifInfo?.country || null },
     ]));
+    const takenAtByAssetId = new Map(assets.map((a: any) => [
+      a.id, a.fileCreatedAt || a.createdAt || null,
+    ]));
 
     const selection: Selection = {
       provider: 'immich',
       asset_ids: assets.map((a: any) => a.id),
       locationByAssetId,
+      takenAtByAssetId,
     };
 
     const result = await addTripPhotos(tripId, userId, true, [selection], sid, linkId);
@@ -389,11 +393,15 @@ export async function syncDateRangePhotos(
     a.id,
     { city: (a as any).city || null, country: (a as any).country || null },
   ]));
+  const takenAtByAssetId = new Map(assets.map((a: any) => [
+    a.id, (a as any).takenAt || null,
+  ]));
 
   const selection: Selection = {
     provider: 'immich',
     asset_ids: assets.map((a: any) => a.id),
     locationByAssetId,
+    takenAtByAssetId,
   };
 
   const addResult = await addTripPhotos(tripId, userId, true, [selection], sid, linkId);

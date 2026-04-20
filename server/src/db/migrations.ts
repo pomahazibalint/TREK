@@ -1083,6 +1083,10 @@ function runMigrations(db: Database.Database): void {
     () => {
       try { db.exec('ALTER TABLE photos ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
     },
+    // Migration 94: Cache taken_at on provider photos for day-grouping in gallery
+    () => {
+      try { db.exec('ALTER TABLE trip_photos ADD COLUMN taken_at TEXT'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+    },
   ];
 
   if (currentVersion < migrations.length) {

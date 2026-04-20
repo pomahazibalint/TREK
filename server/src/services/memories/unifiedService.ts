@@ -46,13 +46,14 @@ export function listTripPhotos(tripId: string, userId: number): ServiceResult<an
 
     const photos = db.prepare(`
       SELECT tp.asset_id, tp.provider, tp.user_id, tp.shared, tp.added_at,
+             tp.city, tp.country, tp.taken_at,
              u.username, u.avatar
       FROM trip_photos tp
       JOIN users u ON tp.user_id = u.id
       WHERE tp.trip_id = ?
         AND (tp.user_id = ? OR tp.shared = 1)
         AND tp.provider IN (${enabledProviders.map(() => '?').join(',')})
-      ORDER BY tp.added_at ASC
+      ORDER BY COALESCE(tp.taken_at, tp.added_at) ASC
     `).all(tripId, userId, ...enabledProviders);
 
     return success(photos);
@@ -109,7 +110,7 @@ export function listTripAlbumLinks(tripId: string, userId: number): ServiceResul
 function _addTripPhoto(
   tripId: string, userId: number, provider: string, assetId: string,
   shared: boolean, albumLinkId?: string,
-  city?: string | null, country?: string | null,
+  city?: string | null, country?: string | null, takenAt?: string | null,
 ): ServiceResult<boolean> {
   const providerResult = _validProvider(provider);
   if (!providerResult.success) {
@@ -117,8 +118,8 @@ function _addTripPhoto(
   }
   try {
     const result = db.prepare(
-      'INSERT OR IGNORE INTO trip_photos (trip_id, user_id, asset_id, provider, shared, album_link_id, city, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(tripId, userId, assetId, provider, shared ? 1 : 0, albumLinkId || null, city || null, country || null);
+      'INSERT OR IGNORE INTO trip_photos (trip_id, user_id, asset_id, provider, shared, album_link_id, city, country, taken_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(tripId, userId, assetId, provider, shared ? 1 : 0, albumLinkId || null, city || null, country || null, takenAt || null);
     return success(result.changes > 0);
   }
   catch (error) {
@@ -153,7 +154,8 @@ export async function addTripPhotos(
       const assetId = String(raw || '').trim();
       if (!assetId) continue;
       const loc = selection.locationByAssetId?.get(assetId);
-      const result = _addTripPhoto(tripId, userId, selection.provider, assetId, shared, albumLinkId, loc?.city, loc?.country);
+      const takenAt = selection.takenAtByAssetId?.get(assetId);
+      const result = _addTripPhoto(tripId, userId, selection.provider, assetId, shared, albumLinkId, loc?.city, loc?.country, takenAt);
       if (!result.success) {
         return result as ServiceResult<{ added: number; shared: boolean }>;
       }
