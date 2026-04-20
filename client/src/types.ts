@@ -337,6 +337,15 @@ export interface Photo {
   caption: string | null
   place_id: number | null
   day_id: number | null
+  taken_at: string | null
+  latitude: number | null
+  longitude: number | null
+  city: string | null
+  country: string | null
+  camera_make: string | null
+  camera_model: string | null
+  width: number | null
+  height: number | null
   created_at: string
   url?: string
 }

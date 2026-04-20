@@ -42,6 +42,7 @@ export function handleServiceResult<T>(res: Response, result: ServiceResult<T>):
 export type Selection = {
     provider: string;
     asset_ids: string[];
+    locationByAssetId?: Map<string, { city: string | null; country: string | null }>;
 };
 
 export type StatusResult = {

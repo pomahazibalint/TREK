@@ -9,6 +9,7 @@ import { createTodoSlice } from './slices/todoSlice'
 import { createBudgetSlice } from './slices/budgetSlice'
 import { createReservationsSlice } from './slices/reservationsSlice'
 import { createFilesSlice } from './slices/filesSlice'
+import { createPhotosSlice } from './slices/photosSlice'
 import { handleRemoteEvent } from './slices/remoteEventHandler'
 import type {
   Trip, Day, Place, Assignment, DayNote, PackingItem, TodoItem,
@@ -24,6 +25,7 @@ import type { TodoSlice } from './slices/todoSlice'
 import type { BudgetSlice } from './slices/budgetSlice'
 import type { ReservationsSlice } from './slices/reservationsSlice'
 import type { FilesSlice } from './slices/filesSlice'
+import type { PhotosSlice } from './slices/photosSlice'
 
 export interface TripStoreState
   extends PlacesSlice,
@@ -33,7 +35,8 @@ export interface TripStoreState
     TodoSlice,
     BudgetSlice,
     ReservationsSlice,
-    FilesSlice {
+    FilesSlice,
+    PhotosSlice {
   trip: Trip | null
   days: Day[]
   places: Place[]
@@ -50,11 +53,6 @@ export interface TripStoreState
   isLoading: boolean
   error: string | null
   tripMembers?: { id: number; username: string; avatar_url?: string | null }[]
-  photos?: import('../types').Photo[]
-  loadPhotos?: (tripId: number | string) => Promise<void>
-  addPhoto?: (tripId: number | string, formData: FormData) => Promise<void>
-  deletePhoto?: (tripId: number | string, photoId: number) => Promise<void>
-  updatePhoto?: (tripId: number | string, photoId: number, data: Record<string, string | number | null>) => Promise<void>
 
   setSelectedDay: (dayId: number | null) => void
   handleRemoteEvent: (event: WebSocketEvent) => void
@@ -186,4 +184,5 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
   ...createBudgetSlice(set, get),
   ...createReservationsSlice(set, get),
   ...createFilesSlice(set, get),
+  ...createPhotosSlice(set, get),
 }))

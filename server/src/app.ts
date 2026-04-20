@@ -35,6 +35,7 @@ import oidcRoutes from './routes/oidc';
 import vacayRoutes from './routes/vacay';
 import atlasRoutes from './routes/atlas';
 import memoriesRoutes from './routes/memories/unified';
+import photosRoutes from './routes/photos';
 import notificationRoutes from './routes/notifications';
 import shareRoutes from './routes/share';
 import { mcpHandler } from './mcp';
@@ -256,6 +257,7 @@ export function createApp(): express.Application {
   // Addon routes
   app.use('/api/addons/vacay', vacayRoutes);
   app.use('/api/addons/atlas', atlasRoutes);
+  app.use('/api/trips/:tripId/photos', photosRoutes);
   app.use('/api/integrations/memories', memoriesRoutes);
   app.use('/api/maps', mapsRoutes);
   app.use('/api/weather', weatherRoutes);

@@ -106,15 +106,19 @@ export function listTripAlbumLinks(tripId: string, userId: number): ServiceResul
 //-----------------------------------------------
 // managing photos in trip
 
-function _addTripPhoto(tripId: string, userId: number, provider: string, assetId: string, shared: boolean, albumLinkId?: string): ServiceResult<boolean> {
+function _addTripPhoto(
+  tripId: string, userId: number, provider: string, assetId: string,
+  shared: boolean, albumLinkId?: string,
+  city?: string | null, country?: string | null,
+): ServiceResult<boolean> {
   const providerResult = _validProvider(provider);
   if (!providerResult.success) {
     return providerResult as ServiceResult<boolean>;
   }
   try {
     const result = db.prepare(
-      'INSERT OR IGNORE INTO trip_photos (trip_id, user_id, asset_id, provider, shared, album_link_id) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(tripId, userId, assetId, provider, shared ? 1 : 0, albumLinkId || null);
+      'INSERT OR IGNORE INTO trip_photos (trip_id, user_id, asset_id, provider, shared, album_link_id, city, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(tripId, userId, assetId, provider, shared ? 1 : 0, albumLinkId || null, city || null, country || null);
     return success(result.changes > 0);
   }
   catch (error) {
@@ -148,7 +152,8 @@ export async function addTripPhotos(
     for (const raw of selection.asset_ids) {
       const assetId = String(raw || '').trim();
       if (!assetId) continue;
-      const result = _addTripPhoto(tripId, userId, selection.provider, assetId, shared, albumLinkId);
+      const loc = selection.locationByAssetId?.get(assetId);
+      const result = _addTripPhoto(tripId, userId, selection.provider, assetId, shared, albumLinkId, loc?.city, loc?.country);
       if (!result.success) {
         return result as ServiceResult<{ added: number; shared: boolean }>;
       }

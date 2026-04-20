@@ -1070,6 +1070,15 @@ function runMigrations(db: Database.Database): void {
         CREATE INDEX IF NOT EXISTS idx_tce_trip ON trip_calendar_entries(trip_id, user_id);
       `);
     },
+    // Migration 92: EXIF metadata for uploaded photos and location cache for provider photos
+    () => {
+      const photoCols = ['latitude REAL', 'longitude REAL', 'city TEXT', 'country TEXT', 'camera_make TEXT', 'camera_model TEXT', 'width INTEGER', 'height INTEGER'];
+      for (const col of photoCols) {
+        try { db.exec(`ALTER TABLE photos ADD COLUMN ${col}`); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      }
+      try { db.exec('ALTER TABLE trip_photos ADD COLUMN city TEXT'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec('ALTER TABLE trip_photos ADD COLUMN country TEXT'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+    },
   ];
 
   if (currentVersion < migrations.length) {

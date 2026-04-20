@@ -342,9 +342,15 @@ export async function syncAlbumAssets(
     const albumData = await resp.json() as { assets?: any[] };
     const assets = (albumData.assets || []).filter((a: any) => a.type === 'IMAGE');
 
+    const locationByAssetId = new Map(assets.map((a: any) => [
+      a.id,
+      { city: a.exifInfo?.city || null, country: a.exifInfo?.country || null },
+    ]));
+
     const selection: Selection = {
       provider: 'immich',
       asset_ids: assets.map((a: any) => a.id),
+      locationByAssetId,
     };
 
     const result = await addTripPhotos(tripId, userId, true, [selection], sid, linkId);
@@ -379,9 +385,15 @@ export async function syncDateRangePhotos(
     return { success: true, added: 0, total: 0 };
   }
 
+  const locationByAssetId = new Map(assets.map((a: any) => [
+    a.id,
+    { city: (a as any).city || null, country: (a as any).country || null },
+  ]));
+
   const selection: Selection = {
     provider: 'immich',
     asset_ids: assets.map((a: any) => a.id),
+    locationByAssetId,
   };
 
   const addResult = await addTripPhotos(tripId, userId, true, [selection], sid, linkId);
