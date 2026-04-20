@@ -1087,6 +1087,11 @@ function runMigrations(db: Database.Database): void {
     () => {
       try { db.exec('ALTER TABLE trip_photos ADD COLUMN taken_at TEXT'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
     },
+    // Migration 95: Cache lat/lng on provider photos for map view
+    () => {
+      try { db.exec('ALTER TABLE trip_photos ADD COLUMN latitude REAL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      try { db.exec('ALTER TABLE trip_photos ADD COLUMN longitude REAL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+    },
   ];
 
   if (currentVersion < migrations.length) {

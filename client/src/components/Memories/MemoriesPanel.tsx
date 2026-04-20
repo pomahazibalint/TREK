@@ -42,6 +42,8 @@ interface TripPhoto {
   city?: string | null
   country?: string | null
   taken_at?: string | null
+  latitude?: number | null
+  longitude?: number | null
 }
 
 interface Asset {
@@ -75,8 +77,8 @@ function adaptToPhoto(p: TripPhoto, tripId: number, idx: number): Photo {
     place_id: null,
     day_id: null,
     taken_at: p.taken_at || null,
-    latitude: null,
-    longitude: null,
+    latitude: p.latitude ?? null,
+    longitude: p.longitude ?? null,
     city: p.city || null,
     country: p.country || null,
     camera_make: null,

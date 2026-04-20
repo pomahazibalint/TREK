@@ -344,7 +344,7 @@ export async function syncAlbumAssets(
 
     const locationByAssetId = new Map(assets.map((a: any) => [
       a.id,
-      { city: a.exifInfo?.city || null, country: a.exifInfo?.country || null },
+      { city: a.exifInfo?.city || null, country: a.exifInfo?.country || null, latitude: a.exifInfo?.latitude ?? null, longitude: a.exifInfo?.longitude ?? null },
     ]));
     const takenAtByAssetId = new Map(assets.map((a: any) => [
       a.id, a.fileCreatedAt || a.createdAt || null,
@@ -391,7 +391,7 @@ export async function syncDateRangePhotos(
 
   const locationByAssetId = new Map(assets.map((a: any) => [
     a.id,
-    { city: (a as any).city || null, country: (a as any).country || null },
+    { city: (a as any).city || null, country: (a as any).country || null, latitude: (a as any).lat ?? null, longitude: (a as any).lng ?? null },
   ]));
   const takenAtByAssetId = new Map(assets.map((a: any) => [
     a.id, (a as any).takenAt || null,
