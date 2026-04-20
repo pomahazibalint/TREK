@@ -186,14 +186,29 @@ export function PhotoLightbox({ photos, initialIndex, onClose, onUpdate, onDelet
           </div>
 
           {/* Metadata */}
-          <div className="flex items-center gap-4 text-white/40 text-xs">
-            <span>{photo.original_name}</span>
-            {photo.created_at && (
-              <span>{formatDate(photo.created_at)}</span>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-3 text-white/40 text-xs flex-wrap">
+              <span>{photo.original_name}</span>
+              {(photo.taken_at || photo.created_at) && (
+                <span>{formatDate((photo.taken_at || photo.created_at)!)}</span>
+              )}
+              {(photo.width && photo.height) ? <span>{photo.width} × {photo.height}</span> : null}
+              {photo.file_size ? <span>{formatSize(photo.file_size)}</span> : null}
+            </div>
+            {(day || place || photo.city || (photo.camera_make || photo.camera_model)) && (
+              <div className="flex items-center gap-3 text-white/30 text-xs flex-wrap">
+                {day && <span>Day {day.day_number}</span>}
+                {place
+                  ? <span>{place.name}</span>
+                  : (photo.city || photo.country)
+                    ? <span>{[photo.city, photo.country].filter(Boolean).join(', ')}</span>
+                    : null
+                }
+                {(photo.camera_make || photo.camera_model) && (
+                  <span>{[photo.camera_make, photo.camera_model].filter(Boolean).join(' ')}</span>
+                )}
+              </div>
             )}
-            {day && <span>📅 Tag {day.day_number}</span>}
-            {place && <span>📍 {place.name}</span>}
-            {photo.file_size && <span>{formatSize(photo.file_size)}</span>}
           </div>
         </div>
 
