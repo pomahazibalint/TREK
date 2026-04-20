@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { PhotoLightbox } from './PhotoLightbox'
 import { PhotoUpload } from './PhotoUpload'
-import { Upload, Camera, Grid, AlignLeft, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, X, MapPin } from 'lucide-react'
+import PhotoMapView from './PhotoMapView'
+import { Upload, Camera, Grid, Map as MapIcon, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, X, MapPin } from 'lucide-react'
 import Modal from '../shared/Modal'
 import { getLocaleForLanguage, useTranslation } from '../../i18n'
 import type { Photo, Place, Day, Assignment } from '../../types'
@@ -408,7 +409,7 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
   const { t, language } = useTranslation()
   const locale = getLocaleForLanguage(language)
 
-  const [viewMode, setViewMode] = useState<'grid' | 'timeline'>('grid')
+  const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid')
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [showUpload, setShowUpload] = useState(false)
 
@@ -524,12 +525,12 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
 
         {/* View toggle */}
         <div style={{ display: 'flex', border: '1px solid var(--border-primary)', borderRadius: 8, overflow: 'hidden' }}>
-          {(['grid', 'timeline'] as const).map(mode => (
+          {(['grid', 'map'] as const).map(mode => (
             <button key={mode} onClick={() => setViewMode(mode)}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, background: viewMode === mode ? 'var(--accent)' : 'var(--bg-input)', color: viewMode === mode ? 'var(--accent-text)' : 'var(--text-muted)', transition: 'background 0.15s' }}
             >
-              {mode === 'grid' ? <Grid size={14} /> : <AlignLeft size={14} />}
-              {mode === 'grid' ? 'Grid' : 'Timeline'}
+              {mode === 'grid' ? <Grid size={14} /> : <MapIcon size={14} />}
+              {mode === 'grid' ? 'Grid' : 'Map'}
             </button>
           ))}
         </div>
@@ -614,8 +615,13 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
         </div>
       </div>
 
-      {/* Content — outer div scrolls, inner div lays out (prevents flex shrink on expand) */}
-      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+      {/* Map view */}
+      {viewMode === 'map' && (
+        <PhotoMapView photos={filteredPhotos} onPhotoClick={handlePhotoClick} />
+      )}
+
+      {/* Grid content — outer div scrolls, inner div lays out (prevents flex shrink on expand) */}
+      {viewMode === 'grid' && <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
         <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {filteredPhotos.length === 0 && !hasFilters ? (
             <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-faint)' }}>
@@ -632,7 +638,7 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
             <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-faint)', fontSize: 13 }}>
               No photos match the current filters.
             </div>
-          ) : viewMode === 'grid' ? (
+          ) : (
             filteredSections.map(section => (
               <DaySection
                 key={section.key}
@@ -646,25 +652,9 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
                 locale={locale}
               />
             ))
-          ) : (
-            <div style={{ maxWidth: 640 }}>
-              {filteredSections.map(section => (
-                <TimelineDaySection
-                  key={section.key}
-                  section={section}
-                  expanded={expandedKeys.has(section.key)}
-                  onToggle={() => toggleSection(section.key)}
-                  filteredPhotos={section.photos}
-                  places={places}
-                  days={days}
-                  onPhotoClick={handlePhotoClick}
-                  locale={locale}
-                />
-              ))}
-            </div>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Lightbox — only for direct upload photos (provider photos use their own lightbox) */}
       {lightboxIndex !== null && !onPhotoClickProp && onDelete && onUpdate && (
