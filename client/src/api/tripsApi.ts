@@ -13,6 +13,9 @@ export const tripsApi = {
   addMember: (id: number | string, identifier: string) => apiClient.post(`/trips/${id}/members`, { identifier }).then(r => r.data),
   removeMember: (id: number | string, userId: number) => apiClient.delete(`/trips/${id}/members/${userId}`).then(r => r.data),
   copy: (id: number | string, data?: { title?: string }) => apiClient.post(`/trips/${id}/copy`, data || {}).then(r => r.data),
+  getUserSettings: (id: number | string) => apiClient.get(`/trips/${id}/user-settings`).then(r => r.data),
+  updateUserSettings: (id: number | string, data: { add_to_calendar: number }) => apiClient.put(`/trips/${id}/user-settings`, data).then(r => r.data),
+  getCalendarConflicts: (id: number | string) => apiClient.get(`/trips/${id}/calendar-conflicts`).then(r => r.data),
 }
 
 export const daysApi = {

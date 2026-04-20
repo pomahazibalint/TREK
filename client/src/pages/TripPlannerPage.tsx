@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import ReactDOM from 'react-dom'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTripStore } from '../store/tripStore'
 import { useCanDo } from '../store/permissionsStore'
 import { useSettingsStore } from '../store/settingsStore'
@@ -23,7 +23,7 @@ import BudgetPanel from '../components/Budget/BudgetPanel'
 import CollabPanel from '../components/Collab/CollabPanel'
 import Navbar from '../components/Layout/Navbar'
 import { useToast } from '../components/shared/Toast'
-import { Map, X, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Ticket, PackageCheck, Wallet, FolderOpen, Camera, Users } from 'lucide-react'
+import { Map, X, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Ticket, PackageCheck, Wallet, FolderOpen, Camera, Users, SlidersHorizontal } from 'lucide-react'
 import { useTranslation } from '../i18n'
 import { addonsApi, accommodationsApi, authApi, tripsApi, assignmentsApi, mapsApi, budgetApi } from '../api/client'
 import ConfirmDialog from '../components/shared/ConfirmDialog'
@@ -67,9 +67,30 @@ function ListsContainer({ tripId, packingItems, todoItems }: { tripId: number | 
   )
 }
 
+const TAB_ALIASES: Record<string, string> = {
+  budget: 'finanzplan',
+  reservations: 'buchungen',
+  packing: 'listen',
+  files: 'dateien',
+  collab: 'collab',
+  memories: 'memories',
+  plan: 'plan',
+}
+
+const TAB_LOADING_KEYS: Record<string, string> = {
+  finanzplan: 'trip.loading.budget',
+  buchungen: 'trip.loading.reservations',
+  listen: 'trip.loading.packing',
+  dateien: 'trip.loading.files',
+  collab: 'trip.loading.collab',
+  memories: 'trip.loading.memories',
+}
+
 export default function TripPlannerPage(): React.ReactElement | null {
   const { id: tripId } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
   const toast = useToast()
   const { t, language, locale } = useTranslation()
   const { settings } = useSettingsStore()
@@ -102,6 +123,10 @@ export default function TripPlannerPage(): React.ReactElement | null {
   const [allowedFileTypes, setAllowedFileTypes] = useState<string | null>(null)
   const [tripMembers, setTripMembers] = useState<TripMember[]>([])
   const [transportMode, setTransportMode] = useState<'walking' | 'cycling' | 'driving'>('walking')
+  const [addToCalendar, setAddToCalendar] = useState(0)
+  const [calendarPrefOpen, setCalendarPrefOpen] = useState(false)
+  const [calendarSyncing, setCalendarSyncing] = useState(false)
+  const calendarPopoverRef = useRef<HTMLDivElement>(null)
 
   const loadAccommodations = useCallback(() => {
     if (tripId) {
@@ -123,6 +148,32 @@ export default function TripPlannerPage(): React.ReactElement | null {
     }).catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (!tripId) return
+    tripsApi.getUserSettings(tripId).then(d => setAddToCalendar(d.add_to_calendar ?? 0)).catch(() => {})
+  }, [tripId])
+
+  useEffect(() => {
+    if (!calendarPrefOpen) return
+    const close = (e: MouseEvent) => {
+      if (calendarPopoverRef.current?.contains(e.target as Node)) return
+      setCalendarPrefOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [calendarPrefOpen])
+
+  const handleCalendarToggle = async () => {
+    if (!tripId || calendarSyncing) return
+    const next = addToCalendar ? 0 : 1
+    setCalendarSyncing(true)
+    try {
+      await tripsApi.updateUserSettings(tripId, { add_to_calendar: next })
+      setAddToCalendar(next)
+    } catch {}
+    setCalendarSyncing(false)
+  }
+
   const TRIP_TABS = [
     { id: 'plan', label: t('trip.tabs.plan'), icon: Map },
     { id: 'buchungen', label: t('trip.tabs.reservations'), shortLabel: t('trip.tabs.reservationsShort'), icon: Ticket },
@@ -134,8 +185,12 @@ export default function TripPlannerPage(): React.ReactElement | null {
   ]
 
   const [activeTab, setActiveTab] = useState<string>(() => {
-    const saved = sessionStorage.getItem(`trip-tab-${tripId}`)
-    return saved || 'plan'
+    if (tabParam) {
+      const resolved = TAB_ALIASES[tabParam] ?? tabParam
+      sessionStorage.setItem(`trip-tab-${tripId}`, resolved)
+      return resolved
+    }
+    return sessionStorage.getItem(`trip-tab-${tripId}`) || 'plan'
   })
 
   useEffect(() => {
@@ -544,7 +599,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
           {trip?.title || 'TREK'}
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-faint)', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 32, animation: 'fadeInUp 0.5s ease-out 0.1s both' }}>
-          {t('trip.loadingPhotos')}
+          {t(TAB_LOADING_KEYS[activeTab] ?? 'common.loading')}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {[0, 1, 2].map(i => (
@@ -600,6 +655,63 @@ export default function TripPlannerPage(): React.ReactElement | null {
             </button>
           )
         })}
+
+        {/* My preferences button */}
+        <div style={{ marginLeft: 'auto', flexShrink: 0, position: 'relative' }}>
+          <button
+            onClick={e => { e.stopPropagation(); setCalendarPrefOpen(v => !v) }}
+            title={t('trip.myPreferences')}
+            style={{
+              padding: '5px 10px', borderRadius: 20, border: 'none', cursor: 'pointer',
+              background: 'transparent',
+              color: 'var(--text-muted)',
+              fontFamily: 'inherit', transition: 'background 0.15s', display: 'flex', alignItems: 'center', gap: 5,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+          >
+            <SlidersHorizontal size={15} />
+          </button>
+          {calendarPrefOpen && ReactDOM.createPortal(
+            <div
+              ref={calendarPopoverRef}
+              style={{
+                position: 'fixed',
+                top: 'calc(var(--nav-h) + 50px)',
+                right: 16, zIndex: 9999,
+                minWidth: 240,
+                background: 'var(--bg-card)', border: '1px solid var(--border-primary)',
+                borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                padding: 14,
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10 }}>{t('trip.myPreferences')}</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{t('trip.addToCalendar')}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, maxWidth: 170, lineHeight: 1.4 }}>{t('trip.addToCalendarHint')}</div>
+                </div>
+                <button
+                  onClick={handleCalendarToggle}
+                  disabled={calendarSyncing}
+                  style={{
+                    width: 40, height: 22, borderRadius: 99, border: 'none', cursor: calendarSyncing ? 'default' : 'pointer',
+                    background: addToCalendar ? '#6366f1' : 'var(--border-primary)',
+                    transition: 'background 0.2s', flexShrink: 0, position: 'relative',
+                  }}>
+                  <span style={{
+                    position: 'absolute', top: 3, width: 16, height: 16, borderRadius: '50%', background: 'white',
+                    transition: 'left 0.2s',
+                    left: addToCalendar ? 20 : 3,
+                  }} />
+                </button>
+              </div>
+              {calendarSyncing && <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8 }}>{t('trip.calendarSyncing')}</div>}
+            </div>,
+            document.body
+          )}
+        </div>
       </div>
 
       {/* Offset by navbar + tab bar (44px) */}

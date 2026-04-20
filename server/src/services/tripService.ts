@@ -19,7 +19,24 @@ export const TRIP_SELECT = `
     u.username as owner_username,
     (SELECT COUNT(*) FROM trip_members tm WHERE tm.trip_id = t.id) as shared_count,
     (SELECT COUNT(*) FROM budget_items bi WHERE bi.trip_id = t.id AND bi.currency != t.currency) as has_foreign_currency_expenses,
-    (SELECT username FROM users WHERE id = t.settled_by) as settled_by_username
+    (SELECT username FROM users WHERE id = t.settled_by) as settled_by_username,
+    CASE WHEN t.start_date IS NULL OR t.end_date IS NULL THEN 1 ELSE 0 END as missing_dates,
+    CASE WHEN
+      t.end_date IS NOT NULL AND t.end_date < date('now')
+      AND t.settled_at IS NULL
+      AND EXISTS (SELECT 1 FROM budget_items bi WHERE bi.trip_id = t.id AND bi.is_draft = 0)
+    THEN 1 ELSE 0 END as budget_unsettled,
+    CASE WHEN
+      t.start_date IS NOT NULL AND t.end_date IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM day_assignments da JOIN days d ON d.id = da.day_id WHERE d.trip_id = t.id)
+      AND EXISTS (SELECT 1 FROM days dd WHERE dd.trip_id = t.id)
+    THEN 1 ELSE 0 END as empty_itinerary,
+    CASE WHEN
+      t.start_date IS NOT NULL
+      AND t.start_date > date('now')
+      AND CAST(julianday(t.start_date) - julianday('now') AS INTEGER) <= 7
+    THEN CAST(julianday(t.start_date) - julianday('now') AS INTEGER)
+    ELSE NULL END as upcoming_days
   FROM trips t
   JOIN users u ON u.id = t.user_id
 `;

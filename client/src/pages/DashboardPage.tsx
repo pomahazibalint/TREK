@@ -9,6 +9,7 @@ import Navbar from '../components/Layout/Navbar'
 import DemoBanner from '../components/Layout/DemoBanner'
 import CurrencyWidget from '../components/Dashboard/CurrencyWidget'
 import TimezoneWidget from '../components/Dashboard/TimezoneWidget'
+import TripBadgeChip from '../components/Dashboard/TripBadgeChip'
 import TripFormModal from '../components/Trips/TripFormModal'
 import ConfirmDialog from '../components/shared/ConfirmDialog'
 import { useToast } from '../components/shared/Toast'
@@ -18,6 +19,8 @@ import {
   LayoutGrid, List, Copy,
 } from 'lucide-react'
 import { useCanDo } from '../store/permissionsStore'
+import { computeTripBadges } from '../hooks/useTripBadges'
+import { useTripConflicts } from '../hooks/useTripConflicts'
 
 interface DashboardTrip {
   id: number
@@ -32,6 +35,10 @@ interface DashboardTrip {
   day_count?: number
   place_count?: number
   shared_count?: number
+  missing_dates?: number
+  budget_unsettled?: number
+  empty_itinerary?: number
+  upcoming_days?: number | null
   [key: string]: string | number | boolean | null | undefined
 }
 
@@ -149,10 +156,13 @@ interface TripCardProps {
   t: (key: string, params?: Record<string, string | number | null>) => string
   locale: string
   dark?: boolean
+  conflictDates?: string[]
+  onMissingDatesAction?: () => void
 }
 
-function SpotlightCard({ trip, onEdit, onCopy, onDelete, onArchive, onClick, t, locale, dark }: TripCardProps): React.ReactElement {
+function SpotlightCard({ trip, onEdit, onCopy, onDelete, onArchive, onClick, t, locale, dark, conflictDates, onMissingDatesAction }: TripCardProps): React.ReactElement {
   const status = getTripStatus(trip)
+  const badges = computeTripBadges(trip as any, conflictDates, { onMissingDates: onMissingDatesAction })
 
   const coverBg = trip.cover_image
     ? `url(${trip.cover_image}) center/cover no-repeat`
@@ -169,7 +179,8 @@ function SpotlightCard({ trip, onEdit, onCopy, onDelete, onArchive, onClick, t, 
         }} />
 
         {/* Badges top-left */}
-        <div style={{ position: 'absolute', top: 16, left: 16, display: 'flex', gap: 8 }}>
+        <div style={{ position: 'absolute', top: 16, left: 16, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+          {badges.length > 0 && <TripBadgeChip badges={badges} />}
           {status && (
             <span style={{
               background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)',
@@ -238,8 +249,9 @@ function SpotlightCard({ trip, onEdit, onCopy, onDelete, onArchive, onClick, t, 
 }
 
 // ── Regular Trip Card ────────────────────────────────────────────────────────
-function TripCard({ trip, onEdit, onCopy, onDelete, onArchive, onClick, t, locale }: Omit<TripCardProps, 'dark'>): React.ReactElement {
+function TripCard({ trip, onEdit, onCopy, onDelete, onArchive, onClick, t, locale, conflictDates, onMissingDatesAction }: Omit<TripCardProps, 'dark'>): React.ReactElement {
   const status = getTripStatus(trip)
+  const badges = computeTripBadges(trip as any, conflictDates, { onMissingDates: onMissingDatesAction })
   const [hovered, setHovered] = useState(false)
 
   const coverBg = trip.cover_image
@@ -302,12 +314,16 @@ function TripCard({ trip, onEdit, onCopy, onDelete, onArchive, onClick, t, local
         )}
 
         {(trip.start_date || trip.end_date) && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
             <Calendar size={11} style={{ flexShrink: 0 }} />
             {trip.start_date && trip.end_date
               ? `${formatDateShort(trip.start_date, locale)} — ${formatDateShort(trip.end_date, locale)}`
               : formatDate(trip.start_date || trip.end_date, locale)}
           </div>
+        )}
+
+        {badges.length > 0 && (
+          <div style={{ marginBottom: 8 }}><TripBadgeChip badges={badges} /></div>
         )}
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
@@ -331,8 +347,9 @@ function TripCard({ trip, onEdit, onCopy, onDelete, onArchive, onClick, t, local
 }
 
 // ── List View Item ──────────────────────────────────────────────────────────
-function TripListItem({ trip, onEdit, onCopy, onDelete, onArchive, onClick, t, locale }: Omit<TripCardProps, 'dark'>): React.ReactElement {
+function TripListItem({ trip, onEdit, onCopy, onDelete, onArchive, onClick, t, locale, conflictDates, onMissingDatesAction }: Omit<TripCardProps, 'dark'>): React.ReactElement {
   const status = getTripStatus(trip)
+  const badges = computeTripBadges(trip as any, conflictDates, { onMissingDates: onMissingDatesAction })
   const [hovered, setHovered] = useState(false)
 
   const coverBg = trip.cover_image
@@ -397,6 +414,7 @@ function TripListItem({ trip, onEdit, onCopy, onDelete, onArchive, onClick, t, l
             {trip.description}
           </p>
         )}
+        {badges.length > 0 && <div style={{ marginTop: 4 }}><TripBadgeChip badges={badges} /></div>}
       </div>
 
       {/* Date & stats */}
@@ -549,13 +567,16 @@ function SkeletonCard(): React.ReactElement {
 export default function DashboardPage(): React.ReactElement {
   const [trips, setTrips] = useState<DashboardTrip[]>([])
   const [archivedTrips, setArchivedTrips] = useState<DashboardTrip[]>([])
+  const [archivedLoaded, setArchivedLoaded] = useState(false)
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [showForm, setShowForm] = useState<boolean>(false)
   const [editingTrip, setEditingTrip] = useState<DashboardTrip | null>(null)
   const [showArchived, setShowArchived] = useState<boolean>(false)
+  const tripConflicts = useTripConflicts(trips as any)
   const [showWidgetSettings, setShowWidgetSettings] = useState<boolean | 'mobile'>(false)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => (localStorage.getItem('trek_dashboard_view') as 'grid' | 'list') || 'grid')
   const [deleteTrip, setDeleteTrip] = useState<DashboardTrip | null>(null)
+  const [formHighlightFields, setFormHighlightFields] = useState<string[] | undefined>()
 
   const toggleViewMode = () => {
     setViewMode(prev => {
@@ -591,17 +612,20 @@ export default function DashboardPage(): React.ReactElement {
   const loadTrips = async () => {
     setIsLoading(true)
     try {
-      const [active, archived] = await Promise.all([
-        tripsApi.list(),
-        tripsApi.list({ archived: 1 }),
-      ])
+      const active = await tripsApi.list()
       setTrips(sortTrips(active.trips))
-      setArchivedTrips(sortTrips(archived.trips))
     } catch {
       toast.error(t('dashboard.toast.loadError'))
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const loadArchivedTrips = async () => {
+    try {
+      const archived = await tripsApi.list({ archived: 1 })
+      setArchivedTrips(sortTrips(archived.trips))
+    } catch {}
   }
 
   const handleCreate = async (tripData) => {
@@ -824,6 +848,8 @@ export default function DashboardPage(): React.ReactElement {
             <SpotlightCard
               trip={spotlight}
               t={t} locale={locale} dark={dark}
+              conflictDates={tripConflicts.get(spotlight.id)}
+              onMissingDatesAction={() => { setFormHighlightFields(['start_date', 'end_date']); setEditingTrip(spotlight); setShowForm(true) }}
               onEdit={(can('trip_edit', spotlight) || can('trip_cover_upload', spotlight)) ? tr => { setEditingTrip(tr); setShowForm(true) } : undefined}
               onCopy={can('trip_create') ? handleCopy : undefined}
               onDelete={can('trip_delete', spotlight) ? handleDelete : undefined}
@@ -841,6 +867,8 @@ export default function DashboardPage(): React.ReactElement {
                     key={trip.id}
                     trip={trip}
                     t={t} locale={locale}
+                    conflictDates={tripConflicts.get(trip.id)}
+                    onMissingDatesAction={() => { setFormHighlightFields(['start_date', 'end_date']); setEditingTrip(trip); setShowForm(true) }}
                     onEdit={(can('trip_edit', trip) || can('trip_cover_upload', trip)) ? tr => { setEditingTrip(tr); setShowForm(true) } : undefined}
                     onCopy={can('trip_create') ? handleCopy : undefined}
                     onDelete={can('trip_delete', trip) ? handleDelete : undefined}
@@ -856,6 +884,8 @@ export default function DashboardPage(): React.ReactElement {
                     key={trip.id}
                     trip={trip}
                     t={t} locale={locale}
+                    conflictDates={tripConflicts.get(trip.id)}
+                    onMissingDatesAction={() => { setFormHighlightFields(['start_date', 'end_date']); setEditingTrip(trip); setShowForm(true) }}
                     onEdit={(can('trip_edit', trip) || can('trip_cover_upload', trip)) ? tr => { setEditingTrip(tr); setShowForm(true) } : undefined}
                     onCopy={can('trip_create') ? handleCopy : undefined}
                     onDelete={can('trip_delete', trip) ? handleDelete : undefined}
@@ -868,19 +898,22 @@ export default function DashboardPage(): React.ReactElement {
           )}
 
           {/* Archived section */}
-          {!isLoading && archivedTrips.length > 0 && (
+          {!isLoading && (
             <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: 24 }}>
               <button
-                onClick={() => setShowArchived(v => !v)}
+                onClick={() => {
+                  if (!archivedLoaded) { loadArchivedTrips(); setArchivedLoaded(true) }
+                  setShowArchived(v => !v)
+                }}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', marginBottom: showArchived ? 16 : 0, fontFamily: 'inherit' }}
               >
                 <Archive size={15} style={{ color: '#9ca3af' }} />
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>
-                  {t('dashboard.archived')} ({archivedTrips.length})
+                  {t('dashboard.archived')}{archivedLoaded && archivedTrips.length > 0 ? ` (${archivedTrips.length})` : ''}
                 </span>
                 {showArchived ? <ChevronUp size={14} style={{ color: '#9ca3af' }} /> : <ChevronDown size={14} style={{ color: '#9ca3af' }} />}
               </button>
-              {showArchived && (
+              {showArchived && archivedTrips.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {archivedTrips.map(trip => (
                     <ArchivedRow
@@ -933,9 +966,10 @@ export default function DashboardPage(): React.ReactElement {
 
       <TripFormModal
         isOpen={showForm}
-        onClose={() => { setShowForm(false); setEditingTrip(null) }}
+        onClose={() => { setShowForm(false); setEditingTrip(null); setFormHighlightFields(undefined) }}
         onSave={editingTrip ? handleUpdate : handleCreate}
         trip={editingTrip as any}
+        highlightFields={formHighlightFields}
         onCoverUpdate={handleCoverUpdate}
       />
 

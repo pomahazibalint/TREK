@@ -10,6 +10,12 @@ import { AuthRequest, Trip } from '../types';
 import { writeAudit, getClientIp, logInfo } from '../services/auditLog';
 import { checkPermission } from '../services/permissions';
 import {
+  syncTripToCalendar,
+  removeTripCalendarEntriesForAllUsers,
+  getUserCalendarConflicts,
+  syncAllUsersForTrip,
+} from '../services/calendarSyncService';
+import {
   listTrips,
   createTrip,
   getTrip,
@@ -161,6 +167,10 @@ router.put('/:id', authenticate, (req: Request, res: Response) => {
 
     res.json({ trip: result.updatedTrip });
     broadcast(req.params.id, 'trip:updated', { trip: result.updatedTrip }, req.headers['x-socket-id'] as string);
+
+    if (result.changes.start_date !== undefined || result.changes.end_date !== undefined) {
+      setImmediate(() => syncAllUsersForTrip(req.params.id));
+    }
   } catch (e: any) {
     if (e instanceof NotFoundError) return res.status(404).json({ error: e.message });
     if (e instanceof ValidationError) return res.status(400).json({ error: e.message });
@@ -383,6 +393,7 @@ router.delete('/:id', authenticate, (req: Request, res: Response) => {
   if (!checkPermission('trip_delete', authReq.user.role, tripOwnerId, authReq.user.id, isMemberDel))
     return res.status(403).json({ error: 'No permission to delete this trip' });
 
+  removeTripCalendarEntriesForAllUsers(req.params.id);
   const info = deleteTrip(req.params.id, authReq.user.id, authReq.user.role);
 
   writeAudit({ userId: authReq.user.id, action: 'trip.delete', ip: getClientIp(req), details: { tripId: info.tripId, trip: info.title, ...(info.ownerEmail ? { owner: info.ownerEmail } : {}) } });
@@ -392,6 +403,43 @@ router.delete('/:id', authenticate, (req: Request, res: Response) => {
 
   res.json({ success: true });
   broadcast(info.tripId, 'trip:deleted', { id: info.tripId }, req.headers['x-socket-id'] as string);
+});
+
+// ── Per-user trip settings ────────────────────────────────────────────────
+
+router.get('/:id/user-settings', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  if (!canAccessTrip(req.params.id, authReq.user.id)) return res.status(404).json({ error: 'Trip not found' });
+  const row = db.prepare('SELECT add_to_calendar FROM trip_user_settings WHERE trip_id = ? AND user_id = ?')
+    .get(req.params.id, authReq.user.id) as { add_to_calendar: number } | undefined;
+  res.json({ add_to_calendar: row?.add_to_calendar ?? 0 });
+});
+
+router.put('/:id/user-settings', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  if (!canAccessTrip(req.params.id, authReq.user.id)) return res.status(404).json({ error: 'Trip not found' });
+
+  const { add_to_calendar } = req.body;
+  if (typeof add_to_calendar !== 'number' && typeof add_to_calendar !== 'boolean')
+    return res.status(400).json({ error: 'add_to_calendar must be 0 or 1' });
+
+  const value = add_to_calendar ? 1 : 0;
+  db.prepare(`
+    INSERT INTO trip_user_settings (trip_id, user_id, add_to_calendar)
+    VALUES (?, ?, ?)
+    ON CONFLICT(trip_id, user_id) DO UPDATE SET add_to_calendar = excluded.add_to_calendar
+  `).run(req.params.id, authReq.user.id, value);
+
+  setImmediate(() => syncTripToCalendar(req.params.id, authReq.user.id));
+
+  res.json({ add_to_calendar: value });
+});
+
+router.get('/:id/calendar-conflicts', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  if (!canAccessTrip(req.params.id, authReq.user.id)) return res.status(404).json({ error: 'Trip not found' });
+  const conflicts = getUserCalendarConflicts(req.params.id, authReq.user.id);
+  res.json({ conflict_dates: conflicts });
 });
 
 // ── List members ──────────────────────────────────────────────────────────

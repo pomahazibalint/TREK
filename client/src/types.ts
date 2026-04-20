@@ -36,6 +36,27 @@ export interface Trip {
   settled_at?: string | null
   settled_by?: number | null
   settled_by_username?: string | null
+  missing_dates?: number
+  budget_unsettled?: number
+  empty_itinerary?: number
+  upcoming_days?: number | null
+}
+
+export type TripBadgePriority = 'warning' | 'nudge'
+
+export interface TripBadge {
+  key: string
+  priority: TripBadgePriority
+  labelKey: string
+  labelParams?: Record<string, string | number>
+  detailKey: string
+  actionKey: string
+  actionPath: string
+  actionCallback?: () => void
+}
+
+export interface TripUserSettings {
+  add_to_calendar: number
 }
 
 export interface Day {

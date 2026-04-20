@@ -200,7 +200,7 @@ export default function VacayCalendar() {
     if (popover.existingEntry) {
       await toggleEntry(popover.startDate)
     } else {
-      const dates = getDatesInRange(popover.startDate, popover.endDate, isBlocked)
+      const dates = getDatesInRange(popover.startDate, popover.endDate, () => false)
       await removeEntries(dates)
     }
   }, [popover, toggleEntry, removeEntries, isBlocked])

@@ -16,9 +16,10 @@ interface TripFormModalProps {
   onSave: (data: Record<string, string | number | null>) => Promise<{ trip?: { id: number; [key: string]: unknown } } | void> | void
   trip: Trip | null
   onCoverUpdate?: (tripId: number, coverUrl: string) => void
+  highlightFields?: string[]
 }
 
-export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUpdate }: TripFormModalProps) {
+export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUpdate, highlightFields }: TripFormModalProps) {
   const isEditing = !!trip
   const fileRef = useRef(null)
   const toast = useToast()
@@ -31,6 +32,15 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
   const canEditTrip = !isEditing || can('trip_edit', trip)
 
   const CURRENCIES = ['EUR','USD','GBP','JPY','CHF','CZK','PLN','SEK','NOK','DKK','TRY','THB','AUD','CAD','NZD','BRL','MXN','INR','IDR','MYR','PHP','SGD','KRW','CNY','HKD','TWD','ZAR','AED','SAR','ILS','EGP','MAD','HUF','RON','BGN','ISK','UAH','BDT','LKR','VND','CLP','COP','PEN','ARS']
+
+  const [dateHighlighted, setDateHighlighted] = useState(false)
+
+  useEffect(() => {
+    if (!highlightFields?.length || !isOpen) return
+    const onId = setTimeout(() => setDateHighlighted(true), 250)
+    const offId = setTimeout(() => setDateHighlighted(false), 2500)
+    return () => { clearTimeout(onId); clearTimeout(offId) }
+  }, [isOpen, highlightFields?.length])
 
   const [formData, setFormData] = useState({
     title: '',
@@ -291,14 +301,14 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+          <div style={{ borderRadius: 8, boxShadow: dateHighlighted && highlightFields?.includes('start_date') ? '0 0 0 2px rgba(217,119,6,0.45)' : '0 0 0 0 transparent', transition: 'box-shadow 0.6s ease' }}>
+            <label className="block text-sm font-medium mb-1.5" style={{ color: dateHighlighted && highlightFields?.includes('start_date') ? '#d97706' : undefined, transition: 'color 0.4s' }}>
               <Calendar className="inline w-4 h-4 mr-1" />{t('dashboard.startDate')}
             </label>
             <CustomDatePicker value={formData.start_date} onChange={v => update('start_date', v)} placeholder={t('dashboard.startDate')} />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+          <div style={{ borderRadius: 8, boxShadow: dateHighlighted && highlightFields?.includes('end_date') ? '0 0 0 2px rgba(217,119,6,0.45)' : '0 0 0 0 transparent', transition: 'box-shadow 0.6s ease' }}>
+            <label className="block text-sm font-medium mb-1.5" style={{ color: dateHighlighted && highlightFields?.includes('end_date') ? '#d97706' : undefined, transition: 'color 0.4s' }}>
               <Calendar className="inline w-4 h-4 mr-1" />{t('dashboard.endDate')}
             </label>
             <CustomDatePicker value={formData.end_date} onChange={v => update('end_date', v)} placeholder={t('dashboard.endDate')} />

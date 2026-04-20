@@ -1047,6 +1047,29 @@ function runMigrations(db: Database.Database): void {
       try { db.exec('ALTER TABLE trips ADD COLUMN settled_at DATETIME DEFAULT NULL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
       try { db.exec('ALTER TABLE trips ADD COLUMN settled_by INTEGER REFERENCES users(id) ON DELETE SET NULL DEFAULT NULL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
     },
+    // Migration 91: Per-user trip settings and calendar entry tracking
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS trip_user_settings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          add_to_calendar INTEGER NOT NULL DEFAULT 0,
+          UNIQUE(trip_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_tus_trip ON trip_user_settings(trip_id);
+      `);
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS trip_calendar_entries (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          vacay_entry_id INTEGER NOT NULL REFERENCES vacay_entries(id) ON DELETE CASCADE,
+          UNIQUE(trip_id, user_id, vacay_entry_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_tce_trip ON trip_calendar_entries(trip_id, user_id);
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {

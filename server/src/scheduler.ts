@@ -278,12 +278,40 @@ function startAutoPhotoSync(): void {
   li('Auto Photo Sync scheduled: every 6 hours');
 }
 
+// Auto-archive: nightly at 3 AM — archive trips ended more than N days ago
+let autoArchiveTask: ScheduledTask | null = null;
+
+function startAutoArchive(): void {
+  if (autoArchiveTask) { autoArchiveTask.stop(); autoArchiveTask = null; }
+
+  const tz = process.env.TZ || 'UTC';
+  autoArchiveTask = cron.schedule('0 3 * * *', () => {
+    try {
+      const { db } = require('./db/database');
+      const { logInfo: li } = require('./services/auditLog');
+      const days = parseInt((db.prepare("SELECT value FROM app_settings WHERE key = 'auto_archive_days'").get() as { value: string } | undefined)?.value ?? '60', 10);
+      if (!days || days <= 0) return;
+      const result = db.prepare(`
+        UPDATE trips SET is_archived = 1
+        WHERE is_archived = 0
+          AND end_date IS NOT NULL
+          AND end_date < date('now', '-' || ? || ' days')
+      `).run(days);
+      if (result.changes > 0) li(`Auto-archive: archived ${result.changes} trip(s) older than ${days} days`);
+    } catch (err: unknown) {
+      const { logError: le } = require('./services/auditLog');
+      le(`Auto-archive: ${err instanceof Error ? err.message : err}`);
+    }
+  }, { timezone: tz });
+}
+
 function stop(): void {
   if (currentTask) { currentTask.stop(); currentTask = null; }
   if (demoTask) { demoTask.stop(); demoTask = null; }
   if (reminderTask) { reminderTask.stop(); reminderTask = null; }
   if (versionCheckTask) { versionCheckTask.stop(); versionCheckTask = null; }
   if (autoPhotoSyncTask) { autoPhotoSyncTask.stop(); autoPhotoSyncTask = null; }
+  if (autoArchiveTask) { autoArchiveTask.stop(); autoArchiveTask = null; }
 }
 
-export { start, stop, startDemoReset, startTripReminders, startVersionCheck, startAutoPhotoSync, loadSettings, saveSettings, VALID_INTERVALS };
+export { start, stop, startDemoReset, startTripReminders, startVersionCheck, startAutoPhotoSync, startAutoArchive, loadSettings, saveSettings, VALID_INTERVALS };

@@ -1812,6 +1812,38 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'notif.generic.text': 'You have a new notification',
   'notif.dev.unknown_event.title': '[DEV] Unknown Event',
   'notif.dev.unknown_event.text': 'Event type "{event}" is not registered in EVENT_NOTIFICATION_CONFIG',
+
+  // Trip badge system
+  'tripBadge.budgetUnsettled': 'Budget unsettled',
+  'tripBadge.budgetUnsettled.detail': 'This trip has ended with unsettled expenses.',
+  'tripBadge.budgetUnsettled.action': 'Review budget',
+  'tripBadge.calendarConflict': 'Calendar conflict',
+  'tripBadge.calendarConflict.detail': 'Your calendar has events overlapping these trip dates.',
+  'tripBadge.calendarConflict.action': 'View calendar',
+  'tripBadge.missingDates': 'Dates missing',
+  'tripBadge.missingDates.detail': 'Add travel dates to unlock conflict checking and reminders.',
+  'tripBadge.missingDates.action': 'Edit trip',
+  'tripBadge.upcomingSoon': 'Starting in {days} days',
+  'tripBadge.upcomingSoon.detail': 'Your itinerary is empty — time to plan!',
+  'tripBadge.upcomingSoon.action': 'Open planner',
+  'tripBadge.emptyItinerary': 'No itinerary yet',
+  'tripBadge.emptyItinerary.detail': 'No activities are planned for any day.',
+  'tripBadge.emptyItinerary.action': 'Open planner',
+  'tripBadge.more': '+{count} more',
+
+  // Trip contextual loading text
+  'trip.loading.budget': 'Loading budget...',
+  'trip.loading.reservations': 'Loading reservations...',
+  'trip.loading.packing': 'Loading packing list...',
+  'trip.loading.files': 'Loading files...',
+  'trip.loading.collab': 'Loading messages...',
+  'trip.loading.memories': 'Loading memories...',
+
+  // Trip calendar preferences
+  'trip.myPreferences': 'My Preferences',
+  'trip.addToCalendar': 'Add to my calendar',
+  'trip.addToCalendarHint': 'Block these dates in your personal vacation calendar.',
+  'trip.calendarSyncing': 'Syncing...',
 }
 
 export default en
