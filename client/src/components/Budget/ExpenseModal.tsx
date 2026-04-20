@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import ReactDOM from 'react-dom'
 import { useTripStore } from '../../store/tripStore'
 import { X, Paperclip, Upload, ArrowRightCircle } from 'lucide-react'
@@ -24,10 +24,78 @@ const SYMBOLS: Record<string, string> = {
   COP:'CO$',PEN:'S/.',ARS:'AR$',
 }
 
+function evalExpr(expr: string): number | null {
+  const sanitized = expr.replace(/[^0-9.+\-*/() ]/g, '').trim()
+  if (!sanitized) return null
+  try {
+    // eslint-disable-next-line no-new-func
+    const result = new Function('return (' + sanitized + ')')()
+    if (typeof result !== 'number' || !isFinite(result)) return null
+    return Math.round(result * 100) / 100
+  } catch {
+    return null
+  }
+}
+
+const EXPR_TIP_KEY = 'trek_expr_tip_shown'
+
 const fmtNum = (v: number | null | undefined, locale: string, cur: string) => {
   if (v == null || isNaN(v)) return '-'
   const d = currencyDecimals(cur)
   return Number(v).toLocaleString(locale, { minimumFractionDigits: d, maximumFractionDigits: d }) + ' ' + (SYMBOLS[cur] || cur)
+}
+
+function ExprInput({ val, onChange }: { val: number; onChange: (v: number) => void }) {
+  const [expr, setExpr] = useState(() => val === 0 ? '' : String(val))
+  const [showTip, setShowTip] = useState(false)
+  const focusedRef = useRef(false)
+
+  useEffect(() => {
+    if (!focusedRef.current) setExpr(val === 0 ? '' : String(val))
+  }, [val])
+
+  const result = useMemo(() => evalExpr(expr), [expr])
+  const hasOp = /[+\-*/]/.test(expr)
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value
+    if (/[+\-*/]/.test(v) && !localStorage.getItem(EXPR_TIP_KEY)) {
+      localStorage.setItem(EXPR_TIP_KEY, '1')
+      setShowTip(true)
+      setTimeout(() => setShowTip(false), 3500)
+    }
+    setExpr(v)
+    const n = evalExpr(v)
+    if (n !== null) onChange(n)
+    else if (v === '') onChange(0)
+  }
+
+  const cellInp = { border: '1px solid var(--border-primary)', borderRadius: 6, outline: 'none', fontFamily: 'inherit', background: 'var(--bg-input)', color: 'var(--text-primary)', textAlign: 'right' as const, padding: '4px 6px', fontSize: 13, width: '100%', minWidth: 0 }
+
+  return (
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 5 }}>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={expr}
+        placeholder="0 or 10+5"
+        onChange={handleChange}
+        onFocus={() => { focusedRef.current = true }}
+        onBlur={() => { focusedRef.current = false }}
+        style={cellInp}
+      />
+      {hasOp && result !== null && (
+        <span style={{ fontSize: 12, color: 'var(--text-faint)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+          = {result}
+        </span>
+      )}
+      {showTip && (
+        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 5, padding: '6px 10px', background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: 8, fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', zIndex: 20, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', lineHeight: 1.4 }}>
+          Tip: expressions like <strong>1000+250+150</strong> are evaluated automatically
+        </div>
+      )}
+    </div>
+  )
 }
 
 export interface ExpenseModalProps {
@@ -191,11 +259,6 @@ export default function ExpenseModal({
   }
 
   const inp = { border: '1px solid var(--border-primary)', borderRadius: 6, padding: '7px 10px', fontSize: 13, outline: 'none', fontFamily: 'inherit', background: 'var(--bg-input)', color: 'var(--text-primary)', width: '100%' }
-  const numInp = (val: number, onChange: (v: number) => void) => (
-    <input type="text" inputMode="decimal" value={val === 0 ? '' : String(val)}
-      onChange={e => { const n = parseFloat(e.target.value.replace(',', '.')); onChange(isNaN(n) ? 0 : n) }}
-      style={{ ...inp, textAlign: 'right', padding: '4px 6px', fontSize: 13, width: '100%', minWidth: 0 }} />
-  )
   const DeltaBadge = ({ delta, allZero, cur = tripCurrency }: { delta: number; allZero?: boolean; cur?: string }) => {
     if (allZero) return <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>{t('budget.modal.notReconciled')}</span>
     if (delta < 0.01) return <span style={{ fontSize: 12, fontWeight: 700, color: '#4ade80' }}>{t('budget.modal.balanced')} ✓</span>
@@ -291,14 +354,14 @@ export default function ExpenseModal({
                         </td>
                         <td style={{ padding: '5px 12px', textAlign: 'right' }}>
                           {isDraft
-                            ? numInp(row.paid, v => setRows(prev => prev.map((r, j) => j === i ? { ...r, paid: v } : r)))
-                            : numInp(row.owed, v => setRows(prev => prev.map((r, j) => j === i ? { ...r, owed: v } : r)))
+                            ? <ExprInput val={row.paid} onChange={v => setRows(prev => prev.map((r, j) => j === i ? { ...r, paid: v } : r))} />
+                            : <ExprInput val={row.owed} onChange={v => setRows(prev => prev.map((r, j) => j === i ? { ...r, owed: v } : r))} />
                           }
                           {isForeignCurrency && (isDraft ? row.paid : row.owed) > 0 && hintRate && <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>≈ {fmtNum((isDraft ? row.paid : row.owed) * hintRate, locale, tripCurrency)}</div>}
                         </td>
                         {!isDraft && (
                           <td style={{ padding: '5px 12px', textAlign: 'right' }}>
-                            {numInp(row.paid, v => setRows(prev => prev.map((r, j) => j === i ? { ...r, paid: v } : r)))}
+                            <ExprInput val={row.paid} onChange={v => setRows(prev => prev.map((r, j) => j === i ? { ...r, paid: v } : r))} />
                             {isForeignCurrency && row.paid > 0 && hintRate && <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>≈ {fmtNum(row.paid * hintRate, locale, tripCurrency)}</div>}
                           </td>
                         )}
@@ -309,7 +372,7 @@ export default function ExpenseModal({
                     <tr style={{ borderTop: '1px solid var(--border-primary)', background: 'var(--bg-secondary)' }}>
                       <td style={{ padding: '7px 12px', fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>{t('budget.modal.tip')}</td>
                       <td style={{ padding: '5px 12px', textAlign: 'right' }}>
-                        {numInp(tip, setTip)}
+                        <ExprInput val={tip} onChange={setTip} />
                         {isForeignCurrency && tip > 0 && hintRate && <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>≈ {fmtNum(tip * hintRate, locale, tripCurrency)}</div>}
                       </td>
                       <td style={{ padding: '5px 12px' }} />
