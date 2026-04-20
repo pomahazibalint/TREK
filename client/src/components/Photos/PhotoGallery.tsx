@@ -69,8 +69,8 @@ function buildSections(photos: Photo[], days: Day[]): Section[] {
   const dayByDate = new Map(days.filter(d => d.date).map(d => [d.date, d]))
   const sections = new Map<string, Section>()
 
-  // Preserve trip day order — create sections for all days upfront (empty ones too)
-  for (const day of days) {
+  // Most recent day first
+  for (const day of [...days].reverse()) {
     const key = `day-${day.id}`
     sections.set(key, { key, type: 'trip-day', day, photos: [] })
   }
@@ -95,8 +95,8 @@ function buildSections(photos: Photo[], days: Day[]): Section[] {
     }
   }
 
-  // Sort date groups chronologically
-  const sortedDateGroups = [...dateGroups.values()].sort((a, b) => (a.date! < b.date! ? -1 : 1))
+  // Most recent date first
+  const sortedDateGroups = [...dateGroups.values()].sort((a, b) => (a.date! < b.date! ? 1 : -1))
 
   const result = [...sections.values(), ...sortedDateGroups]
   if (undated.photos.length > 0) result.push(undated)
@@ -104,12 +104,11 @@ function buildSections(photos: Photo[], days: Day[]): Section[] {
 }
 
 function defaultExpandedKey(sections: Section[]): string | null {
-  // Most recent trip-day section with photos, falling back to date-group
+  // Sections are already in descending order — first one with photos is the most recent
   const withPhotos = sections.filter(s => s.photos.length > 0)
   if (withPhotos.length === 0) return null
-  const tripDays = withPhotos.filter(s => s.type === 'trip-day')
-  if (tripDays.length > 0) return tripDays[tripDays.length - 1].key
-  return withPhotos[withPhotos.length - 1].key
+  const tripDay = withPhotos.find(s => s.type === 'trip-day')
+  return (tripDay ?? withPhotos[0]).key
 }
 
 // ── Timeline events ───────────────────────────────────────────────────────────
@@ -297,15 +296,15 @@ function DaySection({ section, expanded, onToggle, photos, places, days, onPhoto
     <div style={{ border: '1px solid var(--border-primary)', borderRadius: 12, overflow: 'hidden', background: 'var(--bg-card)' }}>
       <button
         onClick={onToggle}
-        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'var(--bg-secondary)', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
+        style={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 16px', background: 'var(--bg-secondary)', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
       >
-        {expanded ? <ChevronDown size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} /> : <ChevronRight size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {expanded ? <ChevronDown size={16} style={{ color: 'var(--text-muted)', flexShrink: 0, marginTop: 2 }} /> : <ChevronRight size={16} style={{ color: 'var(--text-muted)', flexShrink: 0, marginTop: 2 }} />}
+        <div style={{ flex: 1, minWidth: 0, paddingBottom: 2 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</span>
             <span style={{ fontSize: 12, color: 'var(--text-faint)', background: 'var(--bg-tertiary)', borderRadius: 20, padding: '1px 8px' }}>{count}</span>
           </div>
-          {subtitle && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{subtitle}</span>}
+          {subtitle && <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>{subtitle}</p>}
         </div>
       </button>
       {expanded && count > 0 && (
@@ -615,54 +614,56 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
         </div>
       </div>
 
-      {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {filteredPhotos.length === 0 && !hasFilters ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-faint)' }}>
-            <Camera size={40} style={{ color: 'var(--border-primary)', display: 'block', margin: '0 auto 12px' }} />
-            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', margin: '0 0 4px' }}>{t('photos.noPhotos')}</p>
-            <p style={{ fontSize: 13, color: 'var(--text-faint)', margin: '0 0 20px' }}>{t('photos.uploadHint')}</p>
-            <button onClick={() => setShowUpload(true)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--accent)', color: 'var(--accent-text)', padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit' }}
-            >
-              <Upload size={14} /> {t('common.upload')}
-            </button>
-          </div>
-        ) : filteredPhotos.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-faint)', fontSize: 13 }}>
-            No photos match the current filters.
-          </div>
-        ) : viewMode === 'grid' ? (
-          filteredSections.map(section => (
-            <DaySection
-              key={section.key}
-              section={section}
-              expanded={expandedKeys.has(section.key)}
-              onToggle={() => toggleSection(section.key)}
-              photos={section.photos}
-              places={places}
-              days={days}
-              onPhotoClick={handlePhotoClick}
-              locale={locale}
-            />
-          ))
-        ) : (
-          <div style={{ maxWidth: 640 }}>
-            {filteredSections.map(section => (
-              <TimelineDaySection
+      {/* Content — outer div scrolls, inner div lays out (prevents flex shrink on expand) */}
+      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {filteredPhotos.length === 0 && !hasFilters ? (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-faint)' }}>
+              <Camera size={40} style={{ color: 'var(--border-primary)', display: 'block', margin: '0 auto 12px' }} />
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', margin: '0 0 4px' }}>{t('photos.noPhotos')}</p>
+              <p style={{ fontSize: 13, color: 'var(--text-faint)', margin: '0 0 20px' }}>{t('photos.uploadHint')}</p>
+              <button onClick={() => setShowUpload(true)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--accent)', color: 'var(--accent-text)', padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit' }}
+              >
+                <Upload size={14} /> {t('common.upload')}
+              </button>
+            </div>
+          ) : filteredPhotos.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-faint)', fontSize: 13 }}>
+              No photos match the current filters.
+            </div>
+          ) : viewMode === 'grid' ? (
+            filteredSections.map(section => (
+              <DaySection
                 key={section.key}
                 section={section}
                 expanded={expandedKeys.has(section.key)}
                 onToggle={() => toggleSection(section.key)}
-                filteredPhotos={section.photos}
+                photos={section.photos}
                 places={places}
                 days={days}
                 onPhotoClick={handlePhotoClick}
                 locale={locale}
               />
-            ))}
-          </div>
-        )}
+            ))
+          ) : (
+            <div style={{ maxWidth: 640 }}>
+              {filteredSections.map(section => (
+                <TimelineDaySection
+                  key={section.key}
+                  section={section}
+                  expanded={expandedKeys.has(section.key)}
+                  onToggle={() => toggleSection(section.key)}
+                  filteredPhotos={section.photos}
+                  places={places}
+                  days={days}
+                  onPhotoClick={handlePhotoClick}
+                  locale={locale}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Lightbox — only for direct upload photos (provider photos use their own lightbox) */}
