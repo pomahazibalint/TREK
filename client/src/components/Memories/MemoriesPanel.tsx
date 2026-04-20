@@ -300,6 +300,7 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
   // Lightbox
   const [lightboxId, setLightboxId] = useState<string | null>(null)
   const [lightboxUserId, setLightboxUserId] = useState<number | null>(null)
+  const [lightboxFilteredPhotos, setLightboxFilteredPhotos] = useState<Photo[]>([])
   const [lightboxInfo, setLightboxInfo] = useState<any>(null)
   const [lightboxInfoLoading, setLightboxInfoLoading] = useState(false)
   const [lightboxOriginalSrc, setLightboxOriginalSrc] = useState('')
@@ -914,9 +915,10 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
 
   const galleryPhotos = allVisible.map((p, i) => adaptToPhoto(p, tripId, i))
 
-  const openLightboxForPhoto = (photo: Photo) => {
+  const openLightboxForPhoto = (photo: Photo, filteredPhotos: Photo[]) => {
     const tripPhoto = allVisible.find(p => p.asset_id === photo.asset_id && p.provider === photo.provider)
     if (!tripPhoto) return
+    setLightboxFilteredPhotos(filteredPhotos)
     setLightboxId(tripPhoto.asset_id)
     setLightboxUserId(tripPhoto.user_id)
     setLightboxInfo(null)
@@ -1028,11 +1030,14 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
           setShowMobileInfo(false)
         }
 
-        const currentIdx = allVisible.findIndex(p => p.asset_id === lightboxId)
+        const navList = lightboxFilteredPhotos.length > 0 ? lightboxFilteredPhotos : allVisible.map((p, i) => adaptToPhoto(p, tripId, i))
+        const currentIdx = navList.findIndex(p => p.asset_id === lightboxId)
         const hasPrev = currentIdx > 0
-        const hasNext = currentIdx < allVisible.length - 1
+        const hasNext = currentIdx < navList.length - 1
         const navigateTo = (idx: number) => {
-          const photo = allVisible[idx]
+          const adapted = navList[idx]
+          if (!adapted) return
+          const photo = allVisible.find(p => p.asset_id === adapted.asset_id && p.provider === adapted.provider)
           if (!photo) return
           if (lightboxOriginalSrc) URL.revokeObjectURL(lightboxOriginalSrc)
           setLightboxOriginalSrc('')
@@ -1133,9 +1138,9 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
             </button>
 
             {/* Counter */}
-            {allVisible.length > 1 && (
+            {navList.length > 1 && (
               <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 10, fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
-                {currentIdx + 1} / {allVisible.length}
+                {currentIdx + 1} / {navList.length}
               </div>
             )}
 

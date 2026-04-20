@@ -14,7 +14,7 @@ interface PhotoGalleryProps {
   places: Place[]
   days: Day[]
   tripId: number
-  onPhotoClick?: (photo: Photo) => void
+  onPhotoClick?: (photo: Photo, filteredPhotos: Photo[]) => void
   headerActions?: React.ReactNode
 }
 
@@ -448,7 +448,7 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
   }, [filteredPhotos, allSections, days])
 
   const handlePhotoClick = (photo: Photo) => {
-    if (onPhotoClickProp) { onPhotoClickProp(photo); return }
+    if (onPhotoClickProp) { onPhotoClickProp(photo, filteredPhotos); return }
     const idx = filteredPhotos.findIndex(p => p.id === photo.id)
     setLightboxIndex(idx >= 0 ? idx : null)
   }
