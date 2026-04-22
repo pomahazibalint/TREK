@@ -34,6 +34,7 @@ import { usePlaceSelection } from '../hooks/usePlaceSelection'
 import { usePlannerHistory } from '../hooks/usePlannerHistory'
 import type { Accommodation, TripMember, Day, Place, Reservation, PackingItem, TodoItem } from '../types'
 import { ListTodo } from 'lucide-react'
+import { concurrentMap } from '../utils/concurrentMap'
 
 function ListsContainer({ tripId, packingItems, todoItems }: { tripId: number | string; packingItems: PackingItem[]; todoItems: TodoItem[] }) {
   const [subTab, setSubTab] = useState<'packing' | 'todo'>(() => {
@@ -309,7 +310,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
       const dayAssignments = useTripStore.getState().assignments[String(selectedDayId)] || []
       const toUpdate = dayAssignments.filter(a => a.place?.lat && a.place?.lng)
       // Fire API calls as background updates (don't block on them)
-      Promise.all(toUpdate.map(a => tripActions.updatePlace(tripId, a.place.id, { transport_mode: mode }))).catch(() => {})
+      concurrentMap(toUpdate, a => tripActions.updatePlace(tripId, a.place.id, { transport_mode: mode }), 4).catch(() => {})
     }
   }, [selectedDayId, tripId, updateRouteForDay])
 

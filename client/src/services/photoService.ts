@@ -12,6 +12,47 @@ const listeners = new Map<string, Set<(entry: PhotoEntry) => void>>()
 // Separate thumb listeners — called when thumbDataUrl becomes available after initial load
 const thumbListeners = new Map<string, Set<(thumb: string) => void>>()
 
+// Concurrency limiter — prevents simultaneous burst requests that trip crawl detection
+const MAX_CONCURRENT = 4
+let activeRequests = 0
+interface QueueItem { cacheKey: string; photoId: string; lat?: number; lng?: number; name?: string }
+const requestQueue: QueueItem[] = []
+
+function drainQueue() {
+  while (activeRequests < MAX_CONCURRENT && requestQueue.length > 0) {
+    const item = requestQueue.shift()!
+    activeRequests++
+    mapsApi.placePhoto(item.photoId, item.lat, item.lng, item.name)
+      .then(async (data: { photoUrl?: string }) => {
+        const photoUrl = data.photoUrl || null
+        if (!photoUrl) {
+          const entry: PhotoEntry = { photoUrl: null, thumbDataUrl: null }
+          cache.set(item.cacheKey, entry)
+          notify(item.cacheKey, entry)
+          return
+        }
+        const entry: PhotoEntry = { photoUrl, thumbDataUrl: null }
+        cache.set(item.cacheKey, entry)
+        notify(item.cacheKey, entry)
+        const thumb = await urlToBase64(photoUrl)
+        if (thumb) {
+          entry.thumbDataUrl = thumb
+          notifyThumb(item.cacheKey, thumb)
+        }
+      })
+      .catch(() => {
+        const entry: PhotoEntry = { photoUrl: null, thumbDataUrl: null }
+        cache.set(item.cacheKey, entry)
+        notify(item.cacheKey, entry)
+      })
+      .finally(() => {
+        inFlight.delete(item.cacheKey)
+        activeRequests--
+        drainQueue()
+      })
+  }
+}
+
 function notify(key: string, entry: PhotoEntry) {
   listeners.get(key)?.forEach(fn => fn(entry))
   listeners.delete(key)
@@ -96,37 +137,9 @@ export function fetchPhoto(
   }
 
   inFlight.add(cacheKey)
-  mapsApi.placePhoto(photoId, lat, lng, name)
-    .then(async (data: { photoUrl?: string }) => {
-      const photoUrl = data.photoUrl || null
-      if (!photoUrl) {
-        const entry: PhotoEntry = { photoUrl: null, thumbDataUrl: null }
-        cache.set(cacheKey, entry)
-        callback?.(entry)
-        notify(cacheKey, entry)
-        return
-      }
-
-      // Store URL first — sidebar can show immediately
-      const entry: PhotoEntry = { photoUrl, thumbDataUrl: null }
-      cache.set(cacheKey, entry)
-      callback?.(entry)
-      notify(cacheKey, entry)
-
-      // Generate base64 thumb in background
-      const thumb = await urlToBase64(photoUrl)
-      if (thumb) {
-        entry.thumbDataUrl = thumb
-        notifyThumb(cacheKey, thumb)
-      }
-    })
-    .catch(() => {
-      const entry: PhotoEntry = { photoUrl: null, thumbDataUrl: null }
-      cache.set(cacheKey, entry)
-      callback?.(entry)
-      notify(cacheKey, entry)
-    })
-    .finally(() => { inFlight.delete(cacheKey) })
+  if (callback) onPhotoLoaded(cacheKey, callback)
+  requestQueue.push({ cacheKey, photoId, lat, lng, name })
+  drainQueue()
 }
 
 export function getAllThumbs(): Record<string, string> {

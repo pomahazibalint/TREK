@@ -3,6 +3,7 @@ import { createElement } from 'react'
 import { getCategoryIcon } from '../shared/categoryIcons'
 import { FileText, Info, Clock, MapPin, Navigation, Train, Plane, Bus, Car, Ship, Coffee, Ticket, Star, Heart, Camera, Flag, Lightbulb, AlertTriangle, ShoppingBag, Bookmark, Hotel, LogIn, LogOut, KeyRound, BedDouble, LucideIcon } from 'lucide-react'
 import { accommodationsApi, mapsApi } from '../../api/client'
+import { concurrentMap } from '../../utils/concurrentMap'
 import type { Trip, Day, Place, Category, AssignmentsMap, DayNotesMap } from '../../types'
 
 function renderLucideIcon(icon:LucideIcon, props = {}) {
@@ -96,13 +97,13 @@ async function fetchPlacePhotos(assignments: Record<string, { place?: { id: numb
 
   const toFetch = unique.filter(p => !p.image_url && p.google_place_id)
 
-  await Promise.allSettled(
-    toFetch.map(async (place) => {
-      try {
-        const data = await mapsApi.placePhoto(place.google_place_id)
-        if (data.photoUrl) photoMap[place.id] = data.photoUrl
-      } catch {}
-    })
+  await concurrentMap(
+    toFetch,
+    async (place) => {
+      const data = await mapsApi.placePhoto(place.google_place_id)
+      if (data.photoUrl) photoMap[place.id] = data.photoUrl
+    },
+    4
   )
   return photoMap
 }

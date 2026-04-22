@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { tripsApi } from '../api/client'
+import { concurrentMap } from '../utils/concurrentMap'
 import type { Trip } from '../types'
 
 export function useTripConflicts(trips: Trip[]): Map<number, string[]> {
@@ -11,12 +12,12 @@ export function useTripConflicts(trips: Trip[]): Map<number, string[]> {
     if (eligible.length === 0) return
 
     let cancelled = false
-    Promise.allSettled(
-      eligible.map(t =>
-        tripsApi.getCalendarConflicts(t.id)
-          .then(data => ({ id: t.id, dates: (data.conflict_dates as string[]) || [] }))
-          .catch(() => ({ id: t.id, dates: [] }))
-      )
+    concurrentMap(
+      eligible,
+      t => tripsApi.getCalendarConflicts(t.id)
+        .then(data => ({ id: t.id, dates: (data.conflict_dates as string[]) || [] }))
+        .catch(() => ({ id: t.id, dates: [] })),
+      4
     ).then(results => {
       if (cancelled) return
       const map = new Map<number, string[]>()
