@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { useTranslation } from '../../i18n'
+import { useAddonStore } from '../../store/addonStore'
 import { MessageCircle, StickyNote, BarChart3, Sparkles } from 'lucide-react'
 import CollabChat from './CollabChat'
 import CollabNotes from './CollabNotes'
@@ -37,36 +38,51 @@ interface CollabPanelProps {
 export default function CollabPanel({ tripId, tripMembers = [] }: CollabPanelProps) {
   const { user } = useAuthStore()
   const { t } = useTranslation()
-  const [mobileTab, setMobileTab] = useState('chat')
+  const isSubEnabled = useAddonStore(s => s.isSubEnabled)
+  const chatEnabled = isSubEnabled('collab', 'chat_enabled')
+  const notesEnabled = isSubEnabled('collab', 'notes_enabled')
+  const pollsEnabled = isSubEnabled('collab', 'polls_enabled')
+
+  const allTabs = [
+    { id: 'chat', label: t('collab.tabs.chat') || 'Chat', icon: MessageCircle, enabled: chatEnabled },
+    { id: 'notes', label: t('collab.tabs.notes') || 'Notes', icon: StickyNote, enabled: notesEnabled },
+    { id: 'polls', label: t('collab.tabs.polls') || 'Polls', icon: BarChart3, enabled: pollsEnabled },
+    { id: 'next', label: t('collab.whatsNext.title') || "What's Next", icon: Sparkles, enabled: true },
+  ]
+  const tabs = allTabs.filter(t => t.enabled)
+
+  const [mobileTab, setMobileTab] = useState(() => tabs[0]?.id || 'next')
   const isDesktop = useIsDesktop()
 
-  const tabs = [
-    { id: 'chat', label: t('collab.tabs.chat') || 'Chat', icon: MessageCircle },
-    { id: 'notes', label: t('collab.tabs.notes') || 'Notes', icon: StickyNote },
-    { id: 'polls', label: t('collab.tabs.polls') || 'Polls', icon: BarChart3 },
-    { id: 'next', label: t('collab.whatsNext.title') || "What's Next", icon: Sparkles },
-  ]
+  // Reset mobile tab if selected tab gets disabled
+  useEffect(() => {
+    if (!tabs.find(t => t.id === mobileTab)) setMobileTab(tabs[0]?.id || 'next')
+  }, [chatEnabled, notesEnabled, pollsEnabled])
 
   if (isDesktop) {
     return (
       <div style={{ height: '100%', display: 'flex', gap: 12, padding: 12, overflow: 'hidden', minHeight: 0 }}>
         {/* Chat — left, fixed width */}
-        <div style={{ ...card, flex: '0 0 380px' }}>
-          <CollabChat tripId={tripId} currentUser={user} />
-        </div>
+        {chatEnabled && (
+          <div style={{ ...card, flex: '0 0 380px' }}>
+            <CollabChat tripId={tripId} currentUser={user} />
+          </div>
+        )}
 
         {/* Right column: Notes top, Polls + What's Next bottom */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'hidden', minHeight: 0 }}>
-          {/* Notes — top */}
-          <div style={{ ...card, flex: 1 }}>
-            <CollabNotes tripId={tripId} currentUser={user} />
-          </div>
-
-          {/* Polls + What's Next — bottom row */}
-          <div style={{ flex: 1, display: 'flex', gap: 12, overflow: 'hidden', minHeight: 0 }}>
+          {notesEnabled && (
             <div style={{ ...card, flex: 1 }}>
-              <CollabPolls tripId={tripId} currentUser={user} />
+              <CollabNotes tripId={tripId} currentUser={user} />
             </div>
+          )}
+
+          <div style={{ flex: 1, display: 'flex', gap: 12, overflow: 'hidden', minHeight: 0 }}>
+            {pollsEnabled && (
+              <div style={{ ...card, flex: 1 }}>
+                <CollabPolls tripId={tripId} currentUser={user} />
+              </div>
+            )}
             <div style={{ ...card, flex: 1 }}>
               <WhatsNextWidget tripMembers={tripMembers} />
             </div>
@@ -102,9 +118,9 @@ export default function CollabPanel({ tripId, tripMembers = [] }: CollabPanelPro
       </div>
 
       <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
-        {mobileTab === 'chat' && <CollabChat tripId={tripId} currentUser={user} />}
-        {mobileTab === 'notes' && <CollabNotes tripId={tripId} currentUser={user} />}
-        {mobileTab === 'polls' && <CollabPolls tripId={tripId} currentUser={user} />}
+        {mobileTab === 'chat' && chatEnabled && <CollabChat tripId={tripId} currentUser={user} />}
+        {mobileTab === 'notes' && notesEnabled && <CollabNotes tripId={tripId} currentUser={user} />}
+        {mobileTab === 'polls' && pollsEnabled && <CollabPolls tripId={tripId} currentUser={user} />}
         {mobileTab === 'next' && <WhatsNextWidget tripMembers={tripMembers} />}
       </div>
     </div>

@@ -189,6 +189,53 @@ export default function AddonManager({ bagTrackingEnabled, onToggleBagTracking }
                         </div>
                       </div>
                     )}
+                    {addon.id === 'collab' && addon.enabled && (() => {
+                      const SUB_FEATURES = [
+                        { key: 'chat_enabled', labelKey: 'admin.collab.chat', hintKey: 'admin.collab.chatHint' },
+                        { key: 'notes_enabled', labelKey: 'admin.collab.notes', hintKey: 'admin.collab.notesHint' },
+                        { key: 'polls_enabled', labelKey: 'admin.collab.polls', hintKey: 'admin.collab.pollsHint' },
+                      ]
+                      return (
+                        <div className="px-6 py-3 border-b" style={{ borderColor: 'var(--border-secondary)', background: 'var(--bg-secondary)', paddingLeft: 70 }}>
+                          <div className="space-y-2">
+                            {SUB_FEATURES.map(({ key, labelKey, hintKey }) => {
+                              const active = addon.config ? addon.config[key] !== false : true
+                              return (
+                                <div key={key} className="flex items-center gap-4" style={{ minHeight: 32 }}>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{t(labelKey)}</div>
+                                    <div className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>{t(hintKey)}</div>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className="hidden sm:inline text-xs font-medium" style={{ color: active ? 'var(--text-primary)' : 'var(--text-faint)' }}>
+                                      {active ? t('admin.addons.enabled') : t('admin.addons.disabled')}
+                                    </span>
+                                    <button
+                                      onClick={async () => {
+                                        const newConfig = { ...(addon.config || {}), [key]: !active }
+                                        setAddons(prev => prev.map(a => a.id === 'collab' ? { ...a, config: newConfig } : a))
+                                        try {
+                                          await adminApi.updateAddon('collab', { config: newConfig })
+                                          refreshGlobalAddons()
+                                        } catch {
+                                          setAddons(prev => prev.map(a => a.id === 'collab' ? { ...a, config: { ...(a.config || {}), [key]: active } } : a))
+                                          toast.error(t('admin.addons.toast.error'))
+                                        }
+                                      }}
+                                      className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
+                                      style={{ background: active ? 'var(--text-primary)' : 'var(--border-primary)' }}
+                                    >
+                                      <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white transition-transform duration-200"
+                                        style={{ transform: active ? 'translateX(20px)' : 'translateX(0)' }} />
+                                    </button>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })()}
                     {addon.id === 'packing' && addon.enabled && onToggleBagTracking && (
                       <div className="flex items-center gap-4 px-6 py-3 border-b" style={{ borderColor: 'var(--border-secondary)', background: 'var(--bg-secondary)', paddingLeft: 70 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>

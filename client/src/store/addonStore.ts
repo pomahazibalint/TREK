@@ -27,6 +27,7 @@ interface AddonState {
   loaded: boolean
   loadAddons: () => Promise<void>
   isEnabled: (id: string) => boolean
+  isSubEnabled: (id: string, subKey: string) => boolean
 }
 
 export const useAddonStore = create<AddonState>((set, get) => ({
@@ -47,5 +48,12 @@ export const useAddonStore = create<AddonState>((set, get) => ({
       return get().addons.some(a => a.type === 'photo_provider' && a.enabled)
     }
     return get().addons.some(a => a.id === id && a.enabled)
+  },
+
+  isSubEnabled: (id: string, subKey: string) => {
+    const addon = get().addons.find(a => a.id === id)
+    if (!addon?.enabled) return false
+    if (!addon.config || !(subKey in addon.config)) return true // default on
+    return addon.config[subKey] !== false
   },
 }))
