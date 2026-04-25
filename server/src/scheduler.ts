@@ -212,6 +212,62 @@ function startTripReminders(): void {
   }, { timezone: tz });
 }
 
+// Todo due-date reminders: daily check at 8 AM for todos due today
+let todoReminderTask: ScheduledTask | null = null;
+
+function startTodoReminders(): void {
+  if (todoReminderTask) { todoReminderTask.stop(); todoReminderTask = null; }
+
+  try {
+    const { db } = require('./db/database');
+    const getSetting = (key: string) => (db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value;
+    const reminderEnabled = getSetting('notify_todo_reminder') !== 'false';
+    const channelsRaw = getSetting('notification_channels') || getSetting('notification_channel') || 'none';
+    const activeChannels = channelsRaw === 'none' ? [] : channelsRaw.split(',').map((c: string) => c.trim());
+    const hasEmail = activeChannels.includes('email') && !!(getSetting('smtp_host') || '').trim();
+    const hasWebhook = activeChannels.includes('webhook');
+    const channelReady = hasEmail || hasWebhook;
+
+    if (!channelReady || !reminderEnabled) return;
+  } catch {
+    return;
+  }
+
+  const tz = process.env.TZ || 'UTC';
+  todoReminderTask = cron.schedule('0 8 * * *', async () => {
+    try {
+      const { db } = require('./db/database');
+      const { send } = require('./services/notificationService');
+
+      const todos = db.prepare(`
+        SELECT ti.id, ti.name, ti.trip_id, t.title as trip_title
+        FROM todo_items ti
+        JOIN trips t ON t.id = ti.trip_id
+        WHERE ti.due_date = date('now')
+          AND ti.checked = 0
+      `).all() as { id: number; name: string; trip_id: number; trip_title: string }[];
+
+      for (const todo of todos) {
+        await send({
+          event: 'todo_due',
+          actorId: null,
+          scope: 'trip',
+          targetId: todo.trip_id,
+          params: { name: todo.name, trip: todo.trip_title, tripId: String(todo.trip_id) },
+        }).catch(() => {});
+      }
+
+      if (todos.length > 0) {
+        const { logInfo: li } = require('./services/auditLog');
+        li(`Todo due reminders sent for ${todos.length} item(s)`);
+      }
+    } catch (err: unknown) {
+      const { logError: le } = require('./services/auditLog');
+      le(`Todo reminder check failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }, { timezone: tz });
+}
+
 // Version check: daily at 9 AM — notify admins if a new TREK release is available
 let versionCheckTask: ScheduledTask | null = null;
 
@@ -324,4 +380,4 @@ function stop(): void {
   if (autoArchiveTask) { autoArchiveTask.stop(); autoArchiveTask = null; }
 }
 
-export { start, stop, startDemoReset, startTripReminders, startVersionCheck, startAutoPhotoSync, startAutoArchive, startIdempotencyCleanup, loadSettings, saveSettings, VALID_INTERVALS };
+export { start, stop, startDemoReset, startTripReminders, startTodoReminders, startVersionCheck, startAutoPhotoSync, startAutoArchive, startIdempotencyCleanup, loadSettings, saveSettings, VALID_INTERVALS };

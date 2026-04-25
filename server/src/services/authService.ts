@@ -33,6 +33,8 @@ const ADMIN_SETTINGS_KEYS = [
   'notification_channels', 'admin_webhook_url',
   'password_login', 'password_registration', 'oidc_login', 'oidc_registration',
   'default_language',
+  'maps_autocomplete_disabled', 'maps_details_disabled',
+  'notify_todo_reminder',
 ];
 
 const avatarDir = path.join(__dirname, '../../uploads/avatars');
@@ -247,6 +249,8 @@ export function getAppConfig(authenticatedUser: { id: number } | null) {
     oidc_registration: toggles.oidcRegistration,
     env_override_oidc_only: toggles.envOverrideOidcOnly,
     default_language: (db.prepare("SELECT value FROM app_settings WHERE key = 'default_language'").get() as { value: string } | undefined)?.value || null,
+    maps_autocomplete_disabled: (db.prepare("SELECT value FROM app_settings WHERE key = 'maps_autocomplete_disabled'").get() as { value: string } | undefined)?.value === 'true',
+    maps_details_disabled: (db.prepare("SELECT value FROM app_settings WHERE key = 'maps_details_disabled'").get() as { value: string } | undefined)?.value === 'true',
     demo_mode: isDemo,
     demo_email: isDemo ? 'demo@trek.app' : undefined,
     demo_password: isDemo ? 'demo12345' : undefined,

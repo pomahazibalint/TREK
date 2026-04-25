@@ -46,6 +46,7 @@ const server = app.listen(PORT, () => {
   }
   scheduler.start();
   scheduler.startTripReminders();
+  scheduler.startTodoReminders();
   scheduler.startVersionCheck();
   scheduler.startDemoReset();
   scheduler.startAutoPhotoSync();

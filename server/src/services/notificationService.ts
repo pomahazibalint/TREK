@@ -77,6 +77,13 @@ const EVENT_NOTIFICATION_CONFIG: Record<string, EventNotifConfig> = {
     navigateTextKey: 'notif.action.view_trip',
     navigateTarget: p => (p.tripId ? `/trips/${p.tripId}` : null),
   },
+  todo_due: {
+    inAppType: 'navigate',
+    titleKey: 'notif.todo_due.title',
+    textKey: 'notif.todo_due.text',
+    navigateTextKey: 'notif.action.view_trip',
+    navigateTarget: p => (p.tripId ? `/trips/${p.tripId}?tab=todo` : null),
+  },
   vacay_invite: {
     inAppType: 'navigate',
     titleKey: 'notif.vacay_invite.title',

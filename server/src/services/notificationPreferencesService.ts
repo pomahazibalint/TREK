@@ -9,6 +9,7 @@ export type NotifEventType =
   | 'trip_invite'
   | 'booking_change'
   | 'trip_reminder'
+  | 'todo_due'
   | 'vacay_invite'
   | 'photos_shared'
   | 'collab_message'
@@ -28,6 +29,7 @@ const IMPLEMENTED_COMBOS: Record<NotifEventType, NotifChannel[]> = {
   trip_invite:        ['inapp', 'email', 'webhook'],
   booking_change:     ['inapp', 'email', 'webhook'],
   trip_reminder:      ['inapp', 'email', 'webhook'],
+  todo_due:           ['inapp', 'email', 'webhook'],
   vacay_invite:       ['inapp', 'email', 'webhook'],
   photos_shared:      ['inapp', 'email', 'webhook'],
   collab_message:     ['inapp', 'email', 'webhook'],
