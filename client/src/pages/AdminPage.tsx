@@ -5,7 +5,7 @@ import DevNotificationsPanel from '../components/Admin/DevNotificationsPanel'
 import { useAuthStore } from '../store/authStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { useAddonStore } from '../store/addonStore'
-import { useTranslation } from '../i18n'
+import { useTranslation, SUPPORTED_LANGUAGES } from '../i18n'
 import { getApiErrorMessage } from '../types'
 import Navbar from '../components/Layout/Navbar'
 import Modal from '../components/shared/Modal'
@@ -195,8 +195,12 @@ export default function AdminPage(): React.ReactElement {
   const [oidcConfig, setOidcConfig] = useState<OidcConfig>({ issuer: '', client_id: '', client_secret: '', client_secret_set: false, display_name: '', oidc_only: false, oidc_auto_provision: false, discovery_url: '' })
   const [savingOidc, setSavingOidc] = useState<boolean>(false)
 
-  // Registration toggle
+  // Auth method toggles
   const [allowRegistration, setAllowRegistration] = useState<boolean>(true)
+  const [passwordLogin, setPasswordLogin] = useState<boolean>(true)
+  const [oidcLoginEnabled, setOidcLoginEnabled] = useState<boolean>(true)
+  const [oidcRegistration, setOidcRegistration] = useState<boolean>(true)
+  const [envOverrideOidcOnly, setEnvOverrideOidcOnly] = useState<boolean>(false)
   const [requireMfa, setRequireMfa] = useState<boolean>(false)
 
   // Invite links
@@ -207,6 +211,10 @@ export default function AdminPage(): React.ReactElement {
   // File types
   const [allowedFileTypes, setAllowedFileTypes] = useState<string>('jpg,jpeg,png,gif,webp,heic,pdf,doc,docx,xls,xlsx,txt,csv')
   const [savingFileTypes, setSavingFileTypes] = useState<boolean>(false)
+
+  // Default language
+  const [defaultLanguage, setDefaultLanguage] = useState<string>('')
+  const [savingDefaultLanguage, setSavingDefaultLanguage] = useState<boolean>(false)
 
   // SMTP settings
   const [smtpValues, setSmtpValues] = useState<Record<string, string>>({})
@@ -269,8 +277,13 @@ export default function AdminPage(): React.ReactElement {
     try {
       const config = await authApi.getAppConfig()
       setAllowRegistration(config.allow_registration)
+      if (config.password_login !== undefined) setPasswordLogin(config.password_login !== false)
+      if (config.oidc_login !== undefined) setOidcLoginEnabled(config.oidc_login !== false)
+      if (config.oidc_registration !== undefined) setOidcRegistration(config.oidc_registration !== false)
+      if (config.env_override_oidc_only !== undefined) setEnvOverrideOidcOnly(!!config.env_override_oidc_only)
       if (config.require_mfa !== undefined) setRequireMfa(!!config.require_mfa)
       if (config.allowed_file_types) setAllowedFileTypes(config.allowed_file_types)
+      if (config.default_language) setDefaultLanguage(config.default_language)
     } catch (err: unknown) {
       // ignore
     }
@@ -289,9 +302,39 @@ export default function AdminPage(): React.ReactElement {
   const handleToggleRegistration = async (value) => {
     setAllowRegistration(value)
     try {
-      await authApi.updateAppSettings({ allow_registration: value })
+      await authApi.updateAppSettings({ allow_registration: value, password_registration: value })
     } catch (err: unknown) {
       setAllowRegistration(!value)
+      toast.error(getApiErrorMessage(err, t('common.error')))
+    }
+  }
+
+  const handleTogglePasswordLogin = async (value: boolean) => {
+    setPasswordLogin(value)
+    try {
+      await authApi.updateAppSettings({ password_login: value })
+    } catch (err: unknown) {
+      setPasswordLogin(!value)
+      toast.error(getApiErrorMessage(err, t('common.error')))
+    }
+  }
+
+  const handleToggleOidcLogin = async (value: boolean) => {
+    setOidcLoginEnabled(value)
+    try {
+      await authApi.updateAppSettings({ oidc_login: value })
+    } catch (err: unknown) {
+      setOidcLoginEnabled(!value)
+      toast.error(getApiErrorMessage(err, t('common.error')))
+    }
+  }
+
+  const handleToggleOidcRegistration = async (value: boolean) => {
+    setOidcRegistration(value)
+    try {
+      await authApi.updateAppSettings({ oidc_registration: value })
+    } catch (err: unknown) {
+      setOidcRegistration(!value)
       toast.error(getApiErrorMessage(err, t('common.error')))
     }
   }
@@ -813,6 +856,39 @@ export default function AdminPage(): React.ReactElement {
                 </div>
               </div>
 
+              {/* Authentication methods */}
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100">
+                  <h2 className="font-semibold text-slate-900">{t('admin.authMethods')}</h2>
+                </div>
+                <div className="p-6 space-y-5">
+                  {envOverrideOidcOnly && (
+                    <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{t('admin.envOverrideHint')}</p>
+                  )}
+                  {[
+                    { label: t('admin.passwordLogin'), hint: t('admin.passwordLoginHint'), value: passwordLogin, onToggle: handleTogglePasswordLogin, disabled: envOverrideOidcOnly },
+                    { label: t('admin.oidcLogin'), hint: t('admin.oidcLoginHint'), value: oidcLoginEnabled, onToggle: handleToggleOidcLogin, disabled: false },
+                    { label: t('admin.oidcRegistration'), hint: t('admin.oidcRegistrationHint'), value: oidcRegistration, onToggle: handleToggleOidcRegistration, disabled: false },
+                  ].map(({ label, hint, value, onToggle, disabled }) => (
+                    <div key={label} className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">{label}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{hint}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => !disabled && onToggle(!value)}
+                        disabled={disabled}
+                        className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
+                        style={{ background: value && !disabled ? 'var(--text-primary)' : 'var(--border-primary)', opacity: disabled ? 0.5 : 1 }}
+                      >
+                        <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white transition-transform duration-200" style={{ transform: value && !disabled ? 'translateX(20px)' : 'translateX(0)' }} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Require 2FA for all users */}
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-100">
@@ -836,6 +912,41 @@ export default function AdminPage(): React.ReactElement {
                       />
                     </button>
                   </div>
+                </div>
+              </div>
+
+              {/* Default Language */}
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100">
+                  <h2 className="font-semibold text-slate-900">{t('admin.defaultLanguage')}</h2>
+                  <p className="text-xs text-slate-400 mt-1">{t('admin.defaultLanguageHint')}</p>
+                </div>
+                <div className="p-6">
+                  <select
+                    value={defaultLanguage}
+                    onChange={e => setDefaultLanguage(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-400 focus:border-transparent"
+                  >
+                    <option value="">{t('admin.defaultLanguageAuto')}</option>
+                    {SUPPORTED_LANGUAGES.map(({ value, label }) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={async () => {
+                      setSavingDefaultLanguage(true)
+                      try {
+                        await authApi.updateAppSettings({ default_language: defaultLanguage || null })
+                        toast.success(t('common.saved'))
+                      } catch { toast.error(t('common.error')) }
+                      finally { setSavingDefaultLanguage(false) }
+                    }}
+                    disabled={savingDefaultLanguage}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm hover:bg-slate-700 disabled:bg-slate-400 mt-3"
+                  >
+                    {savingDefaultLanguage ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
+                    {t('common.save')}
+                  </button>
                 </div>
               </div>
 

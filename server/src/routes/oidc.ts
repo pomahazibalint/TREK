@@ -15,6 +15,7 @@ import {
   frontendUrl,
   getAppUrl,
 } from '../services/oidcService';
+import { resolveAuthToggles } from '../services/authService';
 
 const router = express.Router();
 
@@ -23,6 +24,7 @@ const router = express.Router();
 router.get('/login', async (req: Request, res: Response) => {
   const config = getOidcConfig();
   if (!config) return res.status(400).json({ error: 'OIDC not configured' });
+  if (!resolveAuthToggles().oidcLogin) return res.status(403).json({ error: 'OIDC login is disabled' });
 
   if (config.issuer && !config.issuer.startsWith('https://') && process.env.NODE_ENV === 'production') {
     return res.status(400).json({ error: 'OIDC issuer must use HTTPS in production' });
@@ -74,6 +76,7 @@ router.get('/callback', async (req: Request, res: Response) => {
 
   const config = getOidcConfig();
   if (!config) return res.redirect(frontendUrl('/login?oidc_error=not_configured'));
+  if (!resolveAuthToggles().oidcLogin) return res.redirect(frontendUrl('/login?oidc_error=oidc_disabled'));
 
   if (config.issuer && !config.issuer.startsWith('https://') && process.env.NODE_ENV === 'production') {
     return res.redirect(frontendUrl('/login?oidc_error=issuer_not_https'));

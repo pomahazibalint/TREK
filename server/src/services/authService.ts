@@ -31,6 +31,8 @@ const ADMIN_SETTINGS_KEYS = [
   'allow_registration', 'allowed_file_types', 'require_mfa',
   'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_from', 'smtp_skip_tls_verify',
   'notification_channels', 'admin_webhook_url',
+  'password_login', 'password_registration', 'oidc_login', 'oidc_registration',
+  'default_language',
 ];
 
 const avatarDir = path.join(__dirname, '../../uploads/avatars');
@@ -169,13 +171,44 @@ export function getPendingMfaSecret(userId: number): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// Granular auth toggles
+// ---------------------------------------------------------------------------
+
+export function resolveAuthToggles() {
+  const get = (key: string) =>
+    (db.prepare("SELECT value FROM app_settings WHERE key = ?").get(key) as { value: string } | undefined)?.value ?? null;
+
+  const oidcOnlyEnv = process.env.OIDC_ONLY === 'true';
+
+  const passwordLoginVal = get('password_login');
+  const passwordRegistrationVal = get('password_registration');
+  const oidcLoginVal = get('oidc_login');
+  const oidcRegistrationVal = get('oidc_registration');
+
+  // password_login: default true, overridden to false by OIDC_ONLY env var
+  const passwordLogin = oidcOnlyEnv ? false : (passwordLoginVal !== null ? passwordLoginVal !== 'false' : true);
+  // password_registration: falls back to legacy allow_registration key
+  const passwordRegistration = oidcOnlyEnv ? false : (
+    passwordRegistrationVal !== null ? passwordRegistrationVal !== 'false' :
+    (get('allow_registration') ?? 'true') !== 'false'
+  );
+  // oidc_login: default true when OIDC is configured
+  const oidcLogin = oidcLoginVal !== null ? oidcLoginVal !== 'false' : true;
+  // oidc_registration: allows new users via OIDC; falls back to allow_registration or oidc_auto_provision
+  const oidcRegistration = oidcRegistrationVal !== null ? oidcRegistrationVal !== 'false' :
+    (get('oidc_auto_provision') === 'true' || (get('allow_registration') ?? 'true') !== 'false');
+
+  return { passwordLogin, passwordRegistration, oidcLogin, oidcRegistration, envOverrideOidcOnly: oidcOnlyEnv };
+}
+
+// ---------------------------------------------------------------------------
 // App config (public)
 // ---------------------------------------------------------------------------
 
 export function getAppConfig(authenticatedUser: { id: number } | null) {
   const userCount = (db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number }).count;
-  const setting = db.prepare("SELECT value FROM app_settings WHERE key = 'allow_registration'").get() as { value: string } | undefined;
-  const allowRegistration = userCount === 0 || (setting?.value ?? 'true') === 'true';
+  const toggles = resolveAuthToggles();
+  const allowRegistration = userCount === 0 || toggles.passwordRegistration;
   const isDemo = process.env.DEMO_MODE === 'true';
   const { version } = require('../../package.json');
   const hasGoogleKey = !!db.prepare("SELECT maps_api_key FROM users WHERE role = 'admin' AND maps_api_key IS NOT NULL AND maps_api_key != '' LIMIT 1").get();
@@ -185,9 +218,7 @@ export function getAppConfig(authenticatedUser: { id: number } | null) {
     (process.env.OIDC_ISSUER || (db.prepare("SELECT value FROM app_settings WHERE key = 'oidc_issuer'").get() as { value: string } | undefined)?.value) &&
     (process.env.OIDC_CLIENT_ID || (db.prepare("SELECT value FROM app_settings WHERE key = 'oidc_client_id'").get() as { value: string } | undefined)?.value)
   );
-  const oidcOnlySetting = process.env.OIDC_ONLY ||
-    (db.prepare("SELECT value FROM app_settings WHERE key = 'oidc_only'").get() as { value: string } | undefined)?.value;
-  const oidcOnlyMode = oidcConfigured && oidcOnlySetting === 'true';
+  const oidcOnlyMode = oidcConfigured && !toggles.passwordLogin;
   const requireMfaRow = db.prepare("SELECT value FROM app_settings WHERE key = 'require_mfa'").get() as { value: string } | undefined;
   const notifChannel = (db.prepare("SELECT value FROM app_settings WHERE key = 'notification_channel'").get() as { value: string } | undefined)?.value || 'none';
   const tripReminderSetting = (db.prepare("SELECT value FROM app_settings WHERE key = 'notify_trip_reminder'").get() as { value: string } | undefined)?.value;
@@ -210,6 +241,12 @@ export function getAppConfig(authenticatedUser: { id: number } | null) {
     oidc_only_mode: oidcOnlyMode,
     require_mfa: requireMfaRow?.value === 'true',
     allowed_file_types: (db.prepare("SELECT value FROM app_settings WHERE key = 'allowed_file_types'").get() as { value: string } | undefined)?.value || 'jpg,jpeg,png,gif,webp,heic,pdf,doc,docx,xls,xlsx,txt,csv',
+    password_login: toggles.passwordLogin,
+    password_registration: toggles.passwordRegistration,
+    oidc_login: toggles.oidcLogin,
+    oidc_registration: toggles.oidcRegistration,
+    env_override_oidc_only: toggles.envOverrideOidcOnly,
+    default_language: (db.prepare("SELECT value FROM app_settings WHERE key = 'default_language'").get() as { value: string } | undefined)?.value || null,
     demo_mode: isDemo,
     demo_email: isDemo ? 'demo@trek.app' : undefined,
     demo_password: isDemo ? 'demo12345' : undefined,
@@ -427,6 +464,70 @@ export function changePassword(
 
   const hash = bcrypt.hashSync(new_password, 12);
   db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(hash, userId);
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Password reset
+// ---------------------------------------------------------------------------
+
+export function requestPasswordReset(email: string, ip: string): {
+  reason: 'issued' | 'no_user' | 'already_pending';
+  tokenForDelivery?: string;
+  userEmail?: string;
+  userId?: number;
+} {
+  const rawEmail = email.trim().toLowerCase();
+  if (!rawEmail) return { reason: 'no_user' };
+
+  const user = db.prepare('SELECT id, email FROM users WHERE LOWER(email) = ?').get(rawEmail) as { id: number; email: string } | undefined;
+  if (!user) return { reason: 'no_user' };
+
+  // Invalidate any existing unexpired tokens for this user
+  db.prepare("UPDATE password_reset_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE user_id = ? AND consumed_at IS NULL AND expires_at > datetime('now')").run(user.id);
+
+  const tokenRaw = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(tokenRaw).digest('hex');
+  db.prepare(
+    "INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_ip) VALUES (?, ?, datetime('now', '+60 minutes'), ?)"
+  ).run(user.id, tokenHash, ip);
+
+  return { reason: 'issued', tokenForDelivery: tokenRaw, userEmail: user.email, userId: user.id };
+}
+
+export function resetPassword(tokenRaw: string, newPassword: string, mfaCode?: string): {
+  error?: string; status?: number; success?: boolean;
+} {
+  const tokenHash = crypto.createHash('sha256').update(tokenRaw.trim()).digest('hex');
+  const row = db.prepare(
+    "SELECT prt.*, u.mfa_enabled, u.mfa_secret, u.mfa_backup_codes FROM password_reset_tokens prt JOIN users u ON u.id = prt.user_id WHERE prt.token_hash = ? AND prt.consumed_at IS NULL AND prt.expires_at > datetime('now')"
+  ).get(tokenHash) as any;
+
+  if (!row) return { error: 'Invalid or expired reset link', status: 400 };
+
+  // MFA check if the account has it enabled
+  if (row.mfa_enabled) {
+    if (!mfaCode) return { error: 'mfa_required', status: 403 };
+    const secret = row.mfa_secret ? decryptMfaSecret(row.mfa_secret) : null;
+    if (secret) {
+      const valid = otpVerifySync({ token: mfaCode, secret, epochTolerance: OTP_WINDOW }).valid;
+      if (!valid) {
+        const backupHashes = parseBackupCodeHashes(row.mfa_backup_codes);
+        const normalized = normalizeBackupCode(mfaCode);
+        const matchIdx = backupHashes.findIndex(h => h === hashBackupCode(normalized));
+        if (matchIdx === -1) return { error: 'Invalid MFA code', status: 401 };
+        // Consume backup code
+        backupHashes.splice(matchIdx, 1);
+        db.prepare('UPDATE users SET mfa_backup_codes = ? WHERE id = ?').run(JSON.stringify(backupHashes), row.user_id);
+      }
+    }
+  }
+
+  const hash = bcrypt.hashSync(newPassword, 12);
+  // Bump password_version to invalidate all existing sessions
+  db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0, password_version = password_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(hash, row.user_id);
+  db.prepare('UPDATE password_reset_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE id = ?').run(row.id);
+
   return { success: true };
 }
 

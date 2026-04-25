@@ -13,6 +13,7 @@ export interface OidcDiscoveryDoc {
   authorization_endpoint: string;
   token_endpoint: string;
   userinfo_endpoint: string;
+  issuer?: string;
   _issuer?: string;
 }
 
@@ -137,6 +138,9 @@ export async function discover(issuer: string, discoveryUrl?: string | null): Pr
   const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to fetch OIDC discovery document');
   const doc = (await res.json()) as OidcDiscoveryDoc;
+  if (doc.issuer && doc.issuer.replace(/\/+$/, '') !== issuer) {
+    throw new Error(`OIDC issuer mismatch: expected "${issuer}" but got "${doc.issuer}"`);
+  }
   doc._issuer = url;
   discoveryCache = doc;
   discoveryCacheTime = Date.now();

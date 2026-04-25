@@ -36,7 +36,10 @@ import {
   deleteMcpToken,
   createWsToken,
   createResourceToken,
+  requestPasswordReset,
+  resetPassword,
 } from '../services/authService';
+import { sendEmail, getAppUrl } from '../services/notifications';
 
 const router = express.Router();
 
@@ -76,6 +79,8 @@ const RATE_LIMIT_CLEANUP = 5 * 60 * 1000;
 
 const loginAttempts = new Map<string, { count: number; first: number }>();
 const mfaAttempts = new Map<string, { count: number; first: number }>();
+const forgotAttempts = new Map<string, { count: number; first: number }>();
+const resetAttempts = new Map<string, { count: number; first: number }>();
 setInterval(() => {
   const now = Date.now();
   for (const [key, record] of loginAttempts) {
@@ -83,6 +88,12 @@ setInterval(() => {
   }
   for (const [key, record] of mfaAttempts) {
     if (now - record.first >= RATE_LIMIT_WINDOW) mfaAttempts.delete(key);
+  }
+  for (const [key, record] of forgotAttempts) {
+    if (now - record.first >= RATE_LIMIT_WINDOW) forgotAttempts.delete(key);
+  }
+  for (const [key, record] of resetAttempts) {
+    if (now - record.first >= RATE_LIMIT_WINDOW) resetAttempts.delete(key);
   }
 }, RATE_LIMIT_CLEANUP);
 
@@ -104,6 +115,8 @@ function rateLimiter(maxAttempts: number, windowMs: number, store = loginAttempt
 }
 const authLimiter = rateLimiter(10, RATE_LIMIT_WINDOW);
 const mfaLimiter = rateLimiter(5, RATE_LIMIT_WINDOW, mfaAttempts);
+const forgotLimiter = rateLimiter(3, RATE_LIMIT_WINDOW, forgotAttempts);
+const resetLimiter = rateLimiter(5, RATE_LIMIT_WINDOW, resetAttempts);
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -320,6 +333,44 @@ router.post('/resource-token', authenticate, (req: Request, res: Response) => {
   const token = createResourceToken(authReq.user.id, req.body.purpose);
   if (!token) return res.status(503).json({ error: 'Service unavailable' });
   res.json(token);
+});
+
+router.post('/forgot-password', forgotLimiter, async (req: Request, res: Response) => {
+  const start = Date.now();
+  const { email } = req.body as { email?: string };
+  if (!email || typeof email !== 'string') {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  const result = requestPasswordReset(email, getClientIp(req));
+
+  if (result.reason === 'issued' && result.tokenForDelivery && result.userEmail) {
+    const resetUrl = `${getAppUrl()}/reset-password?token=${result.tokenForDelivery}`;
+    const sent = await sendEmail(
+      result.userEmail,
+      'Password Reset',
+      `You requested a password reset for your TREK account.\n\nClick the link below to set a new password (valid for 60 minutes):\n\n${resetUrl}\n\nIf you did not request this, you can safely ignore this email.`,
+    );
+    if (!sent) {
+      console.warn(`[auth] SMTP not configured — password reset link for ${result.userEmail}: ${resetUrl}`);
+    }
+  }
+
+  // Constant-time response — always 350ms minimum to prevent enumeration
+  const elapsed = Date.now() - start;
+  const delay = Math.max(0, 350 - elapsed);
+  await new Promise(r => setTimeout(r, delay));
+  res.json({ success: true });
+});
+
+router.post('/reset-password', resetLimiter, async (req: Request, res: Response) => {
+  const { token, password, mfa_code } = req.body as { token?: string; password?: string; mfa_code?: string };
+  if (!token || typeof token !== 'string') return res.status(400).json({ error: 'Token is required' });
+  if (!password || typeof password !== 'string') return res.status(400).json({ error: 'Password is required' });
+
+  const result = resetPassword(token, password, mfa_code);
+  if (result.error) return res.status(result.status!).json({ error: result.error });
+  res.json({ success: true });
 });
 
 export default router;

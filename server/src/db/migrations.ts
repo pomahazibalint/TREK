@@ -1092,6 +1092,43 @@ function runMigrations(db: Database.Database): void {
       try { db.exec('ALTER TABLE trip_photos ADD COLUMN latitude REAL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
       try { db.exec('ALTER TABLE trip_photos ADD COLUMN longitude REAL'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
     },
+    // Migration 96: Check-in time range for hotel accommodations
+    () => {
+      try { db.exec('ALTER TABLE day_accommodations ADD COLUMN check_in_end TEXT'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+    },
+    // Migration 97: Password reset tokens and password_version for session invalidation
+    () => {
+      try { db.exec('ALTER TABLE users ADD COLUMN password_version INTEGER NOT NULL DEFAULT 0'); } catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          token_hash TEXT NOT NULL UNIQUE,
+          expires_at DATETIME NOT NULL,
+          consumed_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          created_ip TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_prt_user ON password_reset_tokens(user_id);
+        CREATE INDEX IF NOT EXISTS idx_prt_hash ON password_reset_tokens(token_hash);
+      `);
+    },
+    // Migration 98: Idempotency keys table for safe offline mutation replay
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS idempotency_keys (
+          key TEXT NOT NULL,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          method TEXT NOT NULL,
+          path TEXT NOT NULL,
+          status_code INTEGER NOT NULL,
+          response_body TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (key, user_id, method, path)
+        );
+        CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created ON idempotency_keys(created_at);
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {

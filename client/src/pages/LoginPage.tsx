@@ -15,10 +15,14 @@ interface AppConfig {
   oidc_configured: boolean
   oidc_display_name?: string
   oidc_only_mode: boolean
+  password_login?: boolean
+  oidc_login?: boolean
+  default_language?: string | null
 }
 
 export default function LoginPage(): React.ReactElement {
   const { t, language } = useTranslation()
+  const [langDropdownOpen, setLangDropdownOpen] = useState(false)
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [username, setUsername] = useState<string>('')
   const [email, setEmail] = useState<string>('')
@@ -107,6 +111,15 @@ export default function LoginPage(): React.ReactElement {
         if (config.oidc_only_mode && config.oidc_configured && config.has_users && !invite && !noRedirect) {
           window.location.href = '/api/auth/oidc/login'
         }
+        // Auto-select language if not explicitly set by user
+        if (!localStorage.getItem('app_language')) {
+          const supported: string[] = SUPPORTED_LANGUAGES.map(l => l.value)
+          const browserLang = navigator.language?.split('-')[0]
+          const pick = config.default_language || browserLang || null
+          if (pick && supported.includes(pick)) {
+            setLanguageLocal(pick)
+          }
+        }
       }
     })
   }, [navigate, t, noRedirect])
@@ -194,7 +207,9 @@ export default function LoginPage(): React.ReactElement {
     }
   }
 
-  const showRegisterOption = (appConfig?.allow_registration || !appConfig?.has_users || inviteValid) && !appConfig?.oidc_only_mode && (appConfig?.setup_complete !== false || !appConfig?.has_users)
+  const passwordLoginEnabled = appConfig?.password_login !== false
+  const oidcLoginEnabled = appConfig?.oidc_login !== false
+  const showRegisterOption = (appConfig?.allow_registration || !appConfig?.has_users || inviteValid) && !appConfig?.oidc_only_mode && passwordLoginEnabled && (appConfig?.setup_complete !== false || !appConfig?.has_users)
 
   // In OIDC-only mode, show a minimal page that redirects directly to the IdP
   const oidcOnly = appConfig?.oidc_only_mode && appConfig?.oidc_configured
@@ -359,29 +374,48 @@ export default function LoginPage(): React.ReactElement {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif", position: 'relative' }}>
 
-      {/* Language toggle */}
-      <button
-        onClick={() => {
-          const languages = SUPPORTED_LANGUAGES.map(({ value }) => value)
-          const currentIndex = languages.findIndex(code => code === language)
-          const nextLanguage = languages[(currentIndex + 1) % languages.length]
-          setLanguageLocal(nextLanguage)
-        }}
-        style={{
-          position: 'absolute', top: 16, right: 16, zIndex: 10,
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '6px 12px', borderRadius: 99,
-          background: 'rgba(0,0,0,0.06)', border: 'none',
-          fontSize: 13, fontWeight: 500, color: '#374151',
-          cursor: 'pointer', fontFamily: 'inherit',
-          transition: 'background 0.15s',
-        }}
-        onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'rgba(0,0,0,0.1)'}
-        onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'rgba(0,0,0,0.06)'}
-      >
-        <Globe size={14} />
-        {language.toUpperCase()}
-      </button>
+      {/* Language dropdown */}
+      <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 10 }}>
+        <button
+          onClick={() => setLangDropdownOpen(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '6px 12px', borderRadius: 99,
+            background: langDropdownOpen ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.06)', border: 'none',
+            fontSize: 13, fontWeight: 500, color: '#374151',
+            cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.15s',
+          }}
+          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'rgba(0,0,0,0.1)'}
+          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => { if (!langDropdownOpen) e.currentTarget.style.background = 'rgba(0,0,0,0.06)' }}
+        >
+          <Globe size={14} />
+          {SUPPORTED_LANGUAGES.find(l => l.value === language)?.label || language.toUpperCase()}
+        </button>
+        {langDropdownOpen && (
+          <div style={{
+            position: 'absolute', top: '100%', right: 0, marginTop: 4,
+            background: 'white', border: '1px solid #e5e7eb', borderRadius: 12,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.1)', overflow: 'hidden', minWidth: 160, zIndex: 20,
+          }}>
+            {SUPPORTED_LANGUAGES.map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => { setLanguageLocal(value); setLangDropdownOpen(false) }}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '9px 14px', fontSize: 13, fontFamily: 'inherit',
+                  background: value === language ? '#f3f4f6' : 'transparent',
+                  border: 'none', cursor: 'pointer', color: '#111827', fontWeight: value === language ? 600 : 400,
+                }}
+                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => { if (value !== language) e.currentTarget.style.background = '#f9fafb' }}
+                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => { if (value !== language) e.currentTarget.style.background = 'transparent' }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Left — branding */}
       <div style={{ display: 'none', width: '55%', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '60px 48px', position: 'relative', overflow: 'hidden' }}
@@ -682,7 +716,15 @@ export default function LoginPage(): React.ReactElement {
               {/* Password */}
               {!(mode === 'login' && mfaStep) && !passwordChangeStep && (
               <div>
-                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#374151', marginBottom: 6 }}>{t('common.password')}</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <label style={{ fontSize: 12.5, fontWeight: 600, color: '#374151' }}>{t('common.password')}</label>
+                  {mode === 'login' && passwordLoginEnabled && (
+                    <a href="/forgot-password" style={{ fontSize: 12, color: '#6b7280', textDecoration: 'none' }}
+                      onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => e.currentTarget.style.color = '#111827'}
+                      onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => e.currentTarget.style.color = '#6b7280'}
+                    >{t('login.forgotPassword')}</a>
+                  )}
+                </div>
                 <div style={{ position: 'relative' }}>
                   <Lock size={15} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', pointerEvents: 'none' }} />
                   <input
@@ -730,8 +772,8 @@ export default function LoginPage(): React.ReactElement {
             </>)}
           </div>
 
-          {/* OIDC / SSO login button (only when OIDC is configured but not in oidc-only mode) */}
-          {appConfig?.oidc_configured && !oidcOnly && (
+          {/* OIDC / SSO login button (only when OIDC is configured, enabled, and not in oidc-only mode) */}
+          {appConfig?.oidc_configured && !oidcOnly && oidcLoginEnabled && (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
                 <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
