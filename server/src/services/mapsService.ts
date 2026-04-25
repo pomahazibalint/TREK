@@ -94,6 +94,12 @@ setInterval(() => {
   pruneCache(detailsCache, DETAILS_TTL, DETAILS_CACHE_MAX_ENTRIES, DETAILS_CACHE_PRUNE_TARGET, now);
 }, CACHE_CLEANUP_INTERVAL);
 
+// ── App setting helper ───────────────────────────────────────────────────────
+
+function getAppSetting(key: string): string | null {
+  return (db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value ?? null;
+}
+
 // ── API key retrieval ────────────────────────────────────────────────────────
 
 export function getMapsKey(userId: number): string | null {
@@ -291,6 +297,9 @@ export async function fetchWikimediaPhoto(lat: number, lng: number, name?: strin
 // ── Search places (Google or Nominatim fallback) ─────────────────────────────
 
 export async function searchPlaces(userId: number, query: string, lang?: string): Promise<{ places: Record<string, unknown>[]; source: string }> {
+  if (getAppSetting('maps_autocomplete_disabled') === 'true') {
+    throw Object.assign(new Error('Place search is disabled by the administrator'), { status: 503 });
+  }
   const apiKey = getMapsKey(userId);
   const normalizedQuery = query.trim().toLowerCase();
   const cacheKey = `${apiKey ? 'google' : 'osm'}:${normalizedQuery}:${lang || 'en'}`;
@@ -345,10 +354,24 @@ export async function searchPlaces(userId: number, query: string, lang?: string)
 // ── Place details (Google or OSM) ────────────────────────────────────────────
 
 export async function getPlaceDetails(userId: number, placeId: string, lang?: string): Promise<{ place: Record<string, unknown> }> {
+  if (getAppSetting('maps_details_disabled') === 'true') {
+    throw Object.assign(new Error('Place details are disabled by the administrator'), { status: 503 });
+  }
+
   const cacheKey = `${placeId}:${lang || 'de'}`;
 
   const cached = detailsCache.get(cacheKey);
   if (cached && Date.now() - cached.fetchedAt < DETAILS_TTL) return { place: cached.data };
+
+  // DB persistent cache — check before hitting API (shared across users, survives restarts)
+  const dbCached = db.prepare('SELECT data FROM place_details_cache WHERE place_id = ? AND lang = ?').get(placeId, lang || 'de') as { data: string } | undefined;
+  if (dbCached) {
+    try {
+      const place = JSON.parse(dbCached.data);
+      detailsCache.set(cacheKey, { data: place, fetchedAt: Date.now() });
+      return { place };
+    } catch { /* corrupt row — fall through to API */ }
+  }
 
   // OSM details: placeId is "node:123456" or "way:123456" etc.
   if (placeId.includes(':')) {
@@ -356,6 +379,7 @@ export async function getPlaceDetails(userId: number, placeId: string, lang?: st
     const element = await fetchOverpassDetails(osmType, osmId);
     const place = !element?.tags ? buildOsmDetails({}, osmType, osmId) : buildOsmDetails(element.tags, osmType, osmId);
     detailsCache.set(cacheKey, { data: place, fetchedAt: Date.now() });
+    try { db.prepare('INSERT OR REPLACE INTO place_details_cache (place_id, lang, data, cached_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)').run(placeId, lang || 'de', JSON.stringify(place)); } catch { /* non-fatal */ }
     return { place };
   }
 
@@ -407,6 +431,7 @@ export async function getPlaceDetails(userId: number, placeId: string, lang?: st
   };
 
   detailsCache.set(cacheKey, { data: place, fetchedAt: Date.now() });
+  try { db.prepare('INSERT OR REPLACE INTO place_details_cache (place_id, lang, data, cached_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)').run(placeId, lang || 'de', JSON.stringify(place)); } catch { /* non-fatal */ }
   return { place };
 }
 
@@ -511,6 +536,13 @@ export async function getPlacePhoto(
 // ── Reverse geocoding ────────────────────────────────────────────────────────
 
 export async function reverseGeocode(lat: string, lng: string, lang?: string): Promise<{ name: string | null; address: string | null }> {
+  // Round to 4 decimal places (~11 m precision) for cache key
+  const latKey = Math.round(parseFloat(lat) * 10000) / 10000;
+  const lngKey = Math.round(parseFloat(lng) * 10000) / 10000;
+
+  const dbRow = db.prepare('SELECT name, address FROM geocode_cache WHERE lat_key = ? AND lng_key = ?').get(latKey, lngKey) as { name: string | null; address: string | null } | undefined;
+  if (dbRow) return { name: dbRow.name, address: dbRow.address };
+
   const params = new URLSearchParams({
     lat, lon: lng, format: 'json', addressdetails: '1', zoom: '18',
     'accept-language': lang || 'en',
@@ -522,7 +554,10 @@ export async function reverseGeocode(lat: string, lng: string, lang?: string): P
   const data = await response.json() as { name?: string; display_name?: string; address?: Record<string, string> };
   const addr = data.address || {};
   const name = data.name || addr.tourism || addr.amenity || addr.shop || addr.building || addr.road || null;
-  return { name, address: data.display_name || null };
+  const result = { name, address: data.display_name || null };
+
+  try { db.prepare('INSERT OR REPLACE INTO geocode_cache (lat_key, lng_key, name, address) VALUES (?, ?, ?, ?)').run(latKey, lngKey, result.name, result.address); } catch { /* non-fatal */ }
+  return result;
 }
 
 // ── Resolve Google Maps URL ──────────────────────────────────────────────────

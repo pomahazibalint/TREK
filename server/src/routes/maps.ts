@@ -1,7 +1,9 @@
+import crypto from 'crypto';
 import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { isAddonEnabled } from '../services/adminService';
 import { AuthRequest } from '../types';
+import { db } from '../db/database';
 import {
   searchPlaces,
   getPlaceDetails,
@@ -87,11 +89,20 @@ router.post('/elevation', authenticate, async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'locations array is required' });
   }
   const locationStr = locations.map((l: { latitude: number; longitude: number }) => `${l.latitude},${l.longitude}`).join('|');
+  const locationHash = crypto.createHash('sha256').update(locationStr).digest('hex').slice(0, 32);
+
+  const cached = db.prepare('SELECT results FROM elevation_cache WHERE location_hash = ?').get(locationHash) as { results: string } | undefined;
+  if (cached) {
+    try { return res.json({ results: JSON.parse(cached.results) }); } catch { /* corrupt — fall through */ }
+  }
+
   try {
     const response = await fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${locationStr}`);
     if (!response.ok) throw new Error(`Open-Topo-Data error: ${response.status}`);
     const data = await response.json() as { results?: { elevation: number | null }[] };
-    res.json({ results: (data.results || []).map(r => ({ elevation: r.elevation ?? 0 })) });
+    const results = (data.results || []).map(r => ({ elevation: r.elevation ?? 0 }));
+    try { db.prepare('INSERT OR REPLACE INTO elevation_cache (location_hash, results) VALUES (?, ?)').run(locationHash, JSON.stringify(results)); } catch { /* non-fatal */ }
+    res.json({ results });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Elevation fetch failed';
     res.status(502).json({ error: message });

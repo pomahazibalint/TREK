@@ -474,6 +474,29 @@ function createTables(db: Database.Database): void {
       PRIMARY KEY (user_id, event_type, channel)
     );
     CREATE INDEX IF NOT EXISTS idx_ncp_user ON notification_channel_preferences(user_id);
+
+    CREATE TABLE IF NOT EXISTS place_details_cache (
+      place_id TEXT NOT NULL,
+      lang TEXT NOT NULL DEFAULT 'en',
+      data TEXT NOT NULL,
+      cached_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (place_id, lang)
+    );
+
+    CREATE TABLE IF NOT EXISTS geocode_cache (
+      lat_key REAL NOT NULL,
+      lng_key REAL NOT NULL,
+      name TEXT,
+      address TEXT,
+      cached_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (lat_key, lng_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS elevation_cache (
+      location_hash TEXT PRIMARY KEY,
+      results TEXT NOT NULL,
+      cached_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }
 

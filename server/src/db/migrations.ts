@@ -1129,6 +1129,41 @@ function runMigrations(db: Database.Database): void {
         CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created ON idempotency_keys(created_at);
       `);
     },
+    // Migration 99: Persistent place details cache (survives server restarts, shared across users)
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS place_details_cache (
+          place_id TEXT NOT NULL,
+          lang TEXT NOT NULL DEFAULT 'en',
+          data TEXT NOT NULL,
+          cached_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (place_id, lang)
+        );
+      `);
+    },
+    // Migration 100: Reverse geocode cache (geography is permanent — no TTL needed)
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS geocode_cache (
+          lat_key REAL NOT NULL,
+          lng_key REAL NOT NULL,
+          name TEXT,
+          address TEXT,
+          cached_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (lat_key, lng_key)
+        );
+      `);
+    },
+    // Migration 101: Elevation cache keyed on location hash (terrain doesn't change)
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS elevation_cache (
+          location_hash TEXT PRIMARY KEY,
+          results TEXT NOT NULL,
+          cached_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {
