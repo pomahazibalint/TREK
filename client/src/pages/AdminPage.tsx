@@ -226,6 +226,10 @@ export default function AdminPage(): React.ReactElement {
     }).catch(() => setSmtpLoaded(true))
   }, [])
 
+  // Maps kill switches
+  const [mapsAutocompleteDisabled, setMapsAutocompleteDisabled] = useState<boolean>(false)
+  const [mapsDetailsDisabled, setMapsDetailsDisabled] = useState<boolean>(false)
+
   // API Keys
   const [mapsKey, setMapsKey] = useState<string>('')
   const [weatherKey, setWeatherKey] = useState<string>('')
@@ -284,6 +288,8 @@ export default function AdminPage(): React.ReactElement {
       if (config.require_mfa !== undefined) setRequireMfa(!!config.require_mfa)
       if (config.allowed_file_types) setAllowedFileTypes(config.allowed_file_types)
       if (config.default_language) setDefaultLanguage(config.default_language)
+      if (config.maps_autocomplete_disabled !== undefined) setMapsAutocompleteDisabled(!!config.maps_autocomplete_disabled)
+      if (config.maps_details_disabled !== undefined) setMapsDetailsDisabled(!!config.maps_details_disabled)
     } catch (err: unknown) {
       // ignore
     }
@@ -1072,6 +1078,35 @@ export default function AdminPage(): React.ReactElement {
                         </div>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Google Maps API kill switches */}
+                  <div className="border-t border-slate-100 pt-4 space-y-3">
+                    <p className="text-xs font-medium text-slate-600">{t('admin.mapsKillSwitches')}</p>
+                    {[
+                      { label: t('admin.mapsAutocompleteDisabled'), hint: t('admin.mapsAutocompleteDisabledHint'), value: mapsAutocompleteDisabled, setter: setMapsAutocompleteDisabled, key: 'maps_autocomplete_disabled' },
+                      { label: t('admin.mapsDetailsDisabled'), hint: t('admin.mapsDetailsDisabledHint'), value: mapsDetailsDisabled, setter: setMapsDetailsDisabled, key: 'maps_details_disabled' },
+                    ].map(({ label, hint, value, setter, key }) => (
+                      <div key={key} className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-slate-700">{label}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">{hint}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const next = !value
+                            setter(next)
+                            try { await authApi.updateAppSettings({ [key]: next ? 'true' : 'false' }) }
+                            catch { setter(value); toast.error(t('common.error')) }
+                          }}
+                          className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0"
+                          style={{ background: value ? 'var(--text-primary)' : 'var(--border-primary)' }}
+                        >
+                          <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white transition-transform duration-200" style={{ transform: value ? 'translateX(20px)' : 'translateX(0)' }} />
+                        </button>
+                      </div>
+                    ))}
                   </div>
 
                   <button
