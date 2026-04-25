@@ -282,15 +282,15 @@ router.post('/:id/copy', authenticate, (req: Request, res: Response) => {
     const oldAccom = db.prepare('SELECT * FROM day_accommodations WHERE trip_id = ?').all(req.params.id) as any[];
     const accomMap = new Map<number, number | bigint>();
     const insertAccom = db.prepare(`
-      INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id, check_in, check_out, confirmation, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const a of oldAccom) {
       const newPlaceId = placeMap.get(a.place_id);
       const newStartDay = dayMap.get(a.start_day_id);
       const newEndDay = dayMap.get(a.end_day_id);
       if (newPlaceId && newStartDay && newEndDay) {
-        const r = insertAccom.run(newTripId, newPlaceId, newStartDay, newEndDay, a.check_in, a.check_out, a.confirmation, a.notes);
+        const r = insertAccom.run(newTripId, newPlaceId, newStartDay, newEndDay, a.check_in, a.check_in_end, a.check_out, a.confirmation, a.notes);
         accomMap.set(a.id, r.lastInsertRowid);
       }
     }
@@ -369,6 +369,25 @@ router.post('/:id/copy', authenticate, (req: Request, res: Response) => {
     for (const n of oldNotes) {
       const newDayId = dayMap.get(n.day_id);
       if (newDayId) insertNote.run(newDayId, newTripId, n.text, n.time, n.icon, n.sort_order);
+    }
+
+    // 12. Copy todo_items (checked reset to 0)
+    const oldTodos = db.prepare('SELECT * FROM todo_items WHERE trip_id = ?').all(req.params.id) as any[];
+    const insertTodo = db.prepare(`
+      INSERT INTO todo_items (trip_id, name, checked, category, sort_order, due_date, description, assigned_user_id, priority)
+      VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const todo of oldTodos) {
+      insertTodo.run(newTripId, todo.name, todo.category, todo.sort_order, todo.due_date, todo.description, todo.assigned_user_id, todo.priority);
+    }
+
+    // 13. Copy todo_category_assignees
+    const oldTodoCatAssignees = db.prepare('SELECT * FROM todo_category_assignees WHERE trip_id = ?').all(req.params.id) as any[];
+    const insertTodoCatAssignee = db.prepare(`
+      INSERT OR IGNORE INTO todo_category_assignees (trip_id, category_name, user_id) VALUES (?, ?, ?)
+    `);
+    for (const a of oldTodoCatAssignees) {
+      insertTodoCatAssignee.run(newTripId, a.category_name, a.user_id);
     }
 
     return newTripId;
