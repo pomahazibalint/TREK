@@ -452,6 +452,60 @@ export function exportICS(tripId: string | number): { ics: string; filename: str
     ics += `END:VEVENT\r\n`;
   }
 
+  // Day activities and notes
+  const days = db.prepare('SELECT * FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(tripId) as any[];
+  for (const day of days) {
+    if (!day.date) continue;
+
+    const assignments = db.prepare(`
+      SELECT da.*, p.name as place_name, p.address as place_address,
+        COALESCE(da.assignment_time, p.place_time) as effective_time,
+        COALESCE(da.assignment_end_time, p.end_time) as effective_end_time
+      FROM day_assignments da
+      JOIN places p ON da.place_id = p.id
+      WHERE da.day_id = ?
+      ORDER BY da.order_index ASC, da.created_at ASC
+    `).all(day.id) as any[];
+
+    const notes = db.prepare(
+      'SELECT * FROM day_notes WHERE day_id = ? ORDER BY sort_order ASC, created_at ASC'
+    ).all(day.id) as any[];
+
+    const timed = assignments.filter((a: any) => a.effective_time);
+    const untimed = assignments.filter((a: any) => !a.effective_time);
+
+    // Timed assignments → individual events
+    for (const a of timed) {
+      ics += `BEGIN:VEVENT\r\nUID:${uid(a.id, 'assign')}\r\nDTSTAMP:${now}\r\n`;
+      ics += `DTSTART:${fmtDateTime(a.effective_time, day.date + 'T00:00')}\r\n`;
+      if (a.effective_end_time) {
+        ics += `DTEND:${fmtDateTime(a.effective_end_time, day.date + 'T00:00')}\r\n`;
+      }
+      ics += `SUMMARY:${esc(a.place_name)}\r\n`;
+      if (a.place_address) ics += `LOCATION:${esc(a.place_address)}\r\n`;
+      ics += `END:VEVENT\r\n`;
+    }
+
+    // Untimed activities + notes → one all-day summary per day
+    if (untimed.length > 0 || notes.length > 0) {
+      const datePart = fmtDate(day.date);
+      ics += `BEGIN:VEVENT\r\nUID:trek-day-${day.id}@trek\r\nDTSTAMP:${now}\r\n`;
+      ics += `DTSTART;VALUE=DATE:${datePart}\r\n`;
+      ics += `SUMMARY:${esc(day.title || `Day ${day.day_number}`)}\r\n`;
+
+      let desc = '';
+      if (untimed.length > 0) {
+        desc += untimed.map((a: any) => `• ${a.place_name}`).join('\\n');
+      }
+      if (notes.length > 0) {
+        if (desc) desc += '\\n\\n';
+        desc += notes.map((n: any) => n.content).filter(Boolean).join('\\n');
+      }
+      if (desc) ics += `DESCRIPTION:${desc}\r\n`;
+      ics += `END:VEVENT\r\n`;
+    }
+  }
+
   ics += 'END:VCALENDAR\r\n';
 
   const safeFilename = (trip.title || 'trek-trip').replace(/["\r\n]/g, '').replace(/[^\w\s.-]/g, '_');
