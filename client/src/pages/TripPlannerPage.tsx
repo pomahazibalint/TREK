@@ -246,6 +246,15 @@ export default function TripPlannerPage(): React.ReactElement | null {
     }
   }, [isLoading, places])
 
+  // Auto-fit map to all places on initial load
+  const didInitialFit = useRef(false)
+  useEffect(() => {
+    if (!didInitialFit.current && places.length > 0) {
+      didInitialFit.current = true
+      setFitKey(k => k + 1)
+    }
+  }, [places.length])
+
   // Load trip + files (needed for place inspector file section)
   useEffect(() => {
     if (tripId) {
