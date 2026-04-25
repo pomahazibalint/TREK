@@ -78,7 +78,7 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
   const [showHotelPicker, setShowHotelPicker] = useState<boolean | 'edit'>(false)
   const [hotelDayRange, setHotelDayRange] = useState({ start: day?.id, end: day?.id })
   const [hotelCategoryFilter, setHotelCategoryFilter] = useState<number | ''>('')
-  const [hotelForm, setHotelForm] = useState({ check_in: '', check_out: '', confirmation: '', place_id: null })
+  const [hotelForm, setHotelForm] = useState({ check_in: '', check_in_end: '', check_out: '', confirmation: '', place_id: null })
   const [startTime, setStartTime] = useState(day?.start_time ?? '09:00')
   const [endTime, setEndTime] = useState(day?.end_time ?? '20:00')
   const tripActions = useTripStore((s) => s)
@@ -131,9 +131,10 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
         start_day_id: hotelDayRange.start,
         end_day_id: hotelDayRange.end,
         check_in: hotelForm.check_in || null,
+        check_in_end: hotelForm.check_in_end || null,
         check_out: hotelForm.check_out || null,
         confirmation: hotelForm.confirmation || null,
-      })
+})
       const newAcc = data.accommodation
       const updated = [...accommodations, newAcc]
       setAccommodations(updated)
@@ -142,7 +143,7 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
         days.some(d => d.id >= a.start_day_id && d.id <= a.end_day_id && d.id === day?.id)
       ))
       setShowHotelPicker(false)
-      setHotelForm({ check_in: '', check_out: '', confirmation: '', place_id: null })
+      setHotelForm({ check_in: '', check_in_end: '', check_out: '', confirmation: '', place_id: null })
       onAccommodationChange?.()
     } catch {}
   }
@@ -407,7 +408,7 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
                           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{acc.place_name}</div>
                           {acc.place_address && <div style={{ fontSize: 10, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{acc.place_address}</div>}
                         </div>
-                        {canEditDays && <button onClick={() => { setAccommodation(acc); setHotelForm({ check_in: acc.check_in || '', check_out: acc.check_out || '', confirmation: acc.confirmation || '', place_id: acc.place_id }); setHotelDayRange({ start: acc.start_day_id, end: acc.end_day_id }); setShowHotelPicker('edit') }}
+                        {canEditDays && <button onClick={() => { setAccommodation(acc); setHotelForm({ check_in: acc.check_in || '', check_in_end: acc.check_in_end || '', check_out: acc.check_out || '', confirmation: acc.confirmation || '', place_id: acc.place_id }); setHotelDayRange({ start: acc.start_day_id, end: acc.end_day_id }); setShowHotelPicker('edit') }}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3, flexShrink: 0 }}>
                           <Pencil size={12} style={{ color: 'var(--text-faint)' }} />
                         </button>}
@@ -419,7 +420,9 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
                       <div style={{ display: 'flex', gap: 0, margin: '0 12px 8px', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border-faint)' }}>
                         {acc.check_in && (
                           <div style={{ flex: 1, padding: '8px 10px', borderRight: '1px solid var(--border-faint)', textAlign: 'center' }}>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>{fmtTime(acc.check_in)}</div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+                              {fmtTime(acc.check_in)}{acc.check_in_end ? ` – ${fmtTime(acc.check_in_end)}` : ''}
+                            </div>
                             <div style={{ fontSize: 9, color: 'var(--text-faint)', fontWeight: 500, marginTop: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
                               <LogIn size={8} /> {t('day.checkIn')}
                             </div>
@@ -544,6 +547,10 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
                       <CustomTimePicker value={hotelForm.check_in} onChange={v => setHotelForm(f => ({ ...f, check_in: v }))} placeholder="14:00" />
                     </div>
                     <div style={{ flex: 1, minWidth: 100 }}>
+                      <label style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: 3 }}>{t('day.checkInUntil')}</label>
+                      <CustomTimePicker value={hotelForm.check_in_end} onChange={v => setHotelForm(f => ({ ...f, check_in_end: v }))} placeholder="22:00" />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 100 }}>
                       <label style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: 3 }}>{t('day.checkOut')}</label>
                       <CustomTimePicker value={hotelForm.check_out} onChange={v => setHotelForm(f => ({ ...f, check_out: v }))} placeholder="11:00" />
                     </div>
@@ -621,11 +628,12 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
                         start_day_id: hotelDayRange.start,
                         end_day_id: hotelDayRange.end,
                         check_in: hotelForm.check_in || null,
+                        check_in_end: hotelForm.check_in_end || null,
                         check_out: hotelForm.check_out || null,
                         confirmation: hotelForm.confirmation || null,
                       })
                       setShowHotelPicker(false)
-                      setHotelForm({ check_in: '', check_out: '', confirmation: '', place_id: null })
+                      setHotelForm({ check_in: '', check_in_end: '', check_out: '', confirmation: '', place_id: null })
                       // Reload
                       accommodationsApi.list(tripId).then(d => {
                         const all = d.accommodations || []
