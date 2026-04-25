@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { db } from '../db/database';
 import { JWT_SECRET } from '../config';
 import { AuthRequest, OptionalAuthRequest, User } from '../types';
+import { applyIdempotency } from './idempotency';
 
 export function extractToken(req: Request): string | null {
   // Prefer httpOnly cookie; fall back to Authorization: Bearer (MCP, API clients)
@@ -30,7 +31,7 @@ const authenticate = (req: Request, res: Response, next: NextFunction): void => 
       return;
     }
     (req as AuthRequest).user = user;
-    next();
+    applyIdempotency(req, res, next, user.id);
   } catch (err: unknown) {
     res.status(401).json({ error: 'Invalid or expired token', code: 'AUTH_REQUIRED' });
   }

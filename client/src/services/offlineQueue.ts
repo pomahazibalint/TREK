@@ -256,7 +256,10 @@ export async function replayQueue(fetchFn?: (input: string | Request, init?: Req
 
       const response = await doFetch(endpoint, {
         method: mutation.method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Idempotency-Key': mutation.id,
+        },
         body: requestBody,
         credentials: 'include', // Important: include cookies for auth
       })

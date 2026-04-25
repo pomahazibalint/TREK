@@ -305,6 +305,16 @@ function startAutoArchive(): void {
   }, { timezone: tz });
 }
 
+function startIdempotencyCleanup(): void {
+  // Run at 3:30 AM daily — delete idempotency_keys older than 24 h
+  cron.schedule('30 3 * * *', () => {
+    try {
+      const { db } = require('./db/database');
+      db.prepare("DELETE FROM idempotency_keys WHERE created_at < datetime('now', '-1 day')").run();
+    } catch { /* non-fatal */ }
+  });
+}
+
 function stop(): void {
   if (currentTask) { currentTask.stop(); currentTask = null; }
   if (demoTask) { demoTask.stop(); demoTask = null; }
@@ -314,4 +324,4 @@ function stop(): void {
   if (autoArchiveTask) { autoArchiveTask.stop(); autoArchiveTask = null; }
 }
 
-export { start, stop, startDemoReset, startTripReminders, startVersionCheck, startAutoPhotoSync, startAutoArchive, loadSettings, saveSettings, VALID_INTERVALS };
+export { start, stop, startDemoReset, startTripReminders, startVersionCheck, startAutoPhotoSync, startAutoArchive, startIdempotencyCleanup, loadSettings, saveSettings, VALID_INTERVALS };
