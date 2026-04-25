@@ -143,7 +143,10 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
 
   const filtered = useMemo(() => places.filter(p => {
     if (filter === 'unplanned' && plannedIds.has(p.id)) return false
-    if (categoryFilters.size > 0 && !categoryFilters.has(String(p.category_id))) return false
+    if (categoryFilters.size > 0) {
+      const key = p.category_id == null ? '__none__' : String(p.category_id)
+      if (!categoryFilters.has(key)) return false
+    }
     if (search && !p.name.toLowerCase().includes(search.toLowerCase()) &&
         !(p.address || '').toLowerCase().includes(search.toLowerCase())) return false
     return true
@@ -248,7 +251,7 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
           const label = categoryFilters.size === 0
             ? t('places.allCategories')
             : categoryFilters.size === 1
-              ? categories.find(c => categoryFilters.has(String(c.id)))?.name || t('places.allCategories')
+              ? (categoryFilters.has('__none__') ? t('places.noCategory') : (categories.find(c => categoryFilters.has(String(c.id)))?.name || t('places.allCategories')))
               : `${categoryFilters.size} ${t('places.categoriesSelected')}`
           return (
             <div style={{ marginTop: 6, position: 'relative' }}>
@@ -291,6 +294,28 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
                       </button>
                     )
                   })}
+                  {places.some(p => p.category_id == null) && (() => {
+                    const active = categoryFilters.has('__none__')
+                    return (
+                      <button onClick={() => toggleCategoryFilter('__none__')} style={{
+                        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                        padding: '6px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                        background: active ? 'var(--bg-hover)' : 'transparent',
+                        fontFamily: 'inherit', fontSize: 12, color: 'var(--text-primary)',
+                        textAlign: 'left',
+                      }}>
+                        <div style={{
+                          width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                          border: active ? 'none' : '1.5px solid var(--border-primary)',
+                          background: active ? 'var(--text-faint)' : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {active && <Check size={10} strokeWidth={3} color="white" />}
+                        </div>
+                        <span style={{ flex: 1, color: 'var(--text-faint)', fontStyle: 'italic' }}>{t('places.noCategory')}</span>
+                      </button>
+                    )
+                  })()}
                   {categoryFilters.size > 0 && (
                     <button onClick={() => { setCategoryFiltersLocal(new Set()); onCategoryFilterChange?.('') }} style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
