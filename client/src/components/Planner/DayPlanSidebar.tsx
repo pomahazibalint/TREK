@@ -1271,16 +1271,27 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                 {/* Tages-Badge — click toggles inline day detail */}
                 <div
                   onClick={e => { e.stopPropagation(); onSelectDay(day.id); setDetailOpenDayId(prev => prev === day.id ? null : day.id) }}
-                  title={t('dayplan.dayDetail') || 'Day details'}
+                  title={formattedDate || (t('dayplan.dayDetail') || 'Day details')}
                   style={{
                     width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
                     background: isSelected ? 'var(--accent)' : 'var(--bg-hover)',
                     color: isSelected ? 'var(--accent-text)' : 'var(--text-muted)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer',
                     boxShadow: detailOpenDayId === day.id ? '0 0 0 2px var(--text-primary)' : 'none',
                   }}>
-                  {index + 1}
+                  {trip?.start_date && day.date ? (
+                    <>
+                      <span style={{ fontSize: 8, fontWeight: 600, lineHeight: 1, opacity: 0.75 }}>
+                        {new Date(day.date + 'T00:00:00').toLocaleDateString(locale, { month: 'short' }).toUpperCase()}
+                      </span>
+                      <span style={{ fontSize: 11, fontWeight: 700, lineHeight: 1 }}>
+                        {new Date(day.date + 'T00:00:00').getDate()}
+                      </span>
+                    </>
+                  ) : (
+                    <span style={{ fontSize: 11, fontWeight: 700 }}>{index + 1}</span>
+                  )}
                 </div>
 
                 <div style={{ flex: 1, minWidth: 0 }}>
