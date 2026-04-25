@@ -11,7 +11,7 @@ import { TripFile } from '../types';
 // ---------------------------------------------------------------------------
 
 export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
-export const DEFAULT_ALLOWED_EXTENSIONS = 'jpg,jpeg,png,gif,webp,heic,pdf,doc,docx,xls,xlsx,txt,csv';
+export const DEFAULT_ALLOWED_EXTENSIONS = 'jpg,jpeg,png,gif,webp,heic,pdf,doc,docx,xls,xlsx,txt,csv,pass';
 
 // Blocked extensions: executables, scripts, archives, and dangerous formats
 export const BLOCKED_EXTENSIONS = [
@@ -29,6 +29,7 @@ export const ALLOWED_MIME_TYPES = new Set([
   'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'text/plain', 'text/csv', 'text/csv; charset=utf-8',
+  'application/vnd.apple.pkpass',
 ]);
 
 export const filesDir = path.join(__dirname, '../../uploads/files');
@@ -40,6 +41,7 @@ const MAGIC_BYTES: Record<string, Buffer[]> = {
   'image/gif': [Buffer.from([0x47, 0x49, 0x46, 0x38])], // GIF87a or GIF89a
   'image/webp': [Buffer.from([0x52, 0x49, 0x46, 0x46])], // RIFF (must verify WEBP signature)
   'application/pdf': [Buffer.from([0x25, 0x50, 0x44, 0x46])], // %PDF
+  'application/vnd.apple.pkpass': [Buffer.from([0x50, 0x4B, 0x03, 0x04])], // ZIP (PK)
   'text/plain': [], // No specific magic bytes for text
   'text/csv': [], // No specific magic bytes for CSV
 };
@@ -94,7 +96,7 @@ export function validateFileUpload(
 
   // Verify magic bytes for binary formats if buffer is provided
   if (buffer && buffer.length > 0) {
-    if (mimeType.startsWith('image/') || mimeType === 'application/pdf') {
+    if (mimeType.startsWith('image/') || mimeType === 'application/pdf' || mimeType === 'application/vnd.apple.pkpass') {
       if (!verifyFileMagicBytes(buffer, mimeType)) {
         return { valid: false, reason: 'File content does not match declared type' };
       }
