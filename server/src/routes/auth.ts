@@ -376,4 +376,4 @@ router.post('/reset-password', resetLimiter, async (req: Request, res: Response)
 export default router;
 
 // Exported for test resets only — do not use in production code
-export { loginAttempts, mfaAttempts };
+export { loginAttempts, mfaAttempts, forgotAttempts, resetAttempts };
