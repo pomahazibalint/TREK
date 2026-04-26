@@ -229,6 +229,7 @@ export default function AdminPage(): React.ReactElement {
   // Maps kill switches
   const [mapsAutocompleteDisabled, setMapsAutocompleteDisabled] = useState<boolean>(false)
   const [mapsDetailsDisabled, setMapsDetailsDisabled] = useState<boolean>(false)
+  const [mapsAutocompleteNominatimOnly, setMapsAutocompleteNominatimOnly] = useState<boolean>(false)
 
   // API Keys
   const [mapsKey, setMapsKey] = useState<string>('')
@@ -290,6 +291,7 @@ export default function AdminPage(): React.ReactElement {
       if (config.default_language) setDefaultLanguage(config.default_language)
       if (config.maps_autocomplete_disabled !== undefined) setMapsAutocompleteDisabled(!!config.maps_autocomplete_disabled)
       if (config.maps_details_disabled !== undefined) setMapsDetailsDisabled(!!config.maps_details_disabled)
+      if (config.maps_autocomplete_nominatim_only !== undefined) setMapsAutocompleteNominatimOnly(!!config.maps_autocomplete_nominatim_only)
     } catch (err: unknown) {
       // ignore
     }
@@ -1086,6 +1088,7 @@ export default function AdminPage(): React.ReactElement {
                     {[
                       { label: t('admin.mapsAutocompleteDisabled'), hint: t('admin.mapsAutocompleteDisabledHint'), value: mapsAutocompleteDisabled, setter: setMapsAutocompleteDisabled, key: 'maps_autocomplete_disabled' },
                       { label: t('admin.mapsDetailsDisabled'), hint: t('admin.mapsDetailsDisabledHint'), value: mapsDetailsDisabled, setter: setMapsDetailsDisabled, key: 'maps_details_disabled' },
+                      { label: t('admin.mapsAutocompleteNominatimOnly'), hint: t('admin.mapsAutocompleteNominatimOnlyHint'), value: mapsAutocompleteNominatimOnly, setter: setMapsAutocompleteNominatimOnly, key: 'maps_autocomplete_nominatim_only' },
                     ].map(({ label, hint, value, setter, key }) => (
                       <div key={key} className="flex items-center justify-between">
                         <div>

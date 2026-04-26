@@ -317,7 +317,9 @@ export async function autocompletePlaces(
   }
   const apiKey = getMapsKey(userId);
 
-  if (!apiKey) {
+  const nominatimOnly = !apiKey || getAppSetting('maps_autocomplete_nominatim_only') === 'true';
+
+  if (nominatimOnly) {
     const params = new URLSearchParams({
       q: input,
       format: 'json',

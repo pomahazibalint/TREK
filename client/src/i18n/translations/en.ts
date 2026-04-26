@@ -517,6 +517,8 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'admin.mapsAutocompleteDisabledHint': 'Block all autocomplete / text search calls to Google and Nominatim',
   'admin.mapsDetailsDisabled': 'Disable place details',
   'admin.mapsDetailsDisabledHint': 'Block place detail lookups (ratings, reviews, opening hours)',
+  'admin.mapsAutocompleteNominatimOnly': 'Use Nominatim for autocomplete',
+  'admin.mapsAutocompleteNominatimOnlyHint': 'Route autocomplete to OpenStreetMap even when a Google key is configured, to reduce API costs',
   'admin.mapsKey': 'Google Maps API Key',
   'admin.mapsKeyHint': 'Required for place search. Get at console.cloud.google.com',
   'admin.mapsKeyHintLong': 'Without an API key, OpenStreetMap is used for place search. With a Google API key, photos, ratings, and opening hours can be loaded as well. Get one at console.cloud.google.com.',
