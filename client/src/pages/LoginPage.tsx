@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { SUPPORTED_LANGUAGES, useTranslation } from '../i18n'
@@ -719,10 +719,10 @@ export default function LoginPage(): React.ReactElement {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                   <label style={{ fontSize: 12.5, fontWeight: 600, color: '#374151' }}>{t('common.password')}</label>
                   {mode === 'login' && passwordLoginEnabled && (
-                    <a href="/forgot-password" style={{ fontSize: 12, color: '#6b7280', textDecoration: 'none' }}
+                    <Link to="/forgot-password" style={{ fontSize: 12, color: '#6b7280', textDecoration: 'none' }}
                       onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => e.currentTarget.style.color = '#111827'}
                       onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => e.currentTarget.style.color = '#6b7280'}
-                    >{t('login.forgotPassword')}</a>
+                    >{t('login.forgotPassword')}</Link>
                   )}
                 </div>
                 <div style={{ position: 'relative' }}>
