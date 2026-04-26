@@ -315,4 +315,56 @@ describe('setAdminPreferences', () => {
     const row = testDb.prepare("SELECT value FROM app_settings WHERE key = ?").get('admin_notif_pref_version_available_email') as { value: string } | undefined;
     expect(row?.value).toBe('1');
   });
+
+  it('NPREF-026 — webhook preference for version_available is stored globally (not per-user)', () => {
+    const { user } = createAdmin(testDb);
+    setAdminPreferences(user.id, { version_available: { webhook: false } });
+    // Must land in app_settings, not notification_channel_preferences
+    const globalRow = testDb.prepare("SELECT value FROM app_settings WHERE key = ?")
+      .get('admin_notif_pref_version_available_webhook') as { value: string } | undefined;
+    expect(globalRow?.value).toBe('0');
+    // Must NOT appear in per-user preference table
+    const perUserRow = testDb.prepare(
+      'SELECT enabled FROM notification_channel_preferences WHERE user_id = ? AND event_type = ? AND channel = ?'
+    ).get(user.id, 'version_available', 'webhook');
+    expect(perUserRow).toBeUndefined();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Channel contract — locked against silent changes when new channels are added
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Channel contract', () => {
+  it('NPREF-027 — getActiveChannels silently drops unrecognised channel names', () => {
+    // The filter in getActiveChannels is type-safe: only 'email' and 'webhook'
+    // pass through. This test locks that behaviour so adding a new channel
+    // (e.g. 'ntfy') without updating the filter is caught immediately.
+    setAppSetting(testDb, 'notification_channels', 'ntfy,email');
+    expect(getActiveChannels()).toEqual(['email']);
+  });
+
+  it('NPREF-028 — getAvailableChannels returns exactly { inapp, email, webhook } — no more, no fewer keys', () => {
+    // Lock the shape of the AvailableChannels object. A new channel must be
+    // deliberately added here, not discovered accidentally at runtime.
+    const channels = getAvailableChannels();
+    expect(Object.keys(channels).sort()).toEqual(['email', 'inapp', 'webhook']);
+  });
+
+  it('NPREF-029 — every event type in IMPLEMENTED_COMBOS uses exactly [inapp, email, webhook]', () => {
+    // All 10 event types currently map to the same three channels.
+    // If a new channel is added to some events but not all, this test surfaces
+    // the inconsistency immediately.
+    const { user } = createAdmin(testDb);
+    const { implemented_combos } = getPreferencesMatrix(user.id, 'admin', 'user');
+    for (const [event, channels] of Object.entries(implemented_combos)) {
+      expect((channels as string[]).slice().sort(), `event: ${event}`).toEqual(['email', 'inapp', 'webhook']);
+    }
+  });
+
+  it('NPREF-030 — getPreferencesMatrix available_channels has exactly inapp, email, webhook keys', () => {
+    const { user } = createUser(testDb);
+    const { available_channels } = getPreferencesMatrix(user.id, 'user');
+    expect(Object.keys(available_channels).sort()).toEqual(['email', 'inapp', 'webhook']);
+  });
 });

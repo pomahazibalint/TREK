@@ -528,3 +528,169 @@ describe('GPX Import', () => {
     expect(res.status).toBe(400);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CSV Import
+// ─────────────────────────────────────────────────────────────────────────────
+
+const VALID_CSV = `name,lat,lng,address,notes
+Eiffel Tower,48.8584,2.2945,Champ de Mars Paris,Great view
+Louvre Museum,48.8606,2.3376,Rue de Rivoli Paris,`;
+
+describe('CSV Import', () => {
+  it('POST /import/csv with valid CSV creates places', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+
+    const res = await request(app)
+      .post(`/api/trips/${trip.id}/places/import/csv`)
+      .set('Cookie', authCookie(user.id))
+      .attach('file', Buffer.from(VALID_CSV), { filename: 'places.csv', contentType: 'text/csv' });
+
+    expect(res.status).toBe(201);
+    expect(Array.isArray(res.body.places)).toBe(true);
+    expect(res.body.count).toBe(2);
+    expect(res.body.places[0].name).toBe('Eiffel Tower');
+  });
+
+  it('POST /import/csv without a file returns 400', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+
+    const res = await request(app)
+      .post(`/api/trips/${trip.id}/places/import/csv`)
+      .set('Cookie', authCookie(user.id));
+
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /import/csv with a CSV that has no valid rows returns 400', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+
+    // Header only — no data rows
+    const res = await request(app)
+      .post(`/api/trips/${trip.id}/places/import/csv`)
+      .set('Cookie', authCookie(user.id))
+      .attach('file', Buffer.from('name,lat,lng'), { filename: 'empty.csv', contentType: 'text/csv' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /import/csv by a non-member returns 404', async () => {
+    const { user: owner } = createUser(testDb);
+    const { user: outsider } = createUser(testDb);
+    const trip = createTrip(testDb, owner.id);
+
+    const res = await request(app)
+      .post(`/api/trips/${trip.id}/places/import/csv`)
+      .set('Cookie', authCookie(outsider.id))
+      .attach('file', Buffer.from(VALID_CSV), { filename: 'places.csv', contentType: 'text/csv' });
+
+    expect(res.status).toBe(404);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Google Maps list import
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Minimal structure that matches how importGoogleList parses the response:
+// rawText = "\n" + JSON.stringify(listData)
+// listData[0][4] = list name
+// listData[0][8] = items; each item[1][5] = [_, _, lat, lng], item[2] = name
+function googleListResponse(places: { name: string; lat: number; lng: number }[], listName = 'Test List'): string {
+  const items = places.map(p => [
+    null,
+    [null, null, null, null, null, [null, null, p.lat, p.lng]],
+    p.name,
+    null,
+  ]);
+  const listData = [[null, null, null, null, listName, null, null, null, items]];
+  return '\n' + JSON.stringify(listData);
+}
+
+// A URL with the placelists/list/{ID} pattern so no redirect-follow fetch is needed
+const GOOGLE_LIST_URL = 'https://www.google.com/maps/placelists/list/TESTLIST00001';
+
+describe('Google Maps list import', () => {
+  it('POST /import/google-list without a URL returns 400', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+
+    const res = await request(app)
+      .post(`/api/trips/${trip.id}/places/import/google-list`)
+      .set('Cookie', authCookie(user.id))
+      .send({});
+
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /import/google-list with an unrecognised URL returns 400', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+
+    const res = await request(app)
+      .post(`/api/trips/${trip.id}/places/import/google-list`)
+      .set('Cookie', authCookie(user.id))
+      .send({ url: 'https://example.com/not-a-google-list' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /import/google-list by a non-member returns 404', async () => {
+    const { user: owner } = createUser(testDb);
+    const { user: outsider } = createUser(testDb);
+    const trip = createTrip(testDb, owner.id);
+
+    const res = await request(app)
+      .post(`/api/trips/${trip.id}/places/import/google-list`)
+      .set('Cookie', authCookie(outsider.id))
+      .send({ url: GOOGLE_LIST_URL });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('POST /import/google-list with a mocked valid list creates places', async () => {
+    const mockBody = googleListResponse([
+      { name: 'Eiffel Tower', lat: 48.8584, lng: 2.2945 },
+      { name: 'Louvre Museum', lat: 48.8606, lng: 2.3376 },
+    ]);
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, text: async () => mockBody })));
+
+    try {
+      const { user } = createUser(testDb);
+      const trip = createTrip(testDb, user.id);
+
+      const res = await request(app)
+        .post(`/api/trips/${trip.id}/places/import/google-list`)
+        .set('Cookie', authCookie(user.id))
+        .send({ url: GOOGLE_LIST_URL });
+
+      expect(res.status).toBe(201);
+      expect(res.body.count).toBe(2);
+      expect(res.body.listName).toBe('Test List');
+      expect(res.body.places[0].name).toBe('Eiffel Tower');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('POST /import/google-list returns 502 when Google API request fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503 })));
+
+    try {
+      const { user } = createUser(testDb);
+      const trip = createTrip(testDb, user.id);
+
+      const res = await request(app)
+        .post(`/api/trips/${trip.id}/places/import/google-list`)
+        .set('Cookie', authCookie(user.id))
+        .send({ url: GOOGLE_LIST_URL });
+
+      expect(res.status).toBe(502);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
