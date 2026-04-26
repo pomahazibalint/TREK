@@ -92,6 +92,7 @@ export default function PlaceFormModal({
   const [mapsSearch, setMapsSearch] = useState('')
   const [mapsResults, setMapsResults] = useState([])
   const [isSearchingMaps, setIsSearchingMaps] = useState(false)
+  const acAbortRef = useRef<AbortController | null>(null)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [showNewCategory, setShowNewCategory] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -170,6 +171,31 @@ export default function PlaceFormModal({
     return () => { clearTimeout(scrollId); clearTimeout(clearId) }
   }, [focusPriceOnOpen, isOpen])
 
+  useEffect(() => {
+    const trimmed = mapsSearch.trim()
+    if (!trimmed || trimmed.length < 2) {
+      setMapsResults([])
+      return
+    }
+    const id = setTimeout(async () => {
+      acAbortRef.current?.abort()
+      const controller = new AbortController()
+      acAbortRef.current = controller
+      setIsSearchingMaps(true)
+      try {
+        const result = await mapsApi.autocomplete(trimmed, language, controller.signal)
+        setMapsResults(result.places || [])
+      } catch (err: unknown) {
+        if ((err as { name?: string }).name !== 'CanceledError' && (err as { name?: string }).name !== 'AbortError') {
+          setMapsResults([])
+        }
+      } finally {
+        setIsSearchingMaps(false)
+      }
+    }, 300)
+    return () => clearTimeout(id)
+  }, [mapsSearch, language])
+
   const handleChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }))
   }
@@ -205,7 +231,36 @@ export default function PlaceFormModal({
     }
   }
 
-  const handleSelectMapsResult = (result) => {
+  const handleSelectMapsResult = async (result) => {
+    acAbortRef.current?.abort()
+    setMapsResults([])
+    setMapsSearch('')
+
+    // Google autocomplete predictions have no lat/lng — resolve via details
+    if (result.google_place_id && !result.lat) {
+      setIsSearchingMaps(true)
+      try {
+        const { place } = await mapsApi.details(result.google_place_id, language)
+        setForm(prev => ({
+          ...prev,
+          name: place.name || result.name || prev.name,
+          address: place.address || result.address || prev.address,
+          lat: place.lat || prev.lat,
+          lng: place.lng || prev.lng,
+          google_place_id: result.google_place_id,
+          website: place.website || prev.website,
+          phone: place.phone || prev.phone,
+          price_level: place.price_level ?? prev.price_level,
+          opening_hours: place.opening_hours || null,
+        }))
+      } catch {
+        toast.error(t('places.mapsSearchError'))
+      } finally {
+        setIsSearchingMaps(false)
+      }
+      return
+    }
+
     setForm(prev => ({
       ...prev,
       name: result.name || prev.name,
@@ -219,8 +274,6 @@ export default function PlaceFormModal({
       price_level: result.price_level ?? prev.price_level,
       opening_hours: result.opening_hours || null,
     }))
-    setMapsResults([])
-    setMapsSearch('')
   }
 
   const handleCreateCategory = async () => {

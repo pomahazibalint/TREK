@@ -6,6 +6,7 @@ import { AuthRequest } from '../types';
 import { db } from '../db/database';
 import {
   searchPlaces,
+  autocompletePlaces,
   getPlaceDetails,
   getPlacePhoto,
   reverseGeocode,
@@ -13,6 +14,24 @@ import {
 } from '../services/mapsService';
 
 const router = express.Router();
+
+// POST /autocomplete
+router.post('/autocomplete', authenticate, async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { input } = req.body;
+
+  if (!input || typeof input !== 'string') return res.status(400).json({ error: 'input is required' });
+  if (input.length > 200) return res.status(400).json({ error: 'input too long' });
+
+  try {
+    const result = await autocompletePlaces(authReq.user.id, input, req.query.lang as string);
+    res.json(result);
+  } catch (err: unknown) {
+    const status = (err as { status?: number }).status || 500;
+    const message = err instanceof Error ? err.message : 'Autocomplete error';
+    res.status(status).json({ error: message });
+  }
+});
 
 // POST /search
 router.post('/search', authenticate, async (req: Request, res: Response) => {
