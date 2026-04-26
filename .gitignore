@@ -33,6 +33,10 @@ Thumbs.db
 .idea/
 .claude/
 
+# Local planning notes
+UPSTREAM-PLAN.md
+TEST-PLAN.md
+
 # Logs
 logs
 *.log

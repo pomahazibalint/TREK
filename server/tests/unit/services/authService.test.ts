@@ -23,6 +23,8 @@ import {
   avatarUrl,
   normalizeBackupCode,
   hashBackupCode,
+  hashBackupCodeBcrypt,
+  matchBackupCode,
   generateBackupCodes,
   parseBackupCodeHashes,
 } from '../../../src/services/authService';
@@ -263,6 +265,57 @@ describe('generateBackupCodes', () => {
   it('generates no duplicate codes', () => {
     const codes = generateBackupCodes(10);
     expect(new Set(codes).size).toBe(10);
+  });
+});
+
+// ── hashBackupCodeBcrypt ─────────────────────────────────────────────────────
+
+describe('hashBackupCodeBcrypt', () => {
+  it('returns a bcrypt hash (starts with $2)', () => {
+    expect(hashBackupCodeBcrypt('A1B2-C3D4')).toMatch(/^\$2[ab]\$/);
+  });
+
+  it('normalizes before hashing: dashed and plain form verify against the same hash', () => {
+    const hash = hashBackupCodeBcrypt('A1B2-C3D4');
+    expect(matchBackupCode('a1b2c3d4', hash)).toBe(true);
+  });
+});
+
+// ── matchBackupCode ──────────────────────────────────────────────────────────
+
+describe('matchBackupCode', () => {
+  it('returns true for a matching bcrypt hash', () => {
+    const hash = hashBackupCodeBcrypt('A1B2-C3D4');
+    expect(matchBackupCode('A1B2-C3D4', hash)).toBe(true);
+  });
+
+  it('returns false for a wrong code against a bcrypt hash', () => {
+    const hash = hashBackupCodeBcrypt('A1B2-C3D4');
+    expect(matchBackupCode('ZZZZ-ZZZZ', hash)).toBe(false);
+  });
+
+  it('returns true for a matching legacy SHA-256 hash', () => {
+    const legacyHash = hashBackupCode('A1B2-C3D4');
+    expect(matchBackupCode('A1B2-C3D4', legacyHash)).toBe(true);
+  });
+
+  it('returns false for a wrong code against a legacy SHA-256 hash', () => {
+    const legacyHash = hashBackupCode('A1B2-C3D4');
+    expect(matchBackupCode('ZZZZ-ZZZZ', legacyHash)).toBe(false);
+  });
+
+  it('returns false for an empty stored hash', () => {
+    expect(matchBackupCode('A1B2-C3D4', '')).toBe(false);
+  });
+
+  it('normalizes plaintext before comparing (case-insensitive, strips dashes)', () => {
+    const hash = hashBackupCodeBcrypt('A1B2C3D4');
+    expect(matchBackupCode('a1b2-c3d4', hash)).toBe(true);
+  });
+
+  it('returns false when stored hash length differs from SHA-256 output (tampered hash)', () => {
+    // A 32-char string that does not start with $2 and is not 64 hex chars
+    expect(matchBackupCode('A1B2-C3D4', 'short-invalid-hash')).toBe(false);
   });
 });
 

@@ -53,4 +53,33 @@ describe('cookieOptions', () => {
     const opts = cookieOptions(true);
     expect(opts).not.toHaveProperty('maxAge');
   });
+
+  it('sets secure: true when req.secure is true regardless of env', () => {
+    vi.stubEnv('COOKIE_SECURE', '');
+    vi.stubEnv('NODE_ENV', 'development');
+    vi.stubEnv('FORCE_HTTPS', 'false');
+    const fakeReq = { secure: true } as any;
+    expect(cookieOptions(false, fakeReq).secure).toBe(true);
+  });
+
+  it('sets secure: false when req.secure is false and no env flags set', () => {
+    vi.stubEnv('COOKIE_SECURE', '');
+    vi.stubEnv('NODE_ENV', 'development');
+    vi.stubEnv('FORCE_HTTPS', 'false');
+    const fakeReq = { secure: false } as any;
+    expect(cookieOptions(false, fakeReq).secure).toBe(false);
+  });
+
+  it('COOKIE_SECURE=false overrides req.secure=true', () => {
+    vi.stubEnv('COOKIE_SECURE', 'false');
+    const fakeReq = { secure: true } as any;
+    expect(cookieOptions(false, fakeReq).secure).toBe(false);
+  });
+
+  it('NODE_ENV=production takes precedence even when req.secure is false', () => {
+    vi.stubEnv('COOKIE_SECURE', '');
+    vi.stubEnv('NODE_ENV', 'production');
+    const fakeReq = { secure: false } as any;
+    expect(cookieOptions(false, fakeReq).secure).toBe(true);
+  });
 });
