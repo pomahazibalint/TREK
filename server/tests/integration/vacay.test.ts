@@ -1,6 +1,10 @@
 /**
  * Vacay integration tests.
  * Covers VACAY-001 to VACAY-025.
+ *
+ * The vacay feature uses a multi-plan API (/plans/:planId/...).
+ * Each test creates its own plan via POST /api/addons/vacay/plans and then
+ * uses the returned planId in all subsequent requests.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
@@ -82,35 +86,44 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 
+/** Helper: create a plan for the given user and return its id. */
+async function createPlan(userId: number, name = 'Test Plan'): Promise<number> {
+  const res = await request(app)
+    .post('/api/addons/vacay/plans')
+    .set('Cookie', authCookie(userId))
+    .send({ name });
+  return res.body.plan.id as number;
+}
+
 describe('Vacay plan', () => {
-  it('VACAY-001 — GET /api/addons/vacay/plan auto-creates plan on first access', async () => {
+  it('VACAY-001 — POST /api/addons/vacay/plans creates plan', async () => {
     const { user } = createUser(testDb);
 
     const res = await request(app)
-      .get('/api/addons/vacay/plan')
-      .set('Cookie', authCookie(user.id));
+      .post('/api/addons/vacay/plans')
+      .set('Cookie', authCookie(user.id))
+      .send({ name: 'My Calendar' });
     expect(res.status).toBe(200);
     expect(res.body.plan).toBeDefined();
     expect(res.body.plan.owner_id).toBe(user.id);
   });
 
-  it('VACAY-001 — second GET returns same plan (no duplicate creation)', async () => {
+  it('VACAY-001 — second POST creates a distinct plan (multi-plan model)', async () => {
     const { user } = createUser(testDb);
 
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
-    const res = await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
-    expect(res.status).toBe(200);
-    expect(res.body.plan).toBeDefined();
+    const r1 = await request(app).post('/api/addons/vacay/plans').set('Cookie', authCookie(user.id)).send({ name: 'Plan A' });
+    const r2 = await request(app).post('/api/addons/vacay/plans').set('Cookie', authCookie(user.id)).send({ name: 'Plan B' });
+    expect(r1.status).toBe(200);
+    expect(r2.status).toBe(200);
+    expect(r1.body.plan.id).not.toBe(r2.body.plan.id);
   });
 
-  it('VACAY-002 — PUT /api/addons/vacay/plan updates plan settings', async () => {
+  it('VACAY-002 — PUT /api/addons/vacay/plans/:planId updates plan settings', async () => {
     const { user } = createUser(testDb);
-
-    // Ensure plan exists
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
+    const planId = await createPlan(user.id);
 
     const res = await request(app)
-      .put('/api/addons/vacay/plan')
+      .put(`/api/addons/vacay/plans/${planId}`)
       .set('Cookie', authCookie(user.id))
       .send({ vacation_days: 30, carry_over_days: 5 });
     expect(res.status).toBe(200);
@@ -118,50 +131,50 @@ describe('Vacay plan', () => {
 });
 
 describe('Vacay years', () => {
-  it('VACAY-007 — POST /api/addons/vacay/years adds a year to the plan', async () => {
+  it('VACAY-007 — POST /api/addons/vacay/plans/:planId/years adds a year', async () => {
     const { user } = createUser(testDb);
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
+    const planId = await createPlan(user.id);
 
     const res = await request(app)
-      .post('/api/addons/vacay/years')
+      .post(`/api/addons/vacay/plans/${planId}/years`)
       .set('Cookie', authCookie(user.id))
       .send({ year: 2025 });
     expect(res.status).toBe(200);
     expect(res.body.years).toBeDefined();
   });
 
-  it('VACAY-025 — GET /api/addons/vacay/years lists years in plan', async () => {
+  it('VACAY-025 — GET /api/addons/vacay/plans/:planId/years lists years', async () => {
     const { user } = createUser(testDb);
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
-    await request(app).post('/api/addons/vacay/years').set('Cookie', authCookie(user.id)).send({ year: 2025 });
+    const planId = await createPlan(user.id);
+    await request(app).post(`/api/addons/vacay/plans/${planId}/years`).set('Cookie', authCookie(user.id)).send({ year: 2025 });
 
     const res = await request(app)
-      .get('/api/addons/vacay/years')
+      .get(`/api/addons/vacay/plans/${planId}/years`)
       .set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.years)).toBe(true);
     expect(res.body.years.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('VACAY-008 — DELETE /api/addons/vacay/years/:year removes year', async () => {
+  it('VACAY-008 — DELETE /api/addons/vacay/plans/:planId/years/:year removes year', async () => {
     const { user } = createUser(testDb);
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
-    await request(app).post('/api/addons/vacay/years').set('Cookie', authCookie(user.id)).send({ year: 2026 });
+    const planId = await createPlan(user.id);
+    await request(app).post(`/api/addons/vacay/plans/${planId}/years`).set('Cookie', authCookie(user.id)).send({ year: 2026 });
 
     const res = await request(app)
-      .delete('/api/addons/vacay/years/2026')
+      .delete(`/api/addons/vacay/plans/${planId}/years/2026`)
       .set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(res.body.years).toBeDefined();
   });
 
-  it('VACAY-011 — PUT /api/addons/vacay/stats/:year updates allowance', async () => {
+  it('VACAY-011 — PUT /api/addons/vacay/plans/:planId/stats/:year updates allowance', async () => {
     const { user } = createUser(testDb);
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
-    await request(app).post('/api/addons/vacay/years').set('Cookie', authCookie(user.id)).send({ year: 2025 });
+    const planId = await createPlan(user.id);
+    await request(app).post(`/api/addons/vacay/plans/${planId}/years`).set('Cookie', authCookie(user.id)).send({ year: 2025 });
 
     const res = await request(app)
-      .put('/api/addons/vacay/stats/2025')
+      .put(`/api/addons/vacay/plans/${planId}/stats/2025`)
       .set('Cookie', authCookie(user.id))
       .send({ vacation_days: 28 });
     expect(res.status).toBe(200);
@@ -169,50 +182,50 @@ describe('Vacay years', () => {
 });
 
 describe('Vacay entries', () => {
-  it('VACAY-003 — POST /api/addons/vacay/entries/toggle marks a day as vacation', async () => {
+  it('VACAY-003 — POST /api/addons/vacay/plans/:planId/entries/toggle marks a day as vacation', async () => {
     const { user } = createUser(testDb);
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
-    await request(app).post('/api/addons/vacay/years').set('Cookie', authCookie(user.id)).send({ year: 2025 });
+    const planId = await createPlan(user.id);
+    await request(app).post(`/api/addons/vacay/plans/${planId}/years`).set('Cookie', authCookie(user.id)).send({ year: 2025 });
 
     const res = await request(app)
-      .post('/api/addons/vacay/entries/toggle')
+      .post(`/api/addons/vacay/plans/${planId}/entries/toggle`)
       .set('Cookie', authCookie(user.id))
       .send({ date: '2025-06-16', year: 2025, type: 'vacation' });
     expect(res.status).toBe(200);
   });
 
-  it('VACAY-004 — POST /api/addons/vacay/entries/toggle on weekend is allowed (no server-side weekend blocking)', async () => {
+  it('VACAY-004 — toggle on weekend is allowed (no server-side weekend blocking)', async () => {
     const { user } = createUser(testDb);
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
-    await request(app).post('/api/addons/vacay/years').set('Cookie', authCookie(user.id)).send({ year: 2025 });
+    const planId = await createPlan(user.id);
+    await request(app).post(`/api/addons/vacay/plans/${planId}/years`).set('Cookie', authCookie(user.id)).send({ year: 2025 });
 
     // 2025-06-21 is a Saturday — server does not block weekends; client-side only
     const res = await request(app)
-      .post('/api/addons/vacay/entries/toggle')
+      .post(`/api/addons/vacay/plans/${planId}/entries/toggle`)
       .set('Cookie', authCookie(user.id))
       .send({ date: '2025-06-21', year: 2025, type: 'vacation' });
     expect(res.status).toBe(200);
   });
 
-  it('VACAY-006 — GET /api/addons/vacay/entries/:year returns vacation entries', async () => {
+  it('VACAY-006 — GET /api/addons/vacay/plans/:planId/entries/:year returns entries', async () => {
     const { user } = createUser(testDb);
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
-    await request(app).post('/api/addons/vacay/years').set('Cookie', authCookie(user.id)).send({ year: 2025 });
+    const planId = await createPlan(user.id);
+    await request(app).post(`/api/addons/vacay/plans/${planId}/years`).set('Cookie', authCookie(user.id)).send({ year: 2025 });
 
     const res = await request(app)
-      .get('/api/addons/vacay/entries/2025')
+      .get(`/api/addons/vacay/plans/${planId}/entries/2025`)
       .set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.entries)).toBe(true);
   });
 
-  it('VACAY-009 — GET /api/addons/vacay/stats/:year returns stats for year', async () => {
+  it('VACAY-009 — GET /api/addons/vacay/plans/:planId/stats/:year returns stats', async () => {
     const { user } = createUser(testDb);
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
-    await request(app).post('/api/addons/vacay/years').set('Cookie', authCookie(user.id)).send({ year: 2025 });
+    const planId = await createPlan(user.id);
+    await request(app).post(`/api/addons/vacay/plans/${planId}/years`).set('Cookie', authCookie(user.id)).send({ year: 2025 });
 
     const res = await request(app)
-      .get('/api/addons/vacay/stats/2025')
+      .get(`/api/addons/vacay/plans/${planId}/stats/2025`)
       .set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('stats');
@@ -220,12 +233,12 @@ describe('Vacay entries', () => {
 });
 
 describe('Vacay color', () => {
-  it('VACAY-024 — PUT /api/addons/vacay/color sets user color in plan', async () => {
+  it('VACAY-024 — PUT /api/addons/vacay/plans/:planId/color sets user color', async () => {
     const { user } = createUser(testDb);
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
+    const planId = await createPlan(user.id);
 
     const res = await request(app)
-      .put('/api/addons/vacay/color')
+      .put(`/api/addons/vacay/plans/${planId}/color`)
       .set('Cookie', authCookie(user.id))
       .send({ color: '#3b82f6' });
     expect(res.status).toBe(200);
@@ -235,10 +248,10 @@ describe('Vacay color', () => {
 describe('Vacay invite flow', () => {
   it('VACAY-022 — cannot invite yourself', async () => {
     const { user } = createUser(testDb);
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
+    const planId = await createPlan(user.id);
 
     const res = await request(app)
-      .post('/api/addons/vacay/invite')
+      .post(`/api/addons/vacay/plans/${planId}/invite`)
       .set('Cookie', authCookie(user.id))
       .send({ user_id: user.id });
     expect(res.status).toBe(400);
@@ -247,22 +260,22 @@ describe('Vacay invite flow', () => {
   it('VACAY-016 — send invite to another user', async () => {
     const { user: owner } = createUser(testDb);
     const { user: invitee } = createUser(testDb);
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(owner.id));
+    const planId = await createPlan(owner.id);
 
     const res = await request(app)
-      .post('/api/addons/vacay/invite')
+      .post(`/api/addons/vacay/plans/${planId}/invite`)
       .set('Cookie', authCookie(owner.id))
       .send({ user_id: invitee.id });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
   });
 
-  it('VACAY-023 — GET /api/addons/vacay/available-users returns users who can be invited', async () => {
+  it('VACAY-023 — GET /api/addons/vacay/plans/:planId/available-users returns invitable users', async () => {
     const { user } = createUser(testDb);
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
+    const planId = await createPlan(user.id);
 
     const res = await request(app)
-      .get('/api/addons/vacay/available-users')
+      .get(`/api/addons/vacay/plans/${planId}/available-users`)
       .set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.users)).toBe(true);
@@ -280,12 +293,12 @@ describe('Vacay holidays', () => {
     expect(Array.isArray(res.body)).toBe(true);
   });
 
-  it('VACAY-012 — POST /api/addons/vacay/plan/holiday-calendars adds a holiday calendar', async () => {
+  it('VACAY-012 — POST /api/addons/vacay/plans/:planId/holiday-calendars adds a holiday calendar', async () => {
     const { user } = createUser(testDb);
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
+    const planId = await createPlan(user.id);
 
     const res = await request(app)
-      .post('/api/addons/vacay/plan/holiday-calendars')
+      .post(`/api/addons/vacay/plans/${planId}/holiday-calendars`)
       .set('Cookie', authCookie(user.id))
       .send({ region: 'DE', label: 'Germany Holidays' });
     expect(res.status).toBe(200);
@@ -293,12 +306,12 @@ describe('Vacay holidays', () => {
 });
 
 describe('Vacay dissolve plan', () => {
-  it('VACAY-020 — POST /api/addons/vacay/dissolve removes user from plan', async () => {
+  it('VACAY-020 — POST /api/addons/vacay/plans/:planId/leave removes user from plan', async () => {
     const { user } = createUser(testDb);
-    await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
+    const planId = await createPlan(user.id);
 
     const res = await request(app)
-      .post('/api/addons/vacay/dissolve')
+      .post(`/api/addons/vacay/plans/${planId}/leave`)
       .set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
   });

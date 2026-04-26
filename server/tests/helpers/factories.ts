@@ -54,7 +54,7 @@ export function createAdmin(
  * Creates a user with MFA already enabled (directly in DB, bypasses rate-limited HTTP endpoints).
  * Returns the user, password, and the TOTP secret so tests can generate valid codes.
  */
-const KNOWN_MFA_SECRET = 'JBSWY3DPEHPK3PXP'; // fixed base32 secret for deterministic tests
+const KNOWN_MFA_SECRET = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'; // 32 A's → 20 bytes; otplib v13 requires ≥16 bytes
 export function createUserWithMfa(
   db: Database.Database,
   overrides: Partial<{ username: string; email: string; password: string; role: 'admin' | 'user' }> = {}

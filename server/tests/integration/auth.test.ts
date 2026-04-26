@@ -7,7 +7,15 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import type { Application } from 'express';
-import { authenticator } from 'otplib';
+import { generateSync } from 'otplib';
+
+// otplib v13 dropped the `authenticator` convenience object; replicate with
+// the functional API. `generateSync({ secret, strategy: 'totp' })` is the
+// direct equivalent of the old `authenticator.generate(secret)`.
+const authenticator = {
+  generate: (secret: string): string =>
+    generateSync({ secret, strategy: 'totp' }) as string,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 1: Bare in-memory DB — schema applied in beforeAll after mocks register
