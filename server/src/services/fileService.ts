@@ -286,22 +286,34 @@ export function restoreFile(id: string | number) {
 
 export function permanentDeleteFile(file: TripFile) {
   const { resolved } = resolveFilePath(file.filename);
+  let unlinkOk = true;
   if (fs.existsSync(resolved)) {
-    try { fs.unlinkSync(resolved); } catch (e) { console.error('Error deleting file:', e); }
+    try { fs.unlinkSync(resolved); }
+    catch (e) { console.error('Error deleting file:', e); unlinkOk = false; }
   }
-  db.prepare('DELETE FROM trip_files WHERE id = ?').run(file.id);
+  // Only remove the DB row when the on-disk unlink succeeded (or the file
+  // didn't exist). Swallowing unlink failures and deleting unconditionally
+  // would orphan bytes on disk with no way to recover them.
+  if (unlinkOk) db.prepare('DELETE FROM trip_files WHERE id = ?').run(file.id);
 }
 
 export function emptyTrash(tripId: string | number): number {
   const trashed = db.prepare('SELECT * FROM trip_files WHERE trip_id = ? AND deleted_at IS NOT NULL').all(tripId) as TripFile[];
+  const deleted: number[] = [];
   for (const file of trashed) {
     const { resolved } = resolveFilePath(file.filename);
+    let unlinkOk = true;
     if (fs.existsSync(resolved)) {
-      try { fs.unlinkSync(resolved); } catch (e) { console.error('Error deleting file:', e); }
+      try { fs.unlinkSync(resolved); }
+      catch (e) { console.error('Error deleting file:', e); unlinkOk = false; }
     }
+    if (unlinkOk) deleted.push(file.id);
   }
-  db.prepare('DELETE FROM trip_files WHERE trip_id = ? AND deleted_at IS NOT NULL').run(tripId);
-  return trashed.length;
+  if (deleted.length > 0) {
+    const ph = deleted.map(() => '?').join(',');
+    db.prepare(`DELETE FROM trip_files WHERE id IN (${ph})`).run(...deleted);
+  }
+  return deleted.length;
 }
 
 // ---------------------------------------------------------------------------

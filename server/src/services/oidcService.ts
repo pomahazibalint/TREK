@@ -13,6 +13,7 @@ export interface OidcDiscoveryDoc {
   authorization_endpoint: string;
   token_endpoint: string;
   userinfo_endpoint: string;
+  jwks_uri?: string;
   issuer?: string;
   _issuer?: string;
 }
@@ -225,6 +226,93 @@ export async function getUserInfo(userinfoEndpoint: string, accessToken: string)
 }
 
 // ---------------------------------------------------------------------------
+// id_token verification (signature + iss + aud + exp)
+// ---------------------------------------------------------------------------
+
+const JWKS_TTL_MS = 5 * 60 * 1000;
+type JwksEntry = { keys: Array<Record<string, unknown>>; fetchedAt: number };
+const jwksCache = new Map<string, JwksEntry>();
+
+async function fetchJwks(jwksUri: string): Promise<Array<Record<string, unknown>>> {
+  const cached = jwksCache.get(jwksUri);
+  if (cached && Date.now() - cached.fetchedAt < JWKS_TTL_MS) return cached.keys;
+  const res = await fetch(jwksUri);
+  if (!res.ok) throw new Error(`JWKS fetch failed: HTTP ${res.status}`);
+  const json = (await res.json()) as { keys?: Array<Record<string, unknown>> };
+  const keys = json.keys ?? [];
+  jwksCache.set(jwksUri, { keys, fetchedAt: Date.now() });
+  return keys;
+}
+
+function base64UrlDecode(input: string): Buffer {
+  const padded = input.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (input.length % 4)) % 4);
+  return Buffer.from(padded, 'base64');
+}
+
+/**
+ * Verify an OIDC id_token end-to-end: signature against the provider's
+ * JWKS, issuer match, audience match, and exp/nbf. Returning claims lets
+ * callers cross-check `sub` against the userinfo response.
+ */
+export async function verifyIdToken(
+  idToken: string,
+  doc: OidcDiscoveryDoc,
+  clientId: string,
+  expectedIssuer: string,
+): Promise<{ ok: true; claims: Record<string, unknown> } | { ok: false; error: string }> {
+  if (!doc.jwks_uri) return { ok: false, error: 'no_jwks_uri' };
+  const parts = idToken.split('.');
+  if (parts.length !== 3) return { ok: false, error: 'malformed_token' };
+
+  let header: { kid?: string; alg?: string };
+  try { header = JSON.parse(base64UrlDecode(parts[0]!).toString('utf8')); }
+  catch { return { ok: false, error: 'bad_header' }; }
+
+  const alg = header.alg;
+  if (!alg || !/^(RS256|RS384|RS512|ES256|ES384|ES512|PS256|PS384|PS512)$/.test(alg)) {
+    return { ok: false, error: 'unsupported_alg' };
+  }
+
+  let keys: Array<Record<string, unknown>>;
+  try { keys = await fetchJwks(doc.jwks_uri); }
+  catch { return { ok: false, error: 'jwks_fetch_failed' }; }
+
+  // When the token carries a `kid`, refuse to fall back to any other key
+  // in the JWKS — a mismatch means the token was signed with a key the
+  // provider no longer publishes, which warrants a specific rejection.
+  const jwk = header.kid
+    ? keys.find((k) => k['kid'] === header.kid)
+    : keys[0];
+  if (!jwk) return { ok: false, error: 'no_matching_key' };
+
+  let publicKey;
+  try {
+    publicKey = crypto.createPublicKey({ key: jwk as any, format: 'jwk' });
+  } catch {
+    return { ok: false, error: 'key_import_failed' };
+  }
+
+  let claims: Record<string, unknown>;
+  try {
+    const verified = jwt.verify(idToken, publicKey, {
+      algorithms: [alg as jwt.Algorithm],
+      audience: clientId,
+    });
+    claims = typeof verified === 'string' ? {} : (verified as Record<string, unknown>);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'verify_failed';
+    return { ok: false, error: `signature_or_claim_mismatch: ${msg}` };
+  }
+
+  const tokenIssuer = typeof claims['iss'] === 'string' ? claims['iss'].replace(/\/+$/, '') : '';
+  if (tokenIssuer !== expectedIssuer) {
+    return { ok: false, error: `signature_or_claim_mismatch: jwt issuer invalid. expected: ${expectedIssuer}` };
+  }
+
+  return { ok: true, claims };
+}
+
+// ---------------------------------------------------------------------------
 // Find or create user by OIDC sub / email
 // ---------------------------------------------------------------------------
 
@@ -296,20 +384,32 @@ export function findOrCreateUser(
   const existing = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?)').get(username);
   if (existing) username = `${username}_${Date.now() % 10000}`;
 
-  const result = db.prepare(
-    'INSERT INTO users (username, email, password_hash, role, oidc_sub, oidc_issuer) VALUES (?, ?, ?, ?, ?, ?)',
-  ).run(username, email, hash, role, sub, config.issuer);
-
-  if (validInvite) {
-    const updated = db.prepare(
-      'UPDATE invite_tokens SET used_count = used_count + 1 WHERE id = ? AND (max_uses = 0 OR used_count < max_uses)',
-    ).run(validInvite.id);
-    if (updated.changes === 0) {
-      console.warn(`[OIDC] Invite token ${inviteToken?.slice(0, 8)}... exceeded max_uses (race condition)`);
-    }
+  // Atomic registration: if an invite was presented, the increment IS the
+  // capacity check — UPDATE matches zero rows the moment another concurrent
+  // callback wins the last slot, and the transaction aborts the user INSERT.
+  // Without this, two parallel OIDC callbacks could both pass the earlier
+  // SELECT-based check and each create a user.
+  const inviteRaceError = new Error('invite_exhausted');
+  let newUserId: number;
+  try {
+    newUserId = db.transaction((): number => {
+      if (validInvite) {
+        const updated = db.prepare(
+          'UPDATE invite_tokens SET used_count = used_count + 1 WHERE id = ? AND (max_uses = 0 OR used_count < max_uses)',
+        ).run(validInvite.id);
+        if (updated.changes === 0) throw inviteRaceError;
+      }
+      const result = db.prepare(
+        'INSERT INTO users (username, email, password_hash, role, oidc_sub, oidc_issuer) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(username, email, hash, role, sub, config.issuer);
+      return Number(result.lastInsertRowid);
+    })();
+  } catch (err) {
+    if (err === inviteRaceError) return { error: 'registration_disabled' };
+    throw err;
   }
 
-  user = { id: Number(result.lastInsertRowid), username, email, role } as User;
+  user = { id: newUserId, username, email, role } as User;
   return { user };
 }
 

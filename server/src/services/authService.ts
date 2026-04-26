@@ -123,9 +123,12 @@ export function isOidcOnlyMode(): boolean {
   return oidcConfigured;
 }
 
-export function generateToken(user: { id: number | bigint }) {
+export function generateToken(user: { id: number | bigint; password_version?: number }) {
+  const pv = typeof user.password_version === 'number'
+    ? user.password_version
+    : ((db.prepare('SELECT password_version FROM users WHERE id = ?').get(user.id) as { password_version?: number } | undefined)?.password_version ?? 0);
   return jwt.sign(
-    { id: user.id },
+    { id: user.id, pv },
     JWT_SECRET,
     { expiresIn: '24h', algorithm: 'HS256' }
   );
@@ -139,8 +142,37 @@ export function normalizeBackupCode(input: string): string {
   return String(input || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+// Legacy SHA-256 hex hash. Kept so existing stored hashes can still be
+// verified in `matchBackupCode` without forcing re-enrolment.
 export function hashBackupCode(input: string): string {
   return crypto.createHash('sha256').update(normalizeBackupCode(input)).digest('hex');
+}
+
+const BCRYPT_BACKUP_COST = 10;
+
+/**
+ * Hash a backup code with bcrypt. Backup codes have only ~40 bits of
+ * entropy, so SHA-256 is crackable from a leaked DB. bcrypt raises that
+ * cost by ~3-4 orders of magnitude.
+ */
+export function hashBackupCodeBcrypt(input: string): string {
+  return bcrypt.hashSync(normalizeBackupCode(input), BCRYPT_BACKUP_COST);
+}
+
+/**
+ * Constant-time match against a stored hash in either format (bcrypt or
+ * legacy SHA-256). Callers that consume the matching entry should splice
+ * it out after calling this.
+ */
+export function matchBackupCode(plaintext: string, storedHash: string): boolean {
+  if (!storedHash) return false;
+  if (storedHash.startsWith('$2')) {
+    try { return bcrypt.compareSync(normalizeBackupCode(plaintext), storedHash); }
+    catch { return false; }
+  }
+  const candidate = hashBackupCode(plaintext);
+  if (candidate.length !== storedHash.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(storedHash));
 }
 
 export function generateBackupCodes(count = MFA_BACKUP_CODE_COUNT): string[] {
@@ -518,7 +550,7 @@ export function resetPassword(tokenRaw: string, newPassword: string, mfaCode?: s
       if (!valid) {
         const backupHashes = parseBackupCodeHashes(row.mfa_backup_codes);
         const normalized = normalizeBackupCode(mfaCode);
-        const matchIdx = backupHashes.findIndex(h => h === hashBackupCode(normalized));
+        const matchIdx = backupHashes.findIndex(h => matchBackupCode(normalized, h));
         if (matchIdx === -1) return { error: 'Invalid MFA code', status: 401 };
         // Consume backup code
         backupHashes.splice(matchIdx, 1);
@@ -528,9 +560,12 @@ export function resetPassword(tokenRaw: string, newPassword: string, mfaCode?: s
   }
 
   const hash = bcrypt.hashSync(newPassword, 12);
-  // Bump password_version to invalidate all existing sessions
+  // Bump password_version — invalidates every JWT that embedded the old value.
+  // Also delete MCP API tokens so a password reset revokes ALL credential classes.
   db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0, password_version = password_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(hash, row.user_id);
+  db.prepare('DELETE FROM mcp_tokens WHERE user_id = ?').run(row.user_id);
   db.prepare('UPDATE password_reset_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE id = ?').run(row.id);
+  revokeUserSessions(row.user_id);
 
   return { success: true };
 }
@@ -937,7 +972,7 @@ export function enableMfa(userId: number, code?: string): { error?: string; stat
     return { error: 'Invalid verification code', status: 401 };
   }
   const backupCodes = generateBackupCodes();
-  const backupHashes = backupCodes.map(hashBackupCode);
+  const backupHashes = backupCodes.map(hashBackupCodeBcrypt);
   const enc = encryptMfaSecret(pending);
   db.prepare('UPDATE users SET mfa_enabled = 1, mfa_secret = ?, mfa_backup_codes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
     enc,
@@ -1012,8 +1047,7 @@ export function verifyMfaLogin(body: {
     const okTotp = otpVerifySync({ token: tokenStr.replace(/\s/g, ''), secret, epochTolerance: OTP_WINDOW }).valid;
     if (!okTotp) {
       const hashes = parseBackupCodeHashes(user.mfa_backup_codes);
-      const candidateHash = hashBackupCode(tokenStr);
-      const idx = hashes.findIndex(h => h === candidateHash);
+      const idx = hashes.findIndex(h => matchBackupCode(tokenStr, h));
       if (idx === -1) {
         return { error: 'Invalid verification code', status: 401 };
       }

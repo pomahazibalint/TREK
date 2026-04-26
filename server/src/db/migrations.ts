@@ -1164,6 +1164,29 @@ function runMigrations(db: Database.Database): void {
         );
       `);
     },
+    // Migration 102: Security audit batch 1 — columns + indexes
+    // - share_tokens.expires_at: new public share links get a 90-day TTL.
+    //   Existing tokens stay NULL (no expiry) so published links keep working.
+    // - PERF-H1: indexes on high-cardinality query paths flagged in the audit.
+    () => {
+      try { db.exec('ALTER TABLE share_tokens ADD COLUMN expires_at TEXT'); }
+      catch (e: any) { if (!e.message?.includes('duplicate column name')) throw e; }
+      const cols = (db.prepare("PRAGMA table_info(day_accommodations)").all() as Array<{ name: string }>).map(r => r.name);
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_trips_user_id ON trips(user_id);
+        CREATE INDEX IF NOT EXISTS idx_trips_created_at ON trips(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_photos_day_id ON photos(day_id);
+        CREATE INDEX IF NOT EXISTS idx_photos_place_id ON photos(place_id);
+        CREATE INDEX IF NOT EXISTS idx_reservations_day_id ON reservations(day_id);
+        CREATE INDEX IF NOT EXISTS idx_share_tokens_token ON share_tokens(token);
+      `);
+      if (cols.includes('start_day_id')) db.exec('CREATE INDEX IF NOT EXISTS idx_day_accommodations_start_day_id ON day_accommodations(start_day_id)');
+      if (cols.includes('end_day_id')) db.exec('CREATE INDEX IF NOT EXISTS idx_day_accommodations_end_day_id ON day_accommodations(end_day_id)');
+      const notifCols = (db.prepare("PRAGMA table_info(notifications)").all() as Array<{ name: string }>).map(r => r.name);
+      if (notifCols.includes('target') && notifCols.includes('scope')) {
+        db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_target_scope ON notifications(target, scope)');
+      }
+    },
   ];
 
   if (currentVersion < migrations.length) {

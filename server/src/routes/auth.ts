@@ -127,10 +127,10 @@ router.get('/app-config', optionalAuth, (req: Request, res: Response) => {
   res.json(getAppConfig(user));
 });
 
-router.post('/demo-login', (_req: Request, res: Response) => {
+router.post('/demo-login', (req: Request, res: Response) => {
   const result = demoLogin();
   if (result.error) return res.status(result.status!).json({ error: result.error });
-  setAuthCookie(res, result.token!);
+  setAuthCookie(res, result.token!, req);
   res.json({ token: result.token, user: result.user });
 });
 
@@ -144,7 +144,7 @@ router.post('/register', authLimiter, (req: Request, res: Response) => {
   const result = registerUser(req.body);
   if (result.error) return res.status(result.status!).json({ error: result.error });
   writeAudit({ userId: result.auditUserId!, action: 'user.register', ip: getClientIp(req), details: result.auditDetails });
-  setAuthCookie(res, result.token!);
+  setAuthCookie(res, result.token!, req);
   res.status(201).json({ token: result.token, user: result.user });
 });
 
@@ -155,7 +155,7 @@ router.post('/login', authLimiter, (req: Request, res: Response) => {
   }
   if (result.error) return res.status(result.status!).json({ error: result.error });
   if (result.mfa_required) return res.json({ mfa_required: true, mfa_token: result.mfa_token });
-  setAuthCookie(res, result.token!);
+  setAuthCookie(res, result.token!, req);
   res.json({ token: result.token, user: result.user });
 });
 
@@ -166,8 +166,8 @@ router.get('/me', authenticate, (req: Request, res: Response) => {
   res.json({ user });
 });
 
-router.post('/logout', (_req: Request, res: Response) => {
-  clearAuthCookie(res);
+router.post('/logout', (req: Request, res: Response) => {
+  clearAuthCookie(res, req);
   res.json({ success: true });
 });
 
@@ -264,7 +264,7 @@ router.post('/mfa/verify-login', mfaLimiter, (req: Request, res: Response) => {
   const result = verifyMfaLogin(req.body);
   if (result.error) return res.status(result.status!).json({ error: result.error });
   writeAudit({ userId: result.auditUserId!, action: 'user.login', ip: getClientIp(req), details: { mfa: true } });
-  setAuthCookie(res, result.token!);
+  setAuthCookie(res, result.token!, req);
   res.json({ token: result.token, user: result.user });
 });
 

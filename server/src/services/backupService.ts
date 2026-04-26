@@ -5,6 +5,7 @@ import fs from 'fs';
 import Database from 'better-sqlite3';
 import { db, closeDb, reinitialize } from '../db/database';
 import * as scheduler from '../scheduler';
+import { invalidatePermissionsCache } from './permissions';
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -246,6 +247,9 @@ export async function restoreFromZip(zipPath: string): Promise<RestoreResult> {
       }
     } finally {
       reinitialize();
+      // The restored DB has different permission-override rows; drop the
+      // process-local cache so the next request reads fresh state.
+      invalidatePermissionsCache();
     }
 
     fs.rmSync(extractDir, { recursive: true, force: true });
@@ -253,6 +257,7 @@ export async function restoreFromZip(zipPath: string): Promise<RestoreResult> {
   } catch (err: unknown) {
     console.error('Restore error:', err);
     if (fs.existsSync(extractDir)) fs.rmSync(extractDir, { recursive: true, force: true });
+    try { invalidatePermissionsCache(); } catch { /* best-effort */ }
     throw err;
   }
 }

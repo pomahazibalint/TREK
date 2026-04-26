@@ -9,6 +9,7 @@ import {
   consumeAuthCode,
   exchangeCodeForToken,
   getUserInfo,
+  verifyIdToken,
   findOrCreateUser,
   touchLastLogin,
   generateToken,
@@ -91,6 +92,19 @@ router.get('/callback', async (req: Request, res: Response) => {
       return res.redirect(frontendUrl('/login?oidc_error=token_failed'));
     }
 
+    // Verify the id_token signature against the provider's JWKS.
+    // If the provider doesn't return an id_token or has no JWKS URI we
+    // fall back to trusting the userinfo endpoint (same as before), but
+    // when an id_token IS present we validate it end-to-end.
+    if (tokenData.id_token && doc.jwks_uri) {
+      const canonicalIssuer = (config.issuer || '').replace(/\/+$/, '');
+      const idTokenResult = await verifyIdToken(tokenData.id_token, doc, config.clientId, canonicalIssuer);
+      if (idTokenResult.ok === false) {
+        console.error('[OIDC] id_token verification failed:', idTokenResult.error);
+        return res.redirect(frontendUrl('/login?oidc_error=id_token_invalid'));
+      }
+    }
+
     const userInfo = await getUserInfo(doc.userinfo_endpoint, tokenData.access_token);
     if (!userInfo.email) {
       return res.redirect(frontendUrl('/login?oidc_error=no_email'));
@@ -120,7 +134,7 @@ router.get('/exchange', (req: Request, res: Response) => {
   const result = consumeAuthCode(code);
   if ('error' in result) return res.status(400).json({ error: result.error });
 
-  setAuthCookie(res, result.token);
+  setAuthCookie(res, result.token, req);
   res.json({ token: result.token });
 });
 
