@@ -435,7 +435,10 @@ async function reverseGeocodeRegion(lat: number, lng: number): Promise<RegionInf
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=8&accept-language=en`,
       { headers: { 'User-Agent': 'TREK Travel Planner' } }
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(`[Atlas] Nominatim HTTP ${res.status} for (${lat},${lng})`);
+      return null;
+    }
     const data = await res.json() as { address?: Record<string, string> };
     const countryCode = data.address?.country_code?.toUpperCase() || null;
     // Try finest ISO level first (lvl6 = departments/provinces), then lvl5, then lvl4 (states/regions)
@@ -445,7 +448,11 @@ async function reverseGeocodeRegion(lat: number, lng: number): Promise<RegionInf
       regionCode = regionCode.replace(/[A-Z]$/i, '');
     }
     const regionName = data.address?.state || data.address?.province || data.address?.region || data.address?.county || data.address?.city || null;
-    if (!countryCode || !regionName) { regionCache.set(key, null); return null; }
+    if (!countryCode || !regionName) {
+      console.warn(`[Atlas] Nominatim missing fields for (${lat},${lng}): countryCode=${countryCode}, regionName=${regionName}`);
+      regionCache.set(key, null);
+      return null;
+    }
     const info: RegionInfo = {
       country_code: countryCode,
       region_code: regionCode || `${countryCode}-${regionName.substring(0, 3).toUpperCase()}`,
@@ -453,7 +460,8 @@ async function reverseGeocodeRegion(lat: number, lng: number): Promise<RegionInf
     };
     regionCache.set(key, info);
     return info;
-  } catch {
+  } catch (err) {
+    console.warn(`[Atlas] Nominatim fetch error for (${lat},${lng}):`, err);
     return null;
   }
 }
