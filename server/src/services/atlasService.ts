@@ -427,27 +427,46 @@ interface RegionInfo { country_code: string; region_code: string; region_name: s
 
 const regionCache = new Map<string, RegionInfo | null>();
 
+function extractRegionFromAddress(address: Record<string, string>): { countryCode: string | null; regionCode: string | null; regionName: string | null } {
+  const countryCode = address.country_code?.toUpperCase() || null;
+  let regionCode = address['ISO3166-2-lvl6'] || address['ISO3166-2-lvl5'] || address['ISO3166-2-lvl4'] || null;
+  if (regionCode && /^[A-Z]{2}-\d+[A-Z]$/i.test(regionCode)) {
+    regionCode = regionCode.replace(/[A-Z]$/i, '');
+  }
+  const regionName = address.state || address.province || address.region || address.county || address.municipality || address.island || address.archipelago || address.city || null;
+  return { countryCode, regionCode, regionName };
+}
+
+async function nominatimReverse(lat: number, lng: number, zoom: number): Promise<Record<string, string> | null> {
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=${zoom}&accept-language=en`,
+    { headers: { 'User-Agent': 'TREK Travel Planner' } }
+  );
+  if (!res.ok) {
+    console.warn(`[Atlas] Nominatim HTTP ${res.status} for (${lat},${lng}) zoom=${zoom}`);
+    return null;
+  }
+  const data = await res.json() as { address?: Record<string, string> };
+  return data.address || null;
+}
+
 async function reverseGeocodeRegion(lat: number, lng: number): Promise<RegionInfo | null> {
   const key = roundKey(lat, lng);
   if (regionCache.has(key)) return regionCache.get(key)!;
   try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=8&accept-language=en`,
-      { headers: { 'User-Agent': 'TREK Travel Planner' } }
-    );
-    if (!res.ok) {
-      console.warn(`[Atlas] Nominatim HTTP ${res.status} for (${lat},${lng})`);
-      return null;
+    // zoom=8 gives county/municipality precision; fall back to zoom=5 (state level) for
+    // coastal coordinates that Nominatim resolves to water at higher zoom
+    let address = await nominatimReverse(lat, lng, 8);
+    if (!address) { regionCache.set(key, null); return null; }
+    let { countryCode, regionCode, regionName } = extractRegionFromAddress(address);
+    if (countryCode && !regionName) {
+      await new Promise(r => setTimeout(r, 1100));
+      const fallback = await nominatimReverse(lat, lng, 5);
+      if (fallback) {
+        const fb = extractRegionFromAddress(fallback);
+        if (fb.regionName) { regionCode = fb.regionCode; regionName = fb.regionName; }
+      }
     }
-    const data = await res.json() as { address?: Record<string, string> };
-    const countryCode = data.address?.country_code?.toUpperCase() || null;
-    // Try finest ISO level first (lvl6 = departments/provinces), then lvl5, then lvl4 (states/regions)
-    let regionCode = data.address?.['ISO3166-2-lvl6'] || data.address?.['ISO3166-2-lvl5'] || data.address?.['ISO3166-2-lvl4'] || null;
-    // Normalize: FR-75C → FR-75 (strip trailing letter suffixes for GeoJSON compatibility)
-    if (regionCode && /^[A-Z]{2}-\d+[A-Z]$/i.test(regionCode)) {
-      regionCode = regionCode.replace(/[A-Z]$/i, '');
-    }
-    const regionName = data.address?.state || data.address?.province || data.address?.region || data.address?.county || data.address?.municipality || data.address?.island || data.address?.archipelago || data.address?.city || null;
     if (!countryCode || !regionName) {
       console.warn(`[Atlas] Nominatim missing fields for (${lat},${lng}): countryCode=${countryCode}, regionName=${regionName}`);
       regionCache.set(key, null);
