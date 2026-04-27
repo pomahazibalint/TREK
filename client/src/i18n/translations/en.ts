@@ -177,6 +177,7 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'settings.notifyWebhook': 'Webhook notifications',
   'settings.notifyVersionAvailable': 'New version available',
   'settings.notifyBudgetSettlement': 'Budget settlements',
+  'settings.notifyTodoDue': 'To-do due today',
   'settings.notificationPreferences.email': 'Email',
   'settings.notificationPreferences.webhook': 'Webhook',
   'settings.notificationPreferences.inapp': 'In-App',
@@ -647,7 +648,7 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'admin.addons.type.integration': 'Integration',
   'admin.addons.tripHint': 'Available as a tab within each trip',
   'admin.addons.globalHint': 'Available as a standalone section in the main navigation',
-  'admin.addons.integrationHint': 'Backend services and API integrations with no dedicated page',
+  'admin.addons.integrationHint': 'Backend services and API integrations',
   'admin.addons.toast.updated': 'Addon updated',
   'admin.addons.toast.error': 'Failed to update addon',
   'admin.addons.noAddons': 'No addons available',
@@ -918,6 +919,8 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'trip.toast.reservationUpdated': 'Reservation updated',
   'trip.toast.reservationAdded': 'Reservation added',
   'trip.toast.deleted': 'Deleted',
+  'trip.toast.loadError': 'Failed to load trip',
+  'trip.toast.tripUpdated': 'Trip updated',
   'trip.confirm.deletePlace': 'Are you sure you want to delete this place?',
 
   // Day Plan Sidebar
@@ -956,6 +959,8 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.transportWalking': 'Walk',
   'dayplan.transportCycling': 'Bike',
   'dayplan.transportDriving': 'Drive',
+  'dayplan.dayDetail': 'Day details',
+  'dayplan.toast.routeError': 'Failed to calculate route',
 
   // Places Sidebar
   'places.addPlace': 'Add Place/Activity',
@@ -1710,6 +1715,7 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'collab.notes.attachFiles': 'Attach files',
   'collab.notes.noCategoriesYet': 'No categories yet',
   'collab.notes.emptyDesc': 'Create a note to get started',
+  'collab.notes.expand': 'Expand',
   'collab.polls.title': 'Polls',
   'collab.polls.new': 'New Poll',
   'collab.polls.empty': 'No polls yet',
