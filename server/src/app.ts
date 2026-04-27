@@ -37,6 +37,7 @@ import photosRoutes from './routes/photos';
 import notificationRoutes from './routes/notifications';
 import shareRoutes from './routes/share';
 import { mcpHandler } from './mcp';
+import { publicRouter as oauthPublicRouter, apiRouter as oauthApiRouter } from './routes/oauth';
 import { Addon } from './types';
 import { getPhotoProviderConfig } from './services/memories/helpersService';
 
@@ -193,6 +194,9 @@ export function createApp(): express.Application {
     res.status(401).send('Authentication required');
   });
 
+  // OAuth 2.1 — public router (/.well-known/*, /oauth/*)
+  app.use('/', oauthPublicRouter);
+
   // API Routes
   app.use('/api/auth', authRoutes);
   app.use('/api/auth/oidc', oidcRoutes);
@@ -283,6 +287,9 @@ export function createApp(): express.Application {
   app.use('/api/backup', backupRoutes);
   app.use('/api/notifications', notificationRoutes);
   app.use('/api', shareRoutes);
+
+  // OAuth 2.1 — API router (/api/oauth/*)
+  app.use('/api/oauth', oauthApiRouter);
 
   // MCP endpoint
   app.post('/mcp', mcpHandler);

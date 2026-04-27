@@ -316,3 +316,85 @@ export interface Participant {
   username: string;
   avatar?: string | null;
 }
+
+// ── OAuth 2.1 types ──────────────────────────────────────────────────────────
+
+export interface OAuthClient {
+  id: string;
+  user_id: number | null;
+  name: string;
+  client_id: string;
+  client_secret_hash: string | null;
+  redirect_uris: string[];
+  allowed_scopes: string[];
+  is_public: boolean;
+  created_via: 'settings_ui' | 'dcr';
+  created_at: string;
+}
+
+export interface OAuthClientResult {
+  client: OAuthClient;
+  clientSecret: string | null;
+}
+
+export interface OAuthTokenRow {
+  id: number;
+  client_id: string;
+  user_id: number;
+  access_token_hash: string;
+  refresh_token_hash: string;
+  scopes: string;
+  audience: string;
+  access_token_expires_at: string;
+  refresh_token_expires_at: string;
+  revoked_at: string | null;
+  parent_token_id: number | null;
+  created_at: string;
+}
+
+export interface OAuthTokenInfo {
+  user: { id: number; username: string; email: string; role: string };
+  scopes: string[];
+  clientId: string;
+  tokenId: number;
+}
+
+export interface OAuthTokens {
+  access_token: string;
+  refresh_token: string;
+  token_type: 'Bearer';
+  expires_in: number;
+  scope: string;
+}
+
+export interface OAuthSessionInfo {
+  id: number;
+  client_id: string;
+  client_name: string;
+  scopes: string[];
+  audience: string;
+  created_at: string;
+  access_token_expires_at: string;
+  refresh_token_expires_at: string;
+}
+
+export interface AuthorizeParams {
+  client_id: string;
+  redirect_uri: string;
+  response_type: string;
+  scope?: string;
+  state?: string;
+  code_challenge?: string;
+  code_challenge_method?: string;
+  resource?: string;
+}
+
+export interface ValidateAuthorizeResult {
+  valid: boolean;
+  loginRequired?: boolean;
+  consentRequired?: boolean;
+  client?: { name: string; clientId: string };
+  scopes?: Array<{ scope: string; label: string; group: string }>;
+  scopeSelectable?: boolean;
+  error?: string;
+}

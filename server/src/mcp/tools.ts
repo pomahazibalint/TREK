@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { canAccessTrip } from '../db/database';
 import { broadcast } from '../websocket';
 import { isDemoUser } from '../services/authService';
+import { can } from './scopes';
 import {
   listTrips, createTrip, updateTrip, deleteTrip, getTripSummary,
   isOwner, verifyTripAccess,
@@ -26,6 +27,14 @@ import { searchPlaces } from '../services/mapsService';
 
 const MAX_MCP_TRIP_DAYS = 90;
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function insufficientScope(required: string) {
+  return {
+    content: [{ type: 'text' as const, text: `Insufficient scope. This action requires the '${required}' OAuth scope.` }],
+    isError: true,
+  };
+}
+
 function demoDenied() {
   return { content: [{ type: 'text' as const, text: 'Write operations are disabled in demo mode.' }], isError: true };
 }
@@ -38,9 +47,13 @@ function ok(data: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
 }
 
-export function registerTools(server: McpServer, userId: number): void {
-  // --- TRIPS ---
+export function registerTools(server: McpServer, userId: number, scopes: string[] | null = null): void {
+  // --- TRIPS (always: list_trips, get_trip_summary) ---
 
+  // list_trips and get_trip_summary are always registered — they are discovery tools.
+  // The summary tool is registered further below, but trips:write tools are guarded here.
+
+  if (can(scopes, 'trips:write')) {
   server.registerTool(
     'create_trip',
     {
@@ -104,7 +117,9 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ trip: updatedTrip });
     }
   );
+  } // trips:write
 
+  if (can(scopes, 'trips:delete')) {
   server.registerTool(
     'delete_trip',
     {
@@ -120,6 +135,7 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ success: true, tripId });
     }
   );
+  } // trips:delete
 
   server.registerTool(
     'list_trips',
@@ -137,6 +153,7 @@ export function registerTools(server: McpServer, userId: number): void {
 
   // --- PLACES ---
 
+  if (can(scopes, 'places:write')) {
   server.registerTool(
     'create_place',
     {
@@ -210,6 +227,7 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ success: true });
     }
   );
+  } // places:write
 
   // --- CATEGORIES ---
 
@@ -227,6 +245,7 @@ export function registerTools(server: McpServer, userId: number): void {
 
   // --- SEARCH ---
 
+  if (can(scopes, 'geo:read')) {
   server.registerTool(
     'search_place',
     {
@@ -244,9 +263,11 @@ export function registerTools(server: McpServer, userId: number): void {
       }
     }
   );
+  } // geo:read
 
   // --- ASSIGNMENTS ---
 
+  if (can(scopes, 'trips:write')) {
   server.registerTool(
     'assign_place_to_day',
     {
@@ -289,9 +310,11 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ success: true });
     }
   );
+  } // trips:write (assignments)
 
   // --- BUDGET ---
 
+  if (can(scopes, 'budget:write')) {
   server.registerTool(
     'create_budget_item',
     {
@@ -331,9 +354,11 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ success: true });
     }
   );
+  } // budget:write
 
   // --- PACKING ---
 
+  if (can(scopes, 'packing:write')) {
   server.registerTool(
     'create_packing_item',
     {
@@ -391,9 +416,11 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ success: true });
     }
   );
+  } // packing:write
 
   // --- RESERVATIONS ---
 
+  if (can(scopes, 'reservations:write')) {
   server.registerTool(
     'create_reservation',
     {
@@ -512,9 +539,11 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ reservation, accommodation_id: (reservation as any).accommodation_id });
     }
   );
+  } // reservations:write
 
   // --- DAYS ---
 
+  if (can(scopes, 'trips:write')) {
   server.registerTool(
     'update_assignment_time',
     {
@@ -561,9 +590,11 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ day: updated });
     }
   );
+  } // trips:write (days)
 
   // --- RESERVATIONS (update) ---
 
+  if (can(scopes, 'reservations:write')) {
   server.registerTool(
     'update_reservation',
     {
@@ -602,9 +633,11 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ reservation });
     }
   );
+  } // reservations:write (update)
 
   // --- BUDGET (update) ---
 
+  if (can(scopes, 'budget:write')) {
   server.registerTool(
     'update_budget_item',
     {
@@ -627,9 +660,11 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ item });
     }
   );
+  } // budget:write (update)
 
   // --- PACKING (update) ---
 
+  if (can(scopes, 'packing:write')) {
   server.registerTool(
     'update_packing_item',
     {
@@ -651,9 +686,11 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ item });
     }
   );
+  } // packing:write (update)
 
   // --- REORDER ---
 
+  if (can(scopes, 'trips:write')) {
   server.registerTool(
     'reorder_day_assignments',
     {
@@ -673,6 +710,7 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ success: true, dayId, order: assignmentIds });
     }
   );
+  } // trips:write (reorder)
 
   // --- TRIP SUMMARY ---
 
@@ -694,6 +732,7 @@ export function registerTools(server: McpServer, userId: number): void {
 
   // --- BUCKET LIST ---
 
+  if (can(scopes, 'atlas:write')) {
   server.registerTool(
     'create_bucket_list_item',
     {
@@ -728,9 +767,11 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ success: true });
     }
   );
+  } // atlas:write (bucket list)
 
   // --- ATLAS ---
 
+  if (can(scopes, 'atlas:write')) {
   server.registerTool(
     'mark_country_visited',
     {
@@ -760,9 +801,11 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ success: true, country_code: country_code.toUpperCase() });
     }
   );
+  } // atlas:write
 
   // --- COLLAB NOTES ---
 
+  if (can(scopes, 'collab:write')) {
   server.registerTool(
     'create_collab_note',
     {
@@ -826,9 +869,11 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ success: true });
     }
   );
+  } // collab:write
 
   // --- DAY NOTES ---
 
+  if (can(scopes, 'collab:write')) {
   server.registerTool(
     'create_day_note',
     {
@@ -895,4 +940,5 @@ export function registerTools(server: McpServer, userId: number): void {
       return ok({ success: true });
     }
   );
+  } // collab:write (day notes)
 }

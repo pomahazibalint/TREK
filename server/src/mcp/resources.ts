@@ -1,4 +1,5 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp';
+import { can } from './scopes';
 import { canAccessTrip } from '../db/database';
 import { listTrips, getTrip, getTripOwner, listMembers } from '../services/tripService';
 import { listDays, listAccommodations } from '../services/dayService';
@@ -36,8 +37,9 @@ function jsonContent(uri: string, data: unknown) {
   };
 }
 
-export function registerResources(server: McpServer, userId: number): void {
-  // List all accessible trips
+export function registerResources(server: McpServer, userId: number, scopes: string[] | null = null): void {
+  // --- TRIPS resources ---
+  if (can(scopes, 'trips:read')) {
   server.registerResource(
     'trips',
     'trek://trips',
@@ -75,72 +77,6 @@ export function registerResources(server: McpServer, userId: number): void {
     }
   );
 
-  // Places in a trip
-  server.registerResource(
-    'trip-places',
-    new ResourceTemplate('trek://trips/{tripId}/places', { list: undefined }),
-    { description: 'All places/POIs saved in a trip' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      const places = listPlaces(String(id), {});
-      return jsonContent(uri.href, places);
-    }
-  );
-
-  // Budget items
-  server.registerResource(
-    'trip-budget',
-    new ResourceTemplate('trek://trips/{tripId}/budget', { list: undefined }),
-    { description: 'Budget and expense items for a trip' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      const items = listBudgetItems(id);
-      return jsonContent(uri.href, items);
-    }
-  );
-
-  // Packing checklist
-  server.registerResource(
-    'trip-packing',
-    new ResourceTemplate('trek://trips/{tripId}/packing', { list: undefined }),
-    { description: 'Packing checklist for a trip' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      const items = listPackingItems(id);
-      return jsonContent(uri.href, items);
-    }
-  );
-
-  // Reservations (flights, hotels, restaurants)
-  server.registerResource(
-    'trip-reservations',
-    new ResourceTemplate('trek://trips/{tripId}/reservations', { list: undefined }),
-    { description: 'Reservations (flights, hotels, restaurants) for a trip' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      const reservations = listReservations(id);
-      return jsonContent(uri.href, reservations);
-    }
-  );
-
-  // Day notes
-  server.registerResource(
-    'day-notes',
-    new ResourceTemplate('trek://trips/{tripId}/days/{dayId}/notes', { list: undefined }),
-    { description: 'Notes for a specific day in a trip' },
-    async (uri, { tripId, dayId }) => {
-      const tId = parseId(tripId);
-      const dId = parseId(dayId);
-      if (tId === null || dId === null || !canAccessTrip(tId, userId)) return accessDenied(uri.href);
-      const notes = listDayNotes(dId, tId);
-      return jsonContent(uri.href, notes);
-    }
-  );
-
   // Accommodations (hotels, rentals) per trip
   server.registerResource(
     'trip-accommodations',
@@ -168,8 +104,86 @@ export function registerResources(server: McpServer, userId: number): void {
       return jsonContent(uri.href, { owner, members });
     }
   );
+  } // trips:read
+
+  // Places in a trip
+  if (can(scopes, 'places:read')) {
+  server.registerResource(
+    'trip-places',
+    new ResourceTemplate('trek://trips/{tripId}/places', { list: undefined }),
+    { description: 'All places/POIs saved in a trip' },
+    async (uri, { tripId }) => {
+      const id = parseId(tripId);
+      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
+      const places = listPlaces(String(id), {});
+      return jsonContent(uri.href, places);
+    }
+  );
+  } // places:read
+
+  // Budget items
+  if (can(scopes, 'budget:read')) {
+  server.registerResource(
+    'trip-budget',
+    new ResourceTemplate('trek://trips/{tripId}/budget', { list: undefined }),
+    { description: 'Budget and expense items for a trip' },
+    async (uri, { tripId }) => {
+      const id = parseId(tripId);
+      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
+      const items = listBudgetItems(id);
+      return jsonContent(uri.href, items);
+    }
+  );
+  } // budget:read
+
+  // Packing checklist
+  if (can(scopes, 'packing:read')) {
+  server.registerResource(
+    'trip-packing',
+    new ResourceTemplate('trek://trips/{tripId}/packing', { list: undefined }),
+    { description: 'Packing checklist for a trip' },
+    async (uri, { tripId }) => {
+      const id = parseId(tripId);
+      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
+      const items = listPackingItems(id);
+      return jsonContent(uri.href, items);
+    }
+  );
+  } // packing:read
+
+  // Reservations (flights, hotels, restaurants)
+  if (can(scopes, 'reservations:read')) {
+  server.registerResource(
+    'trip-reservations',
+    new ResourceTemplate('trek://trips/{tripId}/reservations', { list: undefined }),
+    { description: 'Reservations (flights, hotels, restaurants) for a trip' },
+    async (uri, { tripId }) => {
+      const id = parseId(tripId);
+      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
+      const reservations = listReservations(id);
+      return jsonContent(uri.href, reservations);
+    }
+  );
+  } // reservations:read
+
+  // Day notes
+  if (can(scopes, 'collab:read')) {
+  server.registerResource(
+    'day-notes',
+    new ResourceTemplate('trek://trips/{tripId}/days/{dayId}/notes', { list: undefined }),
+    { description: 'Notes for a specific day in a trip' },
+    async (uri, { tripId, dayId }) => {
+      const tId = parseId(tripId);
+      const dId = parseId(dayId);
+      if (tId === null || dId === null || !canAccessTrip(tId, userId)) return accessDenied(uri.href);
+      const notes = listDayNotes(dId, tId);
+      return jsonContent(uri.href, notes);
+    }
+  );
+  } // collab:read (day notes)
 
   // Collab notes for a trip
+  if (can(scopes, 'collab:read')) {
   server.registerResource(
     'trip-collab-notes',
     new ResourceTemplate('trek://trips/{tripId}/collab-notes', { list: undefined }),
@@ -181,6 +195,7 @@ export function registerResources(server: McpServer, userId: number): void {
       return jsonContent(uri.href, notes);
     }
   );
+  } // collab:read (collab notes)
 
   // All place categories (global, no trip filter)
   server.registerResource(
@@ -193,7 +208,8 @@ export function registerResources(server: McpServer, userId: number): void {
     }
   );
 
-  // User's bucket list
+  // User's bucket list and visited countries
+  if (can(scopes, 'atlas:read')) {
   server.registerResource(
     'bucket-list',
     'trek://bucket-list',
@@ -204,7 +220,6 @@ export function registerResources(server: McpServer, userId: number): void {
     }
   );
 
-  // User's visited countries
   server.registerResource(
     'visited-countries',
     'trek://visited-countries',
@@ -214,4 +229,5 @@ export function registerResources(server: McpServer, userId: number): void {
       return jsonContent(uri.href, countries);
     }
   );
+  } // atlas:read
 }

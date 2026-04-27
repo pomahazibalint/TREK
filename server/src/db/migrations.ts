@@ -1187,6 +1187,61 @@ function runMigrations(db: Database.Database): void {
         db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_target_scope ON notifications(target, scope)');
       }
     },
+    // Migration 103: OAuth 2.1 clients — registered OAuth applications
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS oauth_clients (
+          id          TEXT PRIMARY KEY,
+          user_id     INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          name        TEXT NOT NULL,
+          client_id   TEXT NOT NULL UNIQUE,
+          client_secret_hash TEXT,
+          redirect_uris TEXT NOT NULL,
+          allowed_scopes TEXT NOT NULL,
+          is_public   INTEGER NOT NULL DEFAULT 0,
+          created_via TEXT NOT NULL DEFAULT 'settings_ui',
+          created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_oauth_clients_user ON oauth_clients(user_id);
+        CREATE INDEX IF NOT EXISTS idx_oauth_clients_client_id ON oauth_clients(client_id);
+      `);
+    },
+    // Migration 104: OAuth 2.1 tokens — access + refresh token pairs
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS oauth_tokens (
+          id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_id               TEXT NOT NULL REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+          user_id                 INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          access_token_hash       TEXT NOT NULL UNIQUE,
+          refresh_token_hash      TEXT NOT NULL UNIQUE,
+          scopes                  TEXT NOT NULL,
+          audience                TEXT NOT NULL,
+          access_token_expires_at DATETIME NOT NULL,
+          refresh_token_expires_at DATETIME NOT NULL,
+          revoked_at              DATETIME,
+          parent_token_id         INTEGER REFERENCES oauth_tokens(id) ON DELETE SET NULL,
+          created_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_oauth_tokens_access_hash ON oauth_tokens(access_token_hash);
+        CREATE INDEX IF NOT EXISTS idx_oauth_tokens_refresh_hash ON oauth_tokens(refresh_token_hash);
+        CREATE INDEX IF NOT EXISTS idx_oauth_tokens_client_user ON oauth_tokens(client_id, user_id);
+      `);
+    },
+    // Migration 105: OAuth 2.1 consents — user-approved scope grants per client
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS oauth_consents (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_id  TEXT NOT NULL REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+          user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          scopes     TEXT NOT NULL,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(client_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_oauth_consents_client_user ON oauth_consents(client_id, user_id);
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {

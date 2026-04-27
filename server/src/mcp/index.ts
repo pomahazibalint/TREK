@@ -5,81 +5,107 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { User } from '../types';
 import { verifyMcpToken, verifyJwtToken } from '../services/authService';
 import { isAddonEnabled } from '../services/adminService';
+import { getAppUrl } from '../services/oidcService';
+import { getUserByAccessToken } from '../services/oauthService';
 import { registerResources } from './resources';
 import { registerTools } from './tools';
+import {
+  McpSession,
+  sessions,
+  SESSION_TTL_MS,
+  countSessionsForUser,
+  revokeUserSessions,
+  revokeUserSessionsForClient,
+  closeMcpSessions,
+} from './sessionManager';
 
-interface McpSession {
-  server: McpServer;
-  transport: StreamableHTTPServerTransport;
-  userId: number;
-  lastActivity: number;
+// Re-export for backwards compatibility
+export { revokeUserSessions, revokeUserSessionsForClient, closeMcpSessions };
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const sessionParsed = Number.parseInt(process.env.MCP_MAX_SESSION_PER_USER ?? '');
+const MAX_SESSIONS_PER_USER = Number.isFinite(sessionParsed) && sessionParsed > 0 ? sessionParsed : 20;
+
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const rateParsed = Number.parseInt(process.env.MCP_RATE_LIMIT ?? '');
+const RATE_LIMIT_MAX = Number.isFinite(rateParsed) && rateParsed > 0 ? rateParsed : 60;
+
+const STATIC_TOKEN_DEPRECATION_NOTICE =
+  'Note: You are connected via a legacy TREK API token. These tokens are deprecated. ' +
+  'Ask the user to reconnect via OAuth 2.1 in Settings → Integrations for scoped access.';
+
+// ── Token verification ────────────────────────────────────────────────────────
+
+interface VerifyTokenResult {
+  user: User;
+  scopes: string[] | null;
+  clientId: string | null;
+  isStaticToken: boolean;
 }
 
-const sessions = new Map<string, McpSession>();
+function verifyToken(authHeader: string | undefined): VerifyTokenResult | null {
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return null;
 
-const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
-const sessionParsed = Number.parseInt(process.env.MCP_MAX_SESSION_PER_USER ?? "");
-const MAX_SESSIONS_PER_USER = Number.isFinite(sessionParsed) && sessionParsed > 0 ? sessionParsed : 5;
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const parsed = Number.parseInt(process.env.MCP_RATE_LIMIT ?? "");
-const RATE_LIMIT_MAX = Number.isFinite(parsed) && parsed > 0 ? parsed : 60; // requests per minute per user
+  if (token.startsWith('trekoa_')) {
+    const result = getUserByAccessToken(token);
+    if (!result) return null;
+    return { user: result.user as User, scopes: result.scopes, clientId: result.clientId, isStaticToken: false };
+  }
+
+  if (token.startsWith('trek_')) {
+    const user = verifyMcpToken(token);
+    if (!user) return null;
+    return { user, scopes: null, clientId: null, isStaticToken: true };
+  }
+
+  // JWT (browser / short-lived session token)
+  const user = verifyJwtToken(token);
+  if (!user) return null;
+  return { user, scopes: null, clientId: null, isStaticToken: false };
+}
+
+// ── Rate limiting ─────────────────────────────────────────────────────────────
 
 interface RateLimitEntry {
   count: number;
   windowStart: number;
 }
-const rateLimitMap = new Map<number, RateLimitEntry>();
 
-function isRateLimited(userId: number): boolean {
+const rateLimitMap = new Map<string, RateLimitEntry>();
+
+function isRateLimited(userId: number, clientId: string | null): boolean {
+  const key = `${userId}:${clientId ?? 'static'}`;
   const now = Date.now();
-  const entry = rateLimitMap.get(userId);
+  const entry = rateLimitMap.get(key);
   if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
-    rateLimitMap.set(userId, { count: 1, windowStart: now });
+    rateLimitMap.set(key, { count: 1, windowStart: now });
     return false;
   }
   entry.count += 1;
   return entry.count > RATE_LIMIT_MAX;
 }
 
-function countSessionsForUser(userId: number): number {
-  const cutoff = Date.now() - SESSION_TTL_MS;
-  let count = 0;
-  for (const session of sessions.values()) {
-    if (session.userId === userId && session.lastActivity >= cutoff) count++;
-  }
-  return count;
-}
-
-const sessionSweepInterval = setInterval(() => {
-  const cutoff = Date.now() - SESSION_TTL_MS;
-  for (const [sid, session] of sessions) {
-    if (session.lastActivity < cutoff) {
-      try { session.server.close(); } catch { /* ignore */ }
-      try { session.transport.close(); } catch { /* ignore */ }
-      sessions.delete(sid);
-    }
-  }
+// Sweep stale rate-limit buckets alongside session sweep (piggyback on sessionManager interval)
+setInterval(() => {
   const rateCutoff = Date.now() - RATE_LIMIT_WINDOW_MS;
-  for (const [uid, entry] of rateLimitMap) {
-    if (entry.windowStart < rateCutoff) rateLimitMap.delete(uid);
+  for (const [key, entry] of rateLimitMap) {
+    if (entry.windowStart < rateCutoff) rateLimitMap.delete(key);
   }
-}, 10 * 60 * 1000); // sweep every 10 minutes
+}, 10 * 60 * 1000).unref();
 
-// Prevent the interval from keeping the process alive if nothing else is running
-sessionSweepInterval.unref();
+// ── WWW-Authenticate helper ───────────────────────────────────────────────────
 
-function verifyToken(authHeader: string | undefined): User | null {
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return null;
-
-  // Long-lived MCP API token (trek_...)
-  if (token.startsWith('trek_')) {
-    return verifyMcpToken(token);
-  }
-
-  // Short-lived JWT
-  return verifyJwtToken(token);
+function setAuthChallenge(res: Response, error = 'invalid_token'): void {
+  const base = (getAppUrl() ?? '').replace(/\/+$/, '');
+  res.set(
+    'WWW-Authenticate',
+    `Bearer realm="TREK MCP", resource_metadata="${base}/.well-known/oauth-protected-resource", error="${error}"`,
+  );
 }
+
+// ── MCP handler ───────────────────────────────────────────────────────────────
 
 export async function mcpHandler(req: Request, res: Response): Promise<void> {
   if (!isAddonEnabled('mcp')) {
@@ -87,13 +113,16 @@ export async function mcpHandler(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const user = verifyToken(req.headers['authorization']);
-  if (!user) {
+  const tokenResult = verifyToken(req.headers['authorization']);
+  if (!tokenResult) {
+    setAuthChallenge(res, 'invalid_token');
     res.status(401).json({ error: 'Access token required' });
     return;
   }
 
-  if (isRateLimited(user.id)) {
+  const { user, scopes, clientId, isStaticToken } = tokenResult;
+
+  if (isRateLimited(user.id, clientId)) {
     res.status(429).json({ error: 'Too many requests. Please slow down.' });
     return;
   }
@@ -108,7 +137,14 @@ export async function mcpHandler(req: Request, res: Response): Promise<void> {
       return;
     }
     if (session.userId !== user.id) {
+      setAuthChallenge(res, 'insufficient_scope');
       res.status(403).json({ error: 'Session belongs to a different user' });
+      return;
+    }
+    // Reject if the OAuth client changed mid-session (e.g. token was revoked and re-issued for a different client)
+    if (session.clientId !== clientId) {
+      setAuthChallenge(res, 'invalid_token');
+      res.status(403).json({ error: 'Token client does not match session' });
       return;
     }
     session.lastActivity = Date.now();
@@ -127,15 +163,32 @@ export async function mcpHandler(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Create a new per-user MCP server and session
-  const server = new McpServer({ name: 'trek', version: '1.0.0' });
-  registerResources(server, user.id);
-  registerTools(server, user.id);
+  const serverOptions: ConstructorParameters<typeof McpServer>[0] = {
+    name: 'trek',
+    version: '1.0.0',
+  };
+
+  if (isStaticToken) {
+    (serverOptions as any).instructions = STATIC_TOKEN_DEPRECATION_NOTICE;
+  }
+
+  const server = new McpServer(serverOptions);
+  registerResources(server, user.id, scopes);
+  registerTools(server, user.id, scopes);
 
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
     onsessioninitialized: (sid) => {
-      sessions.set(sid, { server, transport, userId: user.id, lastActivity: Date.now() });
+      const session: McpSession = {
+        server,
+        transport,
+        userId: user.id,
+        lastActivity: Date.now(),
+        scopes,
+        clientId,
+        isStaticToken,
+      };
+      sessions.set(sid, session);
     },
     onsessionclosed: (sid) => {
       sessions.delete(sid);
@@ -144,26 +197,4 @@ export async function mcpHandler(req: Request, res: Response): Promise<void> {
 
   await server.connect(transport);
   await transport.handleRequest(req, res, req.body);
-}
-
-/** Terminate all active MCP sessions for a specific user (e.g. on token revocation). */
-export function revokeUserSessions(userId: number): void {
-  for (const [sid, session] of sessions) {
-    if (session.userId === userId) {
-      try { session.server.close(); } catch { /* ignore */ }
-      try { session.transport.close(); } catch { /* ignore */ }
-      sessions.delete(sid);
-    }
-  }
-}
-
-/** Close all active MCP sessions (call during graceful shutdown). */
-export function closeMcpSessions(): void {
-  clearInterval(sessionSweepInterval);
-  for (const [, session] of sessions) {
-    try { session.server.close(); } catch { /* ignore */ }
-    try { session.transport.close(); } catch { /* ignore */ }
-  }
-  sessions.clear();
-  rateLimitMap.clear();
 }

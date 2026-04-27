@@ -1,6 +1,6 @@
 /**
  * MCP integration tests.
- * Covers MCP-001 to MCP-013.
+ * Covers MCP-001 to MCP-013 + Session 3 OAuth integration (MCP-S3-*).
  *
  * The MCP endpoint uses JWT auth and server-sent events / streaming HTTP.
  * Tests cover authentication, session management, rate limiting, and API token auth.
@@ -48,7 +48,9 @@ import { createUser } from '../helpers/factories';
 import { generateToken } from '../helpers/auth';
 import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
 import { createMcpToken } from '../helpers/factories';
-import { closeMcpSessions } from '../../src/mcp/index';
+import { closeMcpSessions, revokeUserSessionsForClient } from '../../src/mcp/index';
+import { createOAuthClient, issueTokens } from '../../src/services/oauthService';
+import { sessions } from '../../src/mcp/sessionManager';
 
 const app: Application = createApp();
 
@@ -200,16 +202,16 @@ describe('MCP session management', () => {
     return sessionId as string;
   }
 
-  it('MCP-003 — session limit of 5 per user', async () => {
+  it('MCP-003 — session limit of 20 per user', async () => {
     const { user } = createUser(testDb);
     testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
 
-    // Create 5 sessions
-    for (let i = 0; i < 5; i++) {
+    // Create 20 sessions (new default limit, raised from 5)
+    for (let i = 0; i < 20; i++) {
       await createSession(user.id);
     }
 
-    // 6th should fail
+    // 21st should fail
     const token = generateToken(user.id);
     const res = await request(app)
       .post('/mcp')
@@ -288,5 +290,166 @@ describe('MCP rate limiting', () => {
       if (originalLimit === undefined) delete process.env.MCP_RATE_LIMIT;
       else process.env.MCP_RATE_LIMIT = originalLimit;
     }
+  });
+});
+
+// ── Session 3: OAuth 2.1 token integration ────────────────────────────────────
+
+const TEST_REDIRECT = 'https://claude.ai/oauth/callback';
+const TEST_AUDIENCE = 'http://localhost:3001/mcp';
+
+describe('MCP OAuth 2.1 token authentication', () => {
+  it('MCP-S3-001 — trekoa_ access token authenticates successfully', async () => {
+    const { user } = createUser(testDb);
+    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+
+    const { client } = createOAuthClient(user.id, 'Test App', [TEST_REDIRECT], ['trips:read'], true, 'settings_ui');
+    const { accessToken } = issueTokens(client.client_id, user.id, ['trips:read'], TEST_AUDIENCE);
+
+    const res = await request(app)
+      .post('/mcp')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Accept', 'application/json, text/event-stream')
+      .send({ jsonrpc: '2.0', method: 'initialize', id: 1, params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
+
+    expect(res.status).toBe(200);
+  });
+
+  it('MCP-S3-002 — invalid trekoa_ token returns 401 with WWW-Authenticate header', async () => {
+    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+
+    const res = await request(app)
+      .post('/mcp')
+      .set('Authorization', 'Bearer trekoa_notarealtoken')
+      .set('Accept', 'application/json, text/event-stream')
+      .send({ jsonrpc: '2.0', method: 'initialize', id: 1, params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
+
+    expect(res.status).toBe(401);
+    expect(res.headers['www-authenticate']).toMatch(/Bearer realm="TREK MCP"/);
+    expect(res.headers['www-authenticate']).toMatch(/resource_metadata=/);
+    expect(res.headers['www-authenticate']).toMatch(/error="invalid_token"/);
+  });
+
+  it('MCP-S3-003 — expired trekoa_ token returns 401 with WWW-Authenticate', async () => {
+    const { user } = createUser(testDb);
+    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+
+    const { client } = createOAuthClient(user.id, 'App', [TEST_REDIRECT], ['trips:read'], true, 'settings_ui');
+    const { accessToken, tokenId } = issueTokens(client.client_id, user.id, ['trips:read'], TEST_AUDIENCE);
+
+    // Expire the token
+    testDb.prepare("UPDATE oauth_tokens SET access_token_expires_at = datetime('now', '-1 second') WHERE id = ?").run(tokenId);
+
+    const res = await request(app)
+      .post('/mcp')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Accept', 'application/json, text/event-stream')
+      .send({ jsonrpc: '2.0', method: 'initialize', id: 1, params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
+
+    expect(res.status).toBe(401);
+    expect(res.headers['www-authenticate']).toMatch(/Bearer realm="TREK MCP"/);
+  });
+
+  it('MCP-S3-004 — no auth returns 401 with WWW-Authenticate header', async () => {
+    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+
+    const res = await request(app)
+      .post('/mcp')
+      .set('Accept', 'application/json, text/event-stream')
+      .send({ jsonrpc: '2.0', method: 'initialize', id: 1, params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
+
+    expect(res.status).toBe(401);
+    expect(res.headers['www-authenticate']).toMatch(/Bearer realm="TREK MCP"/);
+  });
+
+  it('MCP-S3-005 — session client mismatch returns 403 with WWW-Authenticate', async () => {
+    const { user } = createUser(testDb);
+    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+
+    // Create two different OAuth clients and issue tokens for each
+    const { client: clientA } = createOAuthClient(user.id, 'App A', [TEST_REDIRECT], ['trips:read'], true, 'settings_ui');
+    const { client: clientB } = createOAuthClient(user.id, 'App B', [TEST_REDIRECT], ['trips:read'], true, 'settings_ui');
+    const { accessToken: tokenA } = issueTokens(clientA.client_id, user.id, ['trips:read'], TEST_AUDIENCE);
+    const { accessToken: tokenB } = issueTokens(clientB.client_id, user.id, ['trips:read'], TEST_AUDIENCE);
+
+    // Initialize session with client A's token
+    const initRes = await request(app)
+      .post('/mcp')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .set('Accept', 'application/json, text/event-stream')
+      .send({ jsonrpc: '2.0', method: 'initialize', id: 1, params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
+    expect(initRes.status).toBe(200);
+
+    const sessionId = initRes.headers['mcp-session-id'];
+    expect(sessionId).toBeTruthy();
+
+    // Try to resume with client B's token — should be rejected
+    const resumeRes = await request(app)
+      .post('/mcp')
+      .set('Authorization', `Bearer ${tokenB}`)
+      .set('mcp-session-id', sessionId)
+      .send({ jsonrpc: '2.0', method: 'tools/list', id: 2 });
+
+    expect(resumeRes.status).toBe(403);
+    expect(resumeRes.headers['www-authenticate']).toMatch(/Bearer realm="TREK MCP"/);
+  });
+
+  it('MCP-S3-006 — revokeUserSessionsForClient only closes sessions for that client', async () => {
+    const { user } = createUser(testDb);
+    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+
+    const { client: clientA } = createOAuthClient(user.id, 'App A', [TEST_REDIRECT], ['trips:read'], true, 'settings_ui');
+    const { client: clientB } = createOAuthClient(user.id, 'App B', [TEST_REDIRECT], ['trips:read'], true, 'settings_ui');
+    const { accessToken: tokenA } = issueTokens(clientA.client_id, user.id, ['trips:read'], TEST_AUDIENCE);
+    const { accessToken: tokenB } = issueTokens(clientB.client_id, user.id, ['trips:read'], TEST_AUDIENCE);
+
+    // Open one session for each client
+    const resA = await request(app)
+      .post('/mcp')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .set('Accept', 'application/json, text/event-stream')
+      .send({ jsonrpc: '2.0', method: 'initialize', id: 1, params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
+    const resB = await request(app)
+      .post('/mcp')
+      .set('Authorization', `Bearer ${tokenB}`)
+      .set('Accept', 'application/json, text/event-stream')
+      .send({ jsonrpc: '2.0', method: 'initialize', id: 2, params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
+
+    const sidA = resA.headers['mcp-session-id'];
+    const sidB = resB.headers['mcp-session-id'];
+    expect(sidA).toBeTruthy();
+    expect(sidB).toBeTruthy();
+
+    // Revoke only client A's sessions
+    revokeUserSessionsForClient(user.id, clientA.client_id);
+
+    // Client A's session should be gone, client B's should survive
+    expect(sessions.has(sidA)).toBe(false);
+    expect(sessions.has(sidB)).toBe(true);
+  });
+
+  it('MCP-S3-007 — rate limit is per client (not global per user)', async () => {
+    const { user } = createUser(testDb);
+    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+
+    const { client: clientA } = createOAuthClient(user.id, 'App A', [TEST_REDIRECT], ['trips:read'], true, 'settings_ui');
+    const { client: clientB } = createOAuthClient(user.id, 'App B', [TEST_REDIRECT], ['trips:read'], true, 'settings_ui');
+    const { accessToken: tokenA } = issueTokens(clientA.client_id, user.id, ['trips:read'], TEST_AUDIENCE);
+    const { accessToken: tokenB } = issueTokens(clientB.client_id, user.id, ['trips:read'], TEST_AUDIENCE);
+
+    // Both clients should be able to open a session independently
+    const resA = await request(app)
+      .post('/mcp')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .set('Accept', 'application/json, text/event-stream')
+      .send({ jsonrpc: '2.0', method: 'initialize', id: 1, params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
+    const resB = await request(app)
+      .post('/mcp')
+      .set('Authorization', `Bearer ${tokenB}`)
+      .set('Accept', 'application/json, text/event-stream')
+      .send({ jsonrpc: '2.0', method: 'initialize', id: 2, params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
+
+    expect(resA.status).toBe(200);
+    expect(resB.status).toBe(200);
   });
 });

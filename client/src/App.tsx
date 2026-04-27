@@ -20,6 +20,7 @@ const VacayPage = lazy(() => import('./pages/VacayPage'))
 const AtlasPage = lazy(() => import('./pages/AtlasPage'))
 const SharedTripPage = lazy(() => import('./pages/SharedTripPage'))
 const InAppNotificationsPage = lazy(() => import('./pages/InAppNotificationsPage'))
+const OAuthAuthorizePage = lazy(() => import('./pages/OAuthAuthorizePage'))
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -175,6 +176,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/oauth/authorize" element={<OAuthAuthorizePage />} />
         <Route path="/shared/:token" element={<SharedTripPage />} />
         <Route path="/register" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
