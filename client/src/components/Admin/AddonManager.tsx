@@ -38,6 +38,40 @@ function AddonIcon({ name, size = 20 }: AddonIconProps) {
   return <Icon size={size} />
 }
 
+function AtlasGeoRefresh({ t }: { t: (k: string) => string }) {
+  const toast = useToast()
+  const [refreshing, setRefreshing] = useState(false)
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await adminApi.refreshAtlasGeo()
+      toast.success(t('admin.atlas.geoRefreshed'))
+    } catch {
+      toast.error(t('admin.atlas.geoRefreshError'))
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-4 px-6 py-3 border-b" style={{ borderColor: 'var(--border-secondary)', background: 'var(--bg-secondary)', paddingLeft: 70 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{t('admin.atlas.geoTitle')}</div>
+        <div className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>{t('admin.atlas.geoHint')}</div>
+      </div>
+      <button
+        onClick={handleRefresh}
+        disabled={refreshing}
+        className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity disabled:opacity-50"
+        style={{ background: 'var(--text-primary)', color: 'var(--bg-primary)' }}
+      >
+        {refreshing ? t('admin.atlas.geoRefreshing') : t('admin.atlas.geoRefresh')}
+      </button>
+    </div>
+  )
+}
+
 export default function AddonManager({ bagTrackingEnabled, onToggleBagTracking }: { bagTrackingEnabled?: boolean; onToggleBagTracking?: () => void }) {
   const { t } = useTranslation()
   const dm = useSettingsStore(s => s.settings.dark_mode)
@@ -270,7 +304,12 @@ export default function AddonManager({ bagTrackingEnabled, onToggleBagTracking }
                   </span>
                 </div>
                 {globalAddons.map(addon => (
-                  <AddonRow key={addon.id} addon={addon} onToggle={handleToggle} t={t} />
+                  <div key={addon.id}>
+                    <AddonRow addon={addon} onToggle={handleToggle} t={t} />
+                    {addon.id === 'atlas' && addon.enabled && (
+                      <AtlasGeoRefresh t={t} />
+                    )}
+                  </div>
                 ))}
               </div>
             )}

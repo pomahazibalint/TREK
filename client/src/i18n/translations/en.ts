@@ -593,6 +593,12 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   // Packing Templates & Bag Tracking
   'admin.bagTracking.title': 'Bag Tracking',
   'admin.bagTracking.subtitle': 'Enable weight and bag assignment for packing items',
+  'admin.atlas.geoTitle': 'Region boundary data',
+  'admin.atlas.geoHint': 'Update the sub-national region GeoJSON used to draw region boundaries on the atlas map',
+  'admin.atlas.geoRefresh': 'Update now',
+  'admin.atlas.geoRefreshing': 'Updating…',
+  'admin.atlas.geoRefreshed': 'Region boundary data updated',
+  'admin.atlas.geoRefreshError': 'Failed to update region boundary data',
   'admin.collab.chat': 'Live chat',
   'admin.collab.chatHint': 'Real-time trip chat for all members',
   'admin.collab.notes': 'Shared notes',

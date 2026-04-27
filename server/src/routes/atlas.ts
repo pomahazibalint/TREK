@@ -25,11 +25,10 @@ router.get('/stats', async (req: Request, res: Response) => {
   res.json(data);
 });
 
-router.get('/regions', async (req: Request, res: Response) => {
+router.get('/regions', (req: Request, res: Response) => {
   const userId = (req as AuthRequest).user.id;
   res.setHeader('Cache-Control', 'no-cache, no-store');
-  const data = await getVisitedRegions(userId);
-  res.json(data);
+  res.json(getVisitedRegions(userId));
 });
 
 router.get('/regions/geo', async (req: Request, res: Response) => {

@@ -52,6 +52,9 @@ const server = app.listen(PORT, () => {
   scheduler.startAutoPhotoSync();
   scheduler.startAutoArchive();
   scheduler.startIdempotencyCleanup();
+  import('./services/atlasService').then(({ warmAdmin1Geo, geocodeAllPlaceRegions }) => {
+    warmAdmin1Geo().then(() => geocodeAllPlaceRegions());
+  });
   const { startTokenCleanup } = require('./services/ephemeralTokens');
   startTokenCleanup();
   import('./websocket').then(({ setupWebSocket }) => {

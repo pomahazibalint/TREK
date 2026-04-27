@@ -36,6 +36,7 @@ Thumbs.db
 # Local planning notes
 UPSTREAM-PLAN.md
 TEST-PLAN.md
+local_plans/
 
 # Logs
 logs

@@ -39,6 +39,7 @@ export const adminApi = {
     apiClient.post('/admin/dev/test-notification', data).then(r => r.data),
   getNotificationPreferences: () => apiClient.get('/admin/notification-preferences').then(r => r.data),
   updateNotificationPreferences: (prefs: Record<string, Record<string, boolean>>) => apiClient.put('/admin/notification-preferences', prefs).then(r => r.data),
+  refreshAtlasGeo: () => apiClient.post('/admin/atlas/refresh-geo').then(r => r.data),
 }
 
 export const addonsApi = {

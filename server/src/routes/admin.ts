@@ -3,6 +3,7 @@ import { authenticate, adminOnly } from '../middleware/auth';
 import { AuthRequest } from '../types';
 import { writeAudit, getClientIp, logInfo } from '../services/auditLog';
 import * as svc from '../services/adminService';
+import { warmAdmin1Geo } from '../services/atlasService';
 import { getPreferencesMatrix, setAdminPreferences } from '../services/notificationPreferencesService';
 
 const router = express.Router();
@@ -194,6 +195,23 @@ router.put('/bag-tracking', (req: Request, res: Response) => {
     details: { enabled: result.enabled },
   });
   res.json(result);
+});
+
+// ── Atlas ──────────────────────────────────────────────────────────────────
+
+router.post('/atlas/refresh-geo', async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  try {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const geoPath = path.join(__dirname, '../../data/ne_10m_admin_1_states_provinces.geojson');
+    if (fs.existsSync(geoPath)) fs.unlinkSync(geoPath);
+    await warmAdmin1Geo();
+    writeAudit({ userId: authReq.user.id, action: 'admin.atlas.refresh_geo', ip: getClientIp(req), details: {} });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to refresh GeoJSON' });
+  }
 });
 
 // ── Packing Templates ──────────────────────────────────────────────────────
