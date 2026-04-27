@@ -449,7 +449,7 @@ async function reverseGeocodeRegion(lat: number, lng: number): Promise<RegionInf
     }
     const regionName = data.address?.state || data.address?.province || data.address?.region || data.address?.county || data.address?.municipality || data.address?.island || data.address?.city || null;
     if (!countryCode || !regionName) {
-      console.warn(`[Atlas] Nominatim missing fields for (${lat},${lng}): countryCode=${countryCode}, regionName=${regionName}`);
+      console.warn(`[Atlas] Nominatim missing fields for (${lat},${lng}): countryCode=${countryCode}, regionName=${regionName}, address keys=${JSON.stringify(Object.keys(data.address || {}))}`);
       regionCache.set(key, null);
       return null;
     }
