@@ -175,7 +175,7 @@ export default function OAuthAuthorizePage(): React.ReactElement {
 
               {/* Always-included notice */}
               <div className="text-xs px-3 py-2 rounded-lg" style={{ background: 'var(--bg-secondary)', color: 'var(--text-tertiary)' }}>
-                <strong>Always included:</strong> list_trips, get_trip_summary (discovery tools, cannot be removed)
+                <strong>Always included:</strong> list_trips, get_trip_summary, list_places, list_categories, list_reservations, list_budget_items, get_budget_settlement, list_trip_members (read-only discovery tools, cannot be removed)
               </div>
 
               {/* Scope picker */}

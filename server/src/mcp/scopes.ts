@@ -28,5 +28,27 @@ export const SCOPE_DEFINITIONS: Record<string, { label: string; description: str
 export const ALL_SCOPES = Object.keys(SCOPE_DEFINITIONS);
 
 /** null = full access (static token or JWT); string[] = scoped OAuth token */
-export const can = (scopes: string[] | null, scope: string): boolean =>
-  scopes === null || scopes.includes(scope);
+export const can = (scopes: string[] | null, scope: string): boolean => {
+  _probeCollector?.add(scope);
+  return scopes === null || scopes.includes(scope);
+};
+
+// When set, can() records every scope it is asked about (probe mode).
+let _probeCollector: Set<string> | null = null;
+
+/**
+ * Run fn() in probe mode: can() records every scope name it is called with
+ * (and still returns true so every guarded block executes), then returns the
+ * collected set. Used by implementedScopes.ts to derive IMPLEMENTED_SCOPES
+ * dynamically from the actual registrar functions.
+ */
+export function collectScopesFromRegistration(fn: () => void): string[] {
+  const collector = new Set<string>();
+  _probeCollector = collector;
+  try {
+    fn();
+  } finally {
+    _probeCollector = null;
+  }
+  return Array.from(collector);
+}

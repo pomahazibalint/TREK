@@ -12,6 +12,7 @@ import type {
   ValidateAuthorizeResult,
 } from '../types';
 import { SCOPE_DEFINITIONS, ALL_SCOPES } from '../mcp/scopes';
+import { IMPLEMENTED_SCOPES } from '../mcp/implementedScopes';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -166,7 +167,9 @@ export function validateAuthorizeRequest(params: AuthorizeParams, userId: number
 
   if (!userId) return { valid: true, loginRequired: true, client: { name: client.name, clientId: client.client_id } };
 
-  const requestedScopes = params.scope ? params.scope.split(' ').filter(s => ALL_SCOPES.includes(s)) : client.allowed_scopes;
+  const requestedScopes = params.scope
+    ? params.scope.split(' ').filter(s => IMPLEMENTED_SCOPES.includes(s))
+    : client.allowed_scopes.filter(s => IMPLEMENTED_SCOPES.includes(s));
   const allowedScopes = requestedScopes.filter(s => client.allowed_scopes.includes(s));
 
   const consentRow = db.prepare('SELECT scopes FROM oauth_consents WHERE client_id = ? AND user_id = ?').get(params.client_id, userId) as { scopes: string } | undefined;

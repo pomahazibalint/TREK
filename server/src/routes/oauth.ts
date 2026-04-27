@@ -3,7 +3,7 @@ import cors from 'cors';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { isAddonEnabled } from '../services/adminService';
 import { getAppUrl } from '../services/oidcService';
-import { ALL_SCOPES } from '../mcp/scopes';
+import { IMPLEMENTED_SCOPES } from '../mcp/implementedScopes';
 import type { AuthRequest, OptionalAuthRequest } from '../types';
 import {
   createOAuthClient,
@@ -124,7 +124,7 @@ publicRouter.get('/.well-known/oauth-authorization-server', openCors, (_req: Req
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
-    scopes_supported: ALL_SCOPES,
+    scopes_supported: IMPLEMENTED_SCOPES,
     resource_parameter_supported: true,
   });
 });
@@ -140,7 +140,7 @@ publicRouter.get('/.well-known/oauth-protected-resource', openCors, (_req: Reque
     resource: `${base}/mcp`,
     authorization_servers: [base],
     bearer_methods_supported: ['header'],
-    scopes_supported: ALL_SCOPES,
+    scopes_supported: IMPLEMENTED_SCOPES,
     resource_name: 'TREK MCP',
   });
 });
@@ -218,7 +218,7 @@ publicRouter.post('/oauth/register', registerLimiter, (req: Request, res: Respon
   }
 
   const isPublic = token_endpoint_auth_method === 'none';
-  const requestedScopes: string[] = scope ? (scope as string).split(' ') : ALL_SCOPES;
+  const requestedScopes: string[] = scope ? (scope as string).split(' ') : IMPLEMENTED_SCOPES;
 
   try {
     const { client, clientSecret } = createOAuthClient(null, client_name, redirect_uris, requestedScopes, isPublic, 'dcr');
@@ -370,7 +370,7 @@ apiRouter.post('/clients', authenticate, (req: Request, res: Response) => {
       authReq.user.id,
       name,
       redirect_uris,
-      Array.isArray(allowed_scopes) ? allowed_scopes : ALL_SCOPES,
+      Array.isArray(allowed_scopes) ? allowed_scopes : IMPLEMENTED_SCOPES,
       !!is_public,
       'settings_ui',
     );
