@@ -17,6 +17,7 @@ import AddonManager from '../components/Admin/AddonManager'
 import PackingTemplateManager from '../components/Admin/PackingTemplateManager'
 import AuditLogPanel from '../components/Admin/AuditLogPanel'
 import AdminMcpTokensPanel from '../components/Admin/AdminMcpTokensPanel'
+import AdminOAuthAppsPanel from '../components/Admin/AdminOAuthAppsPanel'
 import PermissionsPanel from '../components/Admin/PermissionsPanel'
 import { Users, Map, Briefcase, Shield, Trash2, Edit2, FileText, Eye, EyeOff, Save, CheckCircle, XCircle, Loader2, UserPlus, ArrowUpCircle, ExternalLink, Download, Sun, Link2, Copy, Plus, RefreshCw, AlertTriangle } from 'lucide-react'
 import CustomSelect from '../components/shared/CustomSelect'
@@ -173,7 +174,10 @@ export default function AdminPage(): React.ReactElement {
     { id: 'notifications', label: t('admin.tabs.notifications') },
     { id: 'backup', label: t('admin.tabs.backup') },
     { id: 'audit', label: t('admin.tabs.audit') },
-    ...(mcpEnabled ? [{ id: 'mcp-tokens', label: t('admin.tabs.mcpTokens') }] : []),
+    ...(mcpEnabled ? [
+      { id: 'oauth-apps', label: t('admin.tabs.oauthApps') },
+      { id: 'mcp-tokens', label: t('admin.tabs.mcpTokens') },
+    ] : []),
     { id: 'github', label: t('admin.tabs.github') },
     ...(devMode ? [{ id: 'dev-notifications', label: 'Dev: Notifications' }] : []),
   ]
@@ -1473,6 +1477,8 @@ export default function AdminPage(): React.ReactElement {
           {activeTab === 'backup' && <BackupPanel />}
 
           {activeTab === 'audit' && <AuditLogPanel serverTimezone={serverTimezone} />}
+
+          {activeTab === 'oauth-apps' && <AdminOAuthAppsPanel />}
 
           {activeTab === 'mcp-tokens' && <AdminMcpTokensPanel />}
 

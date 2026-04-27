@@ -319,6 +319,7 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'settings.mcp.sessions.scopes': 'Scopes',
   'settings.mcp.sessions.expires': 'Expires',
   'settings.mcp.legacyDeprecated': 'Deprecated',
+  'settings.mcp.oauthAppsAdminNote': 'OAuth 2.1 apps for AI clients are configured in the Admin panel.',
   'settings.account': 'Account',
   'settings.about': 'About',
   'settings.about.reportBug': 'Report a Bug',
@@ -664,6 +665,10 @@ const en: Record<string, string | { name: string; category: string }[]> = {
 
   // GitHub
   'admin.tabs.mcpTokens': 'MCP Tokens',
+  'admin.tabs.oauthApps': 'OAuth 2.1 Apps',
+  'admin.oauthApps.title': 'OAuth 2.1 Apps',
+  'admin.oauthApps.subtitle': 'Register OAuth clients so AI tools (Claude.ai, ChatGPT, etc.) can connect to the MCP endpoint.',
+  'admin.oauthApps.registered': 'Registered apps',
   'admin.mcpTokens.title': 'MCP Tokens',
   'admin.mcpTokens.subtitle': 'Manage API tokens across all users',
   'admin.mcpTokens.owner': 'Owner',
