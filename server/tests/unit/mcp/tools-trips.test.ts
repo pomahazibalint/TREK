@@ -1,5 +1,5 @@
 /**
- * Unit tests for MCP trip tools: create_trip, update_trip, delete_trip, list_trips, get_trip_summary.
+ * Unit tests for MCP trip tools: create_trip, update_trip, list_trips, get_trip_summary.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -181,47 +181,6 @@ describe('Tool: update_trip', () => {
     const trip = createTrip(testDb, user.id);
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'update_trip', arguments: { tripId: trip.id, title: 'New' } });
-      expect(result.isError).toBe(true);
-    });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// delete_trip
-// ---------------------------------------------------------------------------
-
-describe('Tool: delete_trip', () => {
-  it('owner can delete trip', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_trip', arguments: { tripId: trip.id } });
-      const data = parseToolResult(result) as any;
-      expect(data.success).toBe(true);
-      const gone = testDb.prepare('SELECT id FROM trips WHERE id = ?').get(trip.id);
-      expect(gone).toBeUndefined();
-    });
-  });
-
-  it('non-owner member cannot delete trip', async () => {
-    const { user } = createUser(testDb);
-    const { user: owner } = createUser(testDb);
-    const trip = createTrip(testDb, owner.id);
-    addTripMember(testDb, trip.id, user.id);
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_trip', arguments: { tripId: trip.id } });
-      expect(result.isError).toBe(true);
-      const stillExists = testDb.prepare('SELECT id FROM trips WHERE id = ?').get(trip.id);
-      expect(stillExists).toBeTruthy();
-    });
-  });
-
-  it('blocks demo user', async () => {
-    process.env.DEMO_MODE = 'true';
-    const { user } = createUser(testDb, { email: 'demo@nomad.app' });
-    const trip = createTrip(testDb, user.id);
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_trip', arguments: { tripId: trip.id } });
       expect(result.isError).toBe(true);
     });
   });

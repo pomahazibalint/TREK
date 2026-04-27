@@ -202,6 +202,43 @@ describe('Tool: unassign_place', () => {
     });
   });
 
+  it('rejects assignment that has a configured start time', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const day = createDay(testDb, trip.id);
+    const place = createPlace(testDb, trip.id);
+    const assignment = createDayAssignment(testDb, day.id, place.id);
+    testDb.prepare('UPDATE day_assignments SET assignment_time = ? WHERE id = ?').run('09:00', assignment.id);
+
+    await withHarness(user.id, async (h) => {
+      const result = await h.client.callTool({
+        name: 'unassign_place',
+        arguments: { tripId: trip.id, dayId: day.id, assignmentId: assignment.id },
+      });
+      expect(result.isError).toBe(true);
+      // row must NOT have been deleted
+      expect(testDb.prepare('SELECT id FROM day_assignments WHERE id = ?').get(assignment.id)).toBeTruthy();
+    });
+  });
+
+  it('rejects assignment that has a configured end time', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const day = createDay(testDb, trip.id);
+    const place = createPlace(testDb, trip.id);
+    const assignment = createDayAssignment(testDb, day.id, place.id);
+    testDb.prepare('UPDATE day_assignments SET assignment_end_time = ? WHERE id = ?').run('11:00', assignment.id);
+
+    await withHarness(user.id, async (h) => {
+      const result = await h.client.callTool({
+        name: 'unassign_place',
+        arguments: { tripId: trip.id, dayId: day.id, assignmentId: assignment.id },
+      });
+      expect(result.isError).toBe(true);
+      expect(testDb.prepare('SELECT id FROM day_assignments WHERE id = ?').get(assignment.id)).toBeTruthy();
+    });
+  });
+
   it('returns access denied for non-member', async () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb);

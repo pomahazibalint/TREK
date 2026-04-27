@@ -1,5 +1,5 @@
 /**
- * Unit tests for MCP place tools: create_place, update_place, delete_place, list_categories, search_place.
+ * Unit tests for MCP place tools: create_place, update_place, list_places, list_categories, search_place.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -198,38 +198,48 @@ describe('Tool: update_place', () => {
 });
 
 // ---------------------------------------------------------------------------
-// delete_place
+// list_places
 // ---------------------------------------------------------------------------
 
-describe('Tool: delete_place', () => {
-  it('deletes an existing place', async () => {
+describe('Tool: list_places', () => {
+  it('returns all places in a trip', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const place = createPlace(testDb, trip.id);
+    createPlace(testDb, trip.id, { name: 'Eiffel Tower' });
+    createPlace(testDb, trip.id, { name: 'Louvre' });
+
     await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_place', arguments: { tripId: trip.id, placeId: place.id } });
+      const result = await h.client.callTool({ name: 'list_places', arguments: { tripId: trip.id } });
       const data = parseToolResult(result) as any;
-      expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM places WHERE id = ?').get(place.id)).toBeUndefined();
+      expect(data.places).toHaveLength(2);
+      const names = data.places.map((p: any) => p.name);
+      expect(names).toContain('Eiffel Tower');
+      expect(names).toContain('Louvre');
     });
   });
 
-  it('broadcasts place:deleted event', async () => {
+  it('returns empty array when trip has no places', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const place = createPlace(testDb, trip.id);
     await withHarness(user.id, async (h) => {
-      await h.client.callTool({ name: 'delete_place', arguments: { tripId: trip.id, placeId: place.id } });
-      expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'place:deleted', expect.any(Object));
+      const result = await h.client.callTool({ name: 'list_places', arguments: { tripId: trip.id } });
+      const data = parseToolResult(result) as any;
+      expect(data.places).toHaveLength(0);
     });
   });
 
-  it('returns error for place not found', async () => {
+  it('only returns places belonging to the specified trip', async () => {
     const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
+    const trip1 = createTrip(testDb, user.id);
+    const trip2 = createTrip(testDb, user.id);
+    createPlace(testDb, trip1.id, { name: 'Trip1 Place' });
+    createPlace(testDb, trip2.id, { name: 'Trip2 Place' });
+
     await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_place', arguments: { tripId: trip.id, placeId: 99999 } });
-      expect(result.isError).toBe(true);
+      const result = await h.client.callTool({ name: 'list_places', arguments: { tripId: trip1.id } });
+      const data = parseToolResult(result) as any;
+      expect(data.places).toHaveLength(1);
+      expect(data.places[0].name).toBe('Trip1 Place');
     });
   });
 
@@ -237,9 +247,8 @@ describe('Tool: delete_place', () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb);
     const trip = createTrip(testDb, other.id);
-    const place = createPlace(testDb, trip.id);
     await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_place', arguments: { tripId: trip.id, placeId: place.id } });
+      const result = await h.client.callTool({ name: 'list_places', arguments: { tripId: trip.id } });
       expect(result.isError).toBe(true);
     });
   });

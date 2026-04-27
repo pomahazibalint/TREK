@@ -1,25 +1,25 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import { z } from 'zod';
-import { canAccessTrip } from '../db/database';
+import { db, canAccessTrip } from '../db/database';
 import { broadcast } from '../websocket';
 import { isDemoUser } from '../services/authService';
 import { can } from './scopes';
 import {
-  listTrips, createTrip, updateTrip, deleteTrip, getTripSummary,
-  isOwner, verifyTripAccess,
+  listTrips, createTrip, updateTrip, getTripSummary,
+  listMembers, verifyTripAccess,
 } from '../services/tripService';
-import { listPlaces, createPlace, updatePlace, deletePlace } from '../services/placeService';
+import { listPlaces, createPlace, updatePlace } from '../services/placeService';
 import { listCategories } from '../services/categoryService';
 import {
   dayExists, placeExists, createAssignment, assignmentExistsInDay,
   deleteAssignment, reorderAssignments, getAssignmentForTrip, updateTime,
 } from '../services/assignmentService';
-import { createBudgetItem, updateBudgetItem, deleteBudgetItem } from '../services/budgetService';
+import { listBudgetItems, calculateSettlement } from '../services/budgetService';
 import { createItem as createPackingItem, updateItem as updatePackingItem, deleteItem as deletePackingItem } from '../services/packingService';
-import { createReservation, getReservation, updateReservation, deleteReservation } from '../services/reservationService';
-import { getDay, updateDay, validateAccommodationRefs } from '../services/dayService';
-import { createNote as createDayNote, getNote as getDayNote, updateNote as updateDayNote, deleteNote as deleteDayNote, dayExists as dayNoteExists } from '../services/dayNoteService';
-import { createNote as createCollabNote, updateNote as updateCollabNote, deleteNote as deleteCollabNote } from '../services/collabService';
+import { listReservations, createReservation, getReservation, updateReservation } from '../services/reservationService';
+import { getDay, updateDay } from '../services/dayService';
+import { createNote as createDayNote, getNote as getDayNote, updateNote as updateDayNote, dayExists as dayNoteExists } from '../services/dayNoteService';
+import { createNote as createCollabNote, updateNote as updateCollabNote } from '../services/collabService';
 import {
   markCountryVisited, unmarkCountryVisited, createBucketItem, deleteBucketItem,
 } from '../services/atlasService';
@@ -119,24 +119,6 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
   );
   } // trips:write
 
-  if (can(scopes, 'trips:delete')) {
-  server.registerTool(
-    'delete_trip',
-    {
-      description: 'Delete a trip. Only the trip owner can delete it.',
-      inputSchema: {
-        tripId: z.number().int().positive(),
-      },
-    },
-    async ({ tripId }) => {
-      if (isDemoUser(userId)) return demoDenied();
-      if (!isOwner(tripId, userId)) return noAccess();
-      deleteTrip(tripId, userId, 'user');
-      return ok({ success: true, tripId });
-    }
-  );
-  } // trips:delete
-
   server.registerTool(
     'list_trips',
     {
@@ -209,25 +191,22 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
     }
   );
 
+  } // places:write
+
   server.registerTool(
-    'delete_place',
+    'list_places',
     {
-      description: 'Delete a place from a trip.',
+      description: 'List all places in a trip\'s pool. Use this before assign_place_to_day to find place IDs.',
       inputSchema: {
         tripId: z.number().int().positive(),
-        placeId: z.number().int().positive(),
       },
     },
-    async ({ tripId, placeId }) => {
-      if (isDemoUser(userId)) return demoDenied();
+    async ({ tripId }) => {
       if (!canAccessTrip(tripId, userId)) return noAccess();
-      const deleted = deletePlace(String(tripId), String(placeId));
-      if (!deleted) return { content: [{ type: 'text' as const, text: 'Place not found.' }], isError: true };
-      broadcast(tripId, 'place:deleted', { placeId });
-      return ok({ success: true });
+      const places = listPlaces(String(tripId), {});
+      return ok({ places });
     }
   );
-  } // places:write
 
   // --- CATEGORIES ---
 
@@ -271,7 +250,7 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
   server.registerTool(
     'assign_place_to_day',
     {
-      description: 'Assign a place to a specific day in a trip.',
+      description: 'Assign a place to a specific day in a trip. The place must already exist in the trip pool — use list_places to find IDs or create_place to add a new one.',
       inputSchema: {
         tripId: z.number().int().positive(),
         dayId: z.number().int().positive(),
@@ -305,56 +284,21 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
       if (!canAccessTrip(tripId, userId)) return noAccess();
       if (!assignmentExistsInDay(assignmentId, dayId, tripId))
         return { content: [{ type: 'text' as const, text: 'Assignment not found.' }], isError: true };
+      const assignmentRow = db.prepare(
+        'SELECT assignment_time, assignment_end_time FROM day_assignments WHERE id = ?'
+      ).get(assignmentId) as { assignment_time: string | null; assignment_end_time: string | null } | undefined;
+      if (assignmentRow && (assignmentRow.assignment_time || assignmentRow.assignment_end_time)) {
+        return {
+          content: [{ type: 'text' as const, text: 'This assignment has configured times; remove it from the day manually so no settings are lost.' }],
+          isError: true,
+        };
+      }
       deleteAssignment(assignmentId);
       broadcast(tripId, 'assignment:deleted', { assignmentId, dayId });
       return ok({ success: true });
     }
   );
   } // trips:write (assignments)
-
-  // --- BUDGET ---
-
-  if (can(scopes, 'budget:write')) {
-  server.registerTool(
-    'create_budget_item',
-    {
-      description: 'Add a budget/expense item to a trip.',
-      inputSchema: {
-        tripId: z.number().int().positive(),
-        name: z.string().min(1).max(200),
-        category: z.string().max(100).optional().describe('Budget category (e.g. Accommodation, Food, Transport)'),
-        total_price: z.number().nonnegative(),
-        note: z.string().max(500).optional(),
-      },
-    },
-    async ({ tripId, name, category, total_price, note }) => {
-      if (isDemoUser(userId)) return demoDenied();
-      if (!canAccessTrip(tripId, userId)) return noAccess();
-      const item = await createBudgetItem(tripId, { category, name, total_price, note });
-      broadcast(tripId, 'budget:created', { item });
-      return ok({ item });
-    }
-  );
-
-  server.registerTool(
-    'delete_budget_item',
-    {
-      description: 'Delete a budget item from a trip.',
-      inputSchema: {
-        tripId: z.number().int().positive(),
-        itemId: z.number().int().positive(),
-      },
-    },
-    async ({ tripId, itemId }) => {
-      if (isDemoUser(userId)) return demoDenied();
-      if (!canAccessTrip(tripId, userId)) return noAccess();
-      const deleted = deleteBudgetItem(itemId, tripId);
-      if (!deleted) return { content: [{ type: 'text' as const, text: 'Budget item not found.' }], isError: true };
-      broadcast(tripId, 'budget:deleted', { itemId });
-      return ok({ success: true });
-    }
-  );
-  } // budget:write
 
   // --- PACKING ---
 
@@ -424,7 +368,7 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
   server.registerTool(
     'create_reservation',
     {
-      description: 'Recommend a reservation for a trip. Created as pending — the user must confirm it. Linking: hotel → use place_id + start_day_id + end_day_id (all three required to create the accommodation link); restaurant/train/car/cruise/event/tour/activity/other → use assignment_id; flight → no linking.',
+      description: 'Recommend a reservation for a trip. Created as pending — the user must confirm it. Cannot be deleted via MCP — use update_reservation with status \'cancelled\' to retract a suggestion. Linking: hotel → use place_id + start_day_id + end_day_id (all three required to create the accommodation link); restaurant/train/car/cruise/event/tour/activity/other → use assignment_id; flight → no linking.',
       inputSchema: {
         tripId: z.number().int().positive(),
         title: z.string().min(1).max(200),
@@ -473,28 +417,6 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
       }
       broadcast(tripId, 'reservation:created', { reservation });
       return ok({ reservation });
-    }
-  );
-
-  server.registerTool(
-    'delete_reservation',
-    {
-      description: 'Delete a reservation from a trip.',
-      inputSchema: {
-        tripId: z.number().int().positive(),
-        reservationId: z.number().int().positive(),
-      },
-    },
-    async ({ tripId, reservationId }) => {
-      if (isDemoUser(userId)) return demoDenied();
-      if (!canAccessTrip(tripId, userId)) return noAccess();
-      const { deleted, accommodationDeleted } = deleteReservation(reservationId, tripId);
-      if (!deleted) return { content: [{ type: 'text' as const, text: 'Reservation not found.' }], isError: true };
-      if (accommodationDeleted) {
-        broadcast(tripId, 'accommodation:deleted', { accommodationId: deleted.accommodation_id });
-      }
-      broadcast(tripId, 'reservation:deleted', { reservationId });
-      return ok({ success: true });
     }
   );
 
@@ -635,32 +557,52 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
   );
   } // reservations:write (update)
 
-  // --- BUDGET (update) ---
-
-  if (can(scopes, 'budget:write')) {
   server.registerTool(
-    'update_budget_item',
+    'list_reservations',
     {
-      description: 'Update an existing budget/expense item in a trip.',
+      description: 'List all reservations for a trip, including their status, type, and linked places or assignments.',
       inputSchema: {
         tripId: z.number().int().positive(),
-        itemId: z.number().int().positive(),
-        name: z.string().min(1).max(200).optional(),
-        category: z.string().max(100).optional(),
-        total_price: z.number().nonnegative().optional(),
-        note: z.string().max(500).nullable().optional(),
       },
     },
-    async ({ tripId, itemId, name, category, total_price, note }) => {
-      if (isDemoUser(userId)) return demoDenied();
+    async ({ tripId }) => {
       if (!canAccessTrip(tripId, userId)) return noAccess();
-      const item = await updateBudgetItem(itemId, tripId, { name, category, total_price, note });
-      if (!item) return { content: [{ type: 'text' as const, text: 'Budget item not found.' }], isError: true };
-      broadcast(tripId, 'budget:updated', { item });
-      return ok({ item });
+      const reservations = listReservations(tripId);
+      return ok({ reservations });
     }
   );
-  } // budget:write (update)
+
+  // --- BUDGET ---
+
+  server.registerTool(
+    'list_budget_items',
+    {
+      description: 'List all budget/expense items for a trip, including category, amount, currency, and per-member allocation status.',
+      inputSchema: {
+        tripId: z.number().int().positive(),
+      },
+    },
+    async ({ tripId }) => {
+      if (!canAccessTrip(tripId, userId)) return noAccess();
+      const items = listBudgetItems(tripId);
+      return ok({ items });
+    }
+  );
+
+  server.registerTool(
+    'get_budget_settlement',
+    {
+      description: 'Calculate the current settlement state for a trip: who owes whom, how much, and which expense items are missing allocation. Reads live data — does not require the trip to have been formally settled.',
+      inputSchema: {
+        tripId: z.number().int().positive(),
+      },
+    },
+    async ({ tripId }) => {
+      if (!canAccessTrip(tripId, userId)) return noAccess();
+      const settlement = calculateSettlement(tripId);
+      return ok(settlement);
+    }
+  );
 
   // --- PACKING (update) ---
 
@@ -694,7 +636,7 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
   server.registerTool(
     'reorder_day_assignments',
     {
-      description: 'Reorder places within a day by providing the assignment IDs in the desired order.',
+      description: 'Reorder places within a day by providing the assignment IDs in the desired order. Preserves all per-assignment metadata (times, notes) — safe to use for reordering without data loss.',
       inputSchema: {
         tripId: z.number().int().positive(),
         dayId: z.number().int().positive(),
@@ -727,6 +669,25 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
       const summary = getTripSummary(tripId);
       if (!summary) return noAccess();
       return ok(summary);
+    }
+  );
+
+  // --- MEMBERS ---
+
+  server.registerTool(
+    'list_trip_members',
+    {
+      description: 'List all members of a trip, including the owner. Returns user IDs, usernames, and roles. Use this for context when reasoning about cost splits or access.',
+      inputSchema: {
+        tripId: z.number().int().positive(),
+      },
+    },
+    async ({ tripId }) => {
+      if (!canAccessTrip(tripId, userId)) return noAccess();
+      const trip = db.prepare('SELECT user_id FROM trips WHERE id = ?').get(tripId) as { user_id: number } | undefined;
+      if (!trip) return noAccess();
+      const { owner, members } = listMembers(tripId, trip.user_id);
+      return ok({ owner, members });
     }
   );
 
@@ -851,24 +812,6 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
     }
   );
 
-  server.registerTool(
-    'delete_collab_note',
-    {
-      description: 'Delete a collaborative note from a trip.',
-      inputSchema: {
-        tripId: z.number().int().positive(),
-        noteId: z.number().int().positive(),
-      },
-    },
-    async ({ tripId, noteId }) => {
-      if (isDemoUser(userId)) return demoDenied();
-      if (!canAccessTrip(tripId, userId)) return noAccess();
-      const deleted = deleteCollabNote(tripId, noteId);
-      if (!deleted) return { content: [{ type: 'text' as const, text: 'Note not found.' }], isError: true };
-      broadcast(tripId, 'collab:note:deleted', { noteId });
-      return ok({ success: true });
-    }
-  );
   } // collab:write
 
   // --- DAY NOTES ---
@@ -920,25 +863,5 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
     }
   );
 
-  server.registerTool(
-    'delete_day_note',
-    {
-      description: 'Delete a note from a specific day.',
-      inputSchema: {
-        tripId: z.number().int().positive(),
-        dayId: z.number().int().positive(),
-        noteId: z.number().int().positive(),
-      },
-    },
-    async ({ tripId, dayId, noteId }) => {
-      if (isDemoUser(userId)) return demoDenied();
-      if (!canAccessTrip(tripId, userId)) return noAccess();
-      const note = getDayNote(noteId, dayId, tripId);
-      if (!note) return { content: [{ type: 'text' as const, text: 'Note not found.' }], isError: true };
-      deleteDayNote(noteId);
-      broadcast(tripId, 'dayNote:deleted', { noteId, dayId });
-      return ok({ success: true });
-    }
-  );
   } // collab:write (day notes)
 }

@@ -1,6 +1,6 @@
 /**
- * Unit tests for MCP note tools: create_day_note, update_day_note, delete_day_note,
- * create_collab_note, update_collab_note, delete_collab_note.
+ * Unit tests for MCP note tools: create_day_note, update_day_note,
+ * create_collab_note, update_collab_note.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -207,58 +207,6 @@ describe('Tool: update_day_note', () => {
 });
 
 // ---------------------------------------------------------------------------
-// delete_day_note
-// ---------------------------------------------------------------------------
-
-describe('Tool: delete_day_note', () => {
-  it('deletes a day note', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    const day = createDay(testDb, trip.id);
-    const note = createDayNote(testDb, day.id, trip.id);
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_day_note', arguments: { tripId: trip.id, dayId: day.id, noteId: note.id } });
-      const data = parseToolResult(result) as any;
-      expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM day_notes WHERE id = ?').get(note.id)).toBeUndefined();
-    });
-  });
-
-  it('broadcasts dayNote:deleted event', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    const day = createDay(testDb, trip.id);
-    const note = createDayNote(testDb, day.id, trip.id);
-    await withHarness(user.id, async (h) => {
-      await h.client.callTool({ name: 'delete_day_note', arguments: { tripId: trip.id, dayId: day.id, noteId: note.id } });
-      expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'dayNote:deleted', expect.any(Object));
-    });
-  });
-
-  it('returns error when note not found', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    const day = createDay(testDb, trip.id);
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_day_note', arguments: { tripId: trip.id, dayId: day.id, noteId: 99999 } });
-      expect(result.isError).toBe(true);
-    });
-  });
-
-  it('returns access denied for non-member', async () => {
-    const { user } = createUser(testDb);
-    const { user: other } = createUser(testDb);
-    const trip = createTrip(testDb, other.id);
-    const day = createDay(testDb, trip.id);
-    const note = createDayNote(testDb, day.id, trip.id);
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_day_note', arguments: { tripId: trip.id, dayId: day.id, noteId: note.id } });
-      expect(result.isError).toBe(true);
-    });
-  });
-});
-
-// ---------------------------------------------------------------------------
 // create_collab_note
 // ---------------------------------------------------------------------------
 
@@ -362,70 +310,3 @@ describe('Tool: update_collab_note', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// delete_collab_note
-// ---------------------------------------------------------------------------
-
-describe('Tool: delete_collab_note', () => {
-  it('deletes a collab note', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    const note = createCollabNote(testDb, trip.id, user.id);
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_collab_note', arguments: { tripId: trip.id, noteId: note.id } });
-      const data = parseToolResult(result) as any;
-      expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM collab_notes WHERE id = ?').get(note.id)).toBeUndefined();
-    });
-  });
-
-  it('deletes associated trip_files records from the database', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    const note = createCollabNote(testDb, trip.id, user.id);
-    // Insert a trip_file linked to this note
-    testDb.prepare(
-      `INSERT INTO trip_files (trip_id, note_id, filename, original_name, mime_type, file_size) VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(trip.id, note.id, 'test-file.pdf', 'document.pdf', 'application/pdf', 1024);
-
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_collab_note', arguments: { tripId: trip.id, noteId: note.id } });
-      expect((parseToolResult(result) as any).success).toBe(true);
-    });
-
-    // trip_files rows are deleted as part of the transaction
-    expect(testDb.prepare('SELECT id FROM trip_files WHERE note_id = ?').all(note.id)).toHaveLength(0);
-    // note itself is deleted
-    expect(testDb.prepare('SELECT id FROM collab_notes WHERE id = ?').get(note.id)).toBeUndefined();
-  });
-
-  it('broadcasts collab:note:deleted event', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    const note = createCollabNote(testDb, trip.id, user.id);
-    await withHarness(user.id, async (h) => {
-      await h.client.callTool({ name: 'delete_collab_note', arguments: { tripId: trip.id, noteId: note.id } });
-      expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'collab:note:deleted', expect.any(Object));
-    });
-  });
-
-  it('returns error when note not found', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_collab_note', arguments: { tripId: trip.id, noteId: 99999 } });
-      expect(result.isError).toBe(true);
-    });
-  });
-
-  it('returns access denied for non-member', async () => {
-    const { user } = createUser(testDb);
-    const { user: other } = createUser(testDb);
-    const trip = createTrip(testDb, other.id);
-    const note = createCollabNote(testDb, trip.id, other.id);
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_collab_note', arguments: { tripId: trip.id, noteId: note.id } });
-      expect(result.isError).toBe(true);
-    });
-  });
-});

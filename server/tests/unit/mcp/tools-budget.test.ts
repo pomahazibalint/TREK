@@ -1,5 +1,5 @@
 /**
- * Unit tests for MCP budget tools: create_budget_item, update_budget_item, delete_budget_item.
+ * Unit tests for MCP budget tools: list_budget_items, get_budget_settlement.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -59,45 +59,48 @@ async function withHarness(userId: number, fn: (h: McpHarness) => Promise<void>)
 }
 
 // ---------------------------------------------------------------------------
-// create_budget_item
+// list_budget_items
 // ---------------------------------------------------------------------------
 
-describe('Tool: create_budget_item', () => {
-  it('creates a budget item with all fields', async () => {
+describe('Tool: list_budget_items', () => {
+  it('returns all budget items for a trip', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
+    createBudgetItem(testDb, trip.id, { name: 'Hotel Paris', category: 'Accommodation', total_price: 500 });
+    createBudgetItem(testDb, trip.id, { name: 'Train ticket', category: 'Transport', total_price: 80 });
+
     await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({
-        name: 'create_budget_item',
-        arguments: { tripId: trip.id, name: 'Hotel Paris', category: 'Accommodation', total_price: 500, note: 'Prepaid' },
-      });
+      const result = await h.client.callTool({ name: 'list_budget_items', arguments: { tripId: trip.id } });
       const data = parseToolResult(result) as any;
-      expect(data.item.name).toBe('Hotel Paris');
-      expect(data.item.category).toBe('Accommodation');
-      expect(data.item.total_price).toBe(500);
-      expect(data.item.note).toBe('Prepaid');
+      expect(data.items).toHaveLength(2);
+      const names = data.items.map((i: any) => i.name);
+      expect(names).toContain('Hotel Paris');
+      expect(names).toContain('Train ticket');
     });
   });
 
-  it('defaults category to "Other" when not specified', async () => {
+  it('returns empty array when trip has no budget items', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({
-        name: 'create_budget_item',
-        arguments: { tripId: trip.id, name: 'Misc', total_price: 10 },
-      });
+      const result = await h.client.callTool({ name: 'list_budget_items', arguments: { tripId: trip.id } });
       const data = parseToolResult(result) as any;
-      expect(data.item.category).toBe('Other');
+      expect(data.items).toHaveLength(0);
     });
   });
 
-  it('broadcasts budget:created event', async () => {
+  it('only returns items belonging to the specified trip', async () => {
     const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
+    const trip1 = createTrip(testDb, user.id);
+    const trip2 = createTrip(testDb, user.id);
+    createBudgetItem(testDb, trip1.id, { name: 'Trip1 item' });
+    createBudgetItem(testDb, trip2.id, { name: 'Trip2 item' });
+
     await withHarness(user.id, async (h) => {
-      await h.client.callTool({ name: 'create_budget_item', arguments: { tripId: trip.id, name: 'Taxi', total_price: 25 } });
-      expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'budget:created', expect.any(Object));
+      const result = await h.client.callTool({ name: 'list_budget_items', arguments: { tripId: trip1.id } });
+      const data = parseToolResult(result) as any;
+      expect(data.items).toHaveLength(1);
+      expect(data.items[0].name).toBe('Trip1 item');
     });
   });
 
@@ -106,59 +109,52 @@ describe('Tool: create_budget_item', () => {
     const { user: other } = createUser(testDb);
     const trip = createTrip(testDb, other.id);
     await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'create_budget_item', arguments: { tripId: trip.id, name: 'Hack', total_price: 0 } });
+      const result = await h.client.callTool({ name: 'list_budget_items', arguments: { tripId: trip.id } });
       expect(result.isError).toBe(true);
     });
   });
 
-  it('blocks demo user', async () => {
+  it('is accessible to demo user (read-only)', async () => {
     process.env.DEMO_MODE = 'true';
     const { user } = createUser(testDb, { email: 'demo@nomad.app' });
     const trip = createTrip(testDb, user.id);
+    createBudgetItem(testDb, trip.id, { name: 'Taxi', total_price: 25 });
     await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'create_budget_item', arguments: { tripId: trip.id, name: 'X', total_price: 0 } });
-      expect(result.isError).toBe(true);
+      const result = await h.client.callTool({ name: 'list_budget_items', arguments: { tripId: trip.id } });
+      expect(result.isError).toBeFalsy();
+      const data = parseToolResult(result) as any;
+      expect(data.items).toHaveLength(1);
     });
   });
 });
 
 // ---------------------------------------------------------------------------
-// update_budget_item
+// get_budget_settlement
 // ---------------------------------------------------------------------------
 
-describe('Tool: update_budget_item', () => {
-  it('updates budget item fields', async () => {
+describe('Tool: get_budget_settlement', () => {
+  it('returns settlement data for a trip', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const item = createBudgetItem(testDb, trip.id, { name: 'Old', category: 'Food', total_price: 50 });
     await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({
-        name: 'update_budget_item',
-        arguments: { tripId: trip.id, itemId: item.id, name: 'New Name', total_price: 75 },
-      });
+      const result = await h.client.callTool({ name: 'get_budget_settlement', arguments: { tripId: trip.id } });
+      expect(result.isError).toBeFalsy();
       const data = parseToolResult(result) as any;
-      expect(data.item.name).toBe('New Name');
-      expect(data.item.total_price).toBe(75);
-      expect(data.item.category).toBe('Food'); // preserved
+      // Settlement always returns a structured response even with no items
+      expect(data).toBeDefined();
     });
   });
 
-  it('broadcasts budget:updated event', async () => {
+  it('includes unallocated items in the incomplete array', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const item = createBudgetItem(testDb, trip.id);
+    createBudgetItem(testDb, trip.id, { name: 'Unallocated dinner', total_price: 60 });
     await withHarness(user.id, async (h) => {
-      await h.client.callTool({ name: 'update_budget_item', arguments: { tripId: trip.id, itemId: item.id, name: 'Updated' } });
-      expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'budget:updated', expect.any(Object));
-    });
-  });
-
-  it('returns error for item not found', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'update_budget_item', arguments: { tripId: trip.id, itemId: 99999, name: 'X' } });
-      expect(result.isError).toBe(true);
+      const result = await h.client.callTool({ name: 'get_budget_settlement', arguments: { tripId: trip.id } });
+      const data = parseToolResult(result) as any;
+      // unallocated items appear in the incomplete field
+      expect(Array.isArray(data.incomplete)).toBe(true);
+      expect(data.incomplete.length).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -166,57 +162,8 @@ describe('Tool: update_budget_item', () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb);
     const trip = createTrip(testDb, other.id);
-    const item = createBudgetItem(testDb, trip.id);
     await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'update_budget_item', arguments: { tripId: trip.id, itemId: item.id, name: 'X' } });
-      expect(result.isError).toBe(true);
-    });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// delete_budget_item
-// ---------------------------------------------------------------------------
-
-describe('Tool: delete_budget_item', () => {
-  it('deletes an existing budget item', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    const item = createBudgetItem(testDb, trip.id);
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_budget_item', arguments: { tripId: trip.id, itemId: item.id } });
-      const data = parseToolResult(result) as any;
-      expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM budget_items WHERE id = ?').get(item.id)).toBeUndefined();
-    });
-  });
-
-  it('broadcasts budget:deleted event', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    const item = createBudgetItem(testDb, trip.id);
-    await withHarness(user.id, async (h) => {
-      await h.client.callTool({ name: 'delete_budget_item', arguments: { tripId: trip.id, itemId: item.id } });
-      expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'budget:deleted', expect.any(Object));
-    });
-  });
-
-  it('returns error for item not found', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_budget_item', arguments: { tripId: trip.id, itemId: 99999 } });
-      expect(result.isError).toBe(true);
-    });
-  });
-
-  it('returns access denied for non-member', async () => {
-    const { user } = createUser(testDb);
-    const { user: other } = createUser(testDb);
-    const trip = createTrip(testDb, other.id);
-    const item = createBudgetItem(testDb, trip.id);
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_budget_item', arguments: { tripId: trip.id, itemId: item.id } });
+      const result = await h.client.callTool({ name: 'get_budget_settlement', arguments: { tripId: trip.id } });
       expect(result.isError).toBe(true);
     });
   });

@@ -1,6 +1,6 @@
 /**
  * Unit tests for MCP reservation tools: create_reservation, update_reservation,
- * delete_reservation, link_hotel_accommodation.
+ * list_reservations, link_hotel_accommodation.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -256,64 +256,48 @@ describe('Tool: update_reservation', () => {
 });
 
 // ---------------------------------------------------------------------------
-// delete_reservation
+// list_reservations
 // ---------------------------------------------------------------------------
 
-describe('Tool: delete_reservation', () => {
-  it('deletes a reservation', async () => {
+describe('Tool: list_reservations', () => {
+  it('returns all reservations for a trip', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const reservation = createReservation(testDb, trip.id);
+    createReservation(testDb, trip.id, { title: 'Flight to Rome', type: 'flight' });
+    createReservation(testDb, trip.id, { title: 'Grand Hotel', type: 'hotel' });
+
     await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_reservation', arguments: { tripId: trip.id, reservationId: reservation.id } });
+      const result = await h.client.callTool({ name: 'list_reservations', arguments: { tripId: trip.id } });
       const data = parseToolResult(result) as any;
-      expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM reservations WHERE id = ?').get(reservation.id)).toBeUndefined();
+      expect(data.reservations).toHaveLength(2);
+      const titles = data.reservations.map((r: any) => r.title);
+      expect(titles).toContain('Flight to Rome');
+      expect(titles).toContain('Grand Hotel');
     });
   });
 
-  it('cascades to accommodation when linked', async () => {
+  it('returns empty array when trip has no reservations', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const day1 = createDay(testDb, trip.id, { day_number: 1 });
-    const day2 = createDay(testDb, trip.id, { day_number: 2 });
-    const hotel = createPlace(testDb, trip.id);
-    // Create reservation via tool so accommodation is linked
-    let reservationId: number;
     await withHarness(user.id, async (h) => {
-      const r = await h.client.callTool({
-        name: 'create_reservation',
-        arguments: { tripId: trip.id, title: 'Hotel', type: 'hotel', place_id: hotel.id, start_day_id: day1.id, end_day_id: day2.id },
-      });
-      reservationId = (parseToolResult(r) as any).reservation.id;
-    });
-
-    const accId = (testDb.prepare('SELECT accommodation_id FROM reservations WHERE id = ?').get(reservationId!) as any).accommodation_id;
-    expect(accId).not.toBeNull();
-
-    await withHarness(user.id, async (h) => {
-      await h.client.callTool({ name: 'delete_reservation', arguments: { tripId: trip.id, reservationId } });
-    });
-
-    expect(testDb.prepare('SELECT id FROM day_accommodations WHERE id = ?').get(accId)).toBeUndefined();
-  });
-
-  it('broadcasts reservation:deleted event', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    const reservation = createReservation(testDb, trip.id);
-    await withHarness(user.id, async (h) => {
-      await h.client.callTool({ name: 'delete_reservation', arguments: { tripId: trip.id, reservationId: reservation.id } });
-      expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'reservation:deleted', expect.any(Object));
+      const result = await h.client.callTool({ name: 'list_reservations', arguments: { tripId: trip.id } });
+      const data = parseToolResult(result) as any;
+      expect(data.reservations).toHaveLength(0);
     });
   });
 
-  it('returns error for reservation not found', async () => {
+  it('only returns reservations belonging to the specified trip', async () => {
     const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
+    const trip1 = createTrip(testDb, user.id);
+    const trip2 = createTrip(testDb, user.id);
+    createReservation(testDb, trip1.id, { title: 'Trip1 Reservation' });
+    createReservation(testDb, trip2.id, { title: 'Trip2 Reservation' });
+
     await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_reservation', arguments: { tripId: trip.id, reservationId: 99999 } });
-      expect(result.isError).toBe(true);
+      const result = await h.client.callTool({ name: 'list_reservations', arguments: { tripId: trip1.id } });
+      const data = parseToolResult(result) as any;
+      expect(data.reservations).toHaveLength(1);
+      expect(data.reservations[0].title).toBe('Trip1 Reservation');
     });
   });
 
@@ -321,9 +305,8 @@ describe('Tool: delete_reservation', () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb);
     const trip = createTrip(testDb, other.id);
-    const reservation = createReservation(testDb, trip.id);
     await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'delete_reservation', arguments: { tripId: trip.id, reservationId: reservation.id } });
+      const result = await h.client.callTool({ name: 'list_reservations', arguments: { tripId: trip.id } });
       expect(result.isError).toBe(true);
     });
   });

@@ -121,13 +121,24 @@ describe('Scope enforcement — JWT (scopes = null) gets full tool list', () => 
     expect(tools).toContain('get_trip_summary');
     // Write tools present for JWT (null scopes = full access)
     expect(tools).toContain('create_trip');
-    expect(tools).toContain('delete_trip');
     expect(tools).toContain('create_place');
-    expect(tools).toContain('create_budget_item');
     expect(tools).toContain('create_packing_item');
     expect(tools).toContain('create_reservation');
     expect(tools).toContain('mark_country_visited');
     expect(tools).toContain('create_collab_note');
+    // Read-only tools always present
+    expect(tools).toContain('list_places');
+    expect(tools).toContain('list_reservations');
+    expect(tools).toContain('list_budget_items');
+    expect(tools).toContain('get_budget_settlement');
+    expect(tools).toContain('list_trip_members');
+    // Removed tools absent
+    expect(tools).not.toContain('delete_trip');
+    expect(tools).not.toContain('delete_place');
+    expect(tools).not.toContain('delete_reservation');
+    expect(tools).not.toContain('create_budget_item');
+    expect(tools).not.toContain('delete_collab_note');
+    expect(tools).not.toContain('delete_day_note');
   });
 });
 
@@ -148,9 +159,7 @@ describe('Scope enforcement — trips:read only', () => {
     // Write tools absent
     expect(tools).not.toContain('create_trip');
     expect(tools).not.toContain('update_trip');
-    expect(tools).not.toContain('delete_trip');
     expect(tools).not.toContain('create_place');
-    expect(tools).not.toContain('create_budget_item');
     expect(tools).not.toContain('search_place');
   });
 });
@@ -173,27 +182,8 @@ describe('Scope enforcement — trips:write', () => {
     expect(tools).toContain('update_assignment_time');
     expect(tools).toContain('update_day');
 
-    // delete_trip requires trips:delete, not trips:write
-    expect(tools).not.toContain('delete_trip');
     // budget/packing/reservations not in scope
-    expect(tools).not.toContain('create_budget_item');
     expect(tools).not.toContain('create_packing_item');
-  });
-});
-
-describe('Scope enforcement — trips:delete', () => {
-  it('SCOPE-004 — trips:delete token has delete_trip but NOT create_trip', async () => {
-    const { user } = createUser(testDb);
-    const { client } = createOAuthClient(user.id, 'App', [TEST_REDIRECT], ['trips:delete'], true, 'settings_ui');
-    const { accessToken } = issueTokens(client.client_id, user.id, ['trips:delete'], TEST_AUDIENCE);
-
-    const { sessionId, status } = await initSession(accessToken);
-    expect(status).toBe(200);
-
-    const tools = await listTools(accessToken, sessionId);
-    expect(tools).toContain('delete_trip');
-    expect(tools).not.toContain('create_trip');
-    expect(tools).not.toContain('update_trip');
   });
 });
 
@@ -207,7 +197,6 @@ describe('Scope enforcement — places:write', () => {
     const tools = await listTools(accessToken, sessionId);
     expect(tools).toContain('create_place');
     expect(tools).toContain('update_place');
-    expect(tools).toContain('delete_place');
     expect(tools).not.toContain('create_trip');
     expect(tools).not.toContain('search_place');
   });
@@ -226,18 +215,17 @@ describe('Scope enforcement — geo:read', () => {
   });
 });
 
-describe('Scope enforcement — budget:write', () => {
-  it('SCOPE-007 — budget:write token has budget CRUD tools', async () => {
+describe('Scope enforcement — budget read tools always visible', () => {
+  it('SCOPE-007 — budget read tools are present even with no budget scope', async () => {
     const { user } = createUser(testDb);
-    const { client } = createOAuthClient(user.id, 'App', [TEST_REDIRECT], ['budget:write'], true, 'settings_ui');
-    const { accessToken } = issueTokens(client.client_id, user.id, ['budget:write'], TEST_AUDIENCE);
+    const { client } = createOAuthClient(user.id, 'App', [TEST_REDIRECT], ['trips:read'], true, 'settings_ui');
+    const { accessToken } = issueTokens(client.client_id, user.id, ['trips:read'], TEST_AUDIENCE);
 
     const { sessionId } = await initSession(accessToken);
     const tools = await listTools(accessToken, sessionId);
-    expect(tools).toContain('create_budget_item');
-    expect(tools).toContain('update_budget_item');
-    expect(tools).toContain('delete_budget_item');
-    expect(tools).not.toContain('create_packing_item');
+    expect(tools).toContain('list_budget_items');
+    expect(tools).toContain('get_budget_settlement');
+    expect(tools).not.toContain('create_budget_item');
   });
 });
 
@@ -267,9 +255,8 @@ describe('Scope enforcement — reservations:write', () => {
     const tools = await listTools(accessToken, sessionId);
     expect(tools).toContain('create_reservation');
     expect(tools).toContain('update_reservation');
-    expect(tools).toContain('delete_reservation');
     expect(tools).toContain('link_hotel_accommodation');
-    expect(tools).not.toContain('create_budget_item');
+    expect(tools).not.toContain('create_packing_item');
   });
 });
 
@@ -283,11 +270,9 @@ describe('Scope enforcement — collab:write', () => {
     const tools = await listTools(accessToken, sessionId);
     expect(tools).toContain('create_collab_note');
     expect(tools).toContain('update_collab_note');
-    expect(tools).toContain('delete_collab_note');
     expect(tools).toContain('create_day_note');
     expect(tools).toContain('update_day_note');
-    expect(tools).toContain('delete_day_note');
-    expect(tools).not.toContain('create_budget_item');
+    expect(tools).not.toContain('create_packing_item');
   });
 });
 
@@ -328,7 +313,6 @@ describe('Scope enforcement — always-registered tools', () => {
     expect(tools).not.toContain('create_trip');
     expect(tools).not.toContain('create_place');
     expect(tools).not.toContain('search_place');
-    expect(tools).not.toContain('create_budget_item');
   });
 
   it('SCOPE-013 — multi-scope token sees union of allowed tools', async () => {
@@ -341,10 +325,8 @@ describe('Scope enforcement — always-registered tools', () => {
     const tools = await listTools(accessToken, sessionId);
 
     expect(tools).toContain('create_trip');      // trips:write
-    expect(tools).toContain('create_budget_item'); // budget:write
     expect(tools).toContain('create_packing_item'); // packing:write
     // Not granted
-    expect(tools).not.toContain('delete_trip');   // trips:delete not in scopes
     expect(tools).not.toContain('search_place');  // geo:read not in scopes
     expect(tools).not.toContain('create_reservation'); // reservations:write not in scopes
   });
