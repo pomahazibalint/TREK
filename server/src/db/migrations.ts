@@ -1246,7 +1246,11 @@ function runMigrations(db: Database.Database): void {
     () => {
       db.prepare(
         "INSERT OR IGNORE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      ).run('google_list_import', 'Google Maps List Import', 'Import places from a shared Google Maps list URL. Uses an unofficial Google endpoint — disable if needed.', 'feature', 'List', 1, 13);
+      ).run('google_list_import', 'Google Maps List Import', 'Import places from a shared Google Maps list URL. Uses an unofficial Google endpoint — disable if needed.', 'integration', 'List', 1, 13);
+    },
+    // Migration 107: Fix google_list_import addon type from 'feature' to 'integration'
+    () => {
+      db.prepare("UPDATE addons SET type = 'integration' WHERE id = 'google_list_import'").run();
     },
   ];
 
