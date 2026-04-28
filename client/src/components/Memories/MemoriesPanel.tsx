@@ -1029,7 +1029,7 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
 
       <div ref={addSourceRef} style={{ position: 'relative', flexShrink: 0, marginLeft: 'auto' }}>
         <button onClick={() => setShowAddSource(v => !v)}
-          style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 8, border: '1px dashed var(--accent)', background: 'none', color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
           <Plus size={12} /> Add source
         </button>
         {showAddSource && (
