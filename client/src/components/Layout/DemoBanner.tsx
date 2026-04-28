@@ -237,7 +237,7 @@ export default function DemoBanner(): React.ReactElement | null {
       position: 'fixed', inset: 0, zIndex: 9999,
       background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 16, overflow: 'auto',
+      padding: 16, paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', overflow: 'auto',
       fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif",
     }} onClick={() => setDismissed(true)}>
       <div style={{
