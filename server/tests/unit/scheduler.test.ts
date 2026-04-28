@@ -11,28 +11,29 @@ vi.mock('archiver', () => ({ default: vi.fn() }));
 // Prevent fs side effects (creating directories, reading files)
 vi.mock('node:fs', () => ({
   default: {
-    existsSync: vi.fn(() => false),
+    existsSync: vi.fn(() => true),
     mkdirSync: vi.fn(),
     readFileSync: vi.fn(() => '{}'),
     writeFileSync: vi.fn(),
     readdirSync: vi.fn(() => []),
-    statSync: vi.fn(() => ({ mtime: new Date(), size: 0 })),
+    statSync: vi.fn(() => ({ mtime: new Date(), mtimeMs: Date.now(), size: 0 })),
+    unlinkSync: vi.fn(),
     createWriteStream: vi.fn(() => ({ on: vi.fn(), pipe: vi.fn() })),
   },
-  existsSync: vi.fn(() => false),
+  existsSync: vi.fn(() => true),
   mkdirSync: vi.fn(),
   readFileSync: vi.fn(() => '{}'),
   writeFileSync: vi.fn(),
   readdirSync: vi.fn(() => []),
-  statSync: vi.fn(() => ({ mtime: new Date(), size: 0 })),
+  statSync: vi.fn(() => ({ mtime: new Date(), mtimeMs: Date.now(), size: 0 })),
+  unlinkSync: vi.fn(),
   createWriteStream: vi.fn(() => ({ on: vi.fn(), pipe: vi.fn() })),
 }));
 vi.mock('../../../src/db/database', () => ({
   db: { prepare: () => ({ all: vi.fn(() => []), get: vi.fn(), run: vi.fn() }) },
 }));
 vi.mock('../../../src/config', () => ({ JWT_SECRET: 'test-secret', ENCRYPTION_KEY: '0'.repeat(64) }));
-
-import { buildCronExpression } from '../../src/scheduler';
+import { buildCronExpression, parseAutoBackupTimestamp } from '../../src/scheduler';
 
 interface BackupSettings {
   enabled: boolean;
@@ -54,6 +55,53 @@ function settings(overrides: Partial<BackupSettings> = {}): BackupSettings {
     ...overrides,
   };
 }
+
+// ---------------------------------------------------------------------------
+// parseAutoBackupTimestamp — retention logic
+// ---------------------------------------------------------------------------
+
+describe('parseAutoBackupTimestamp', () => {
+  function makeFilename(daysAgo: number): string {
+    const d = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
+    const ts = d.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    return `auto-backup-${ts}.zip`;
+  }
+
+  it('parses a well-formed auto-backup filename into a UTC millisecond timestamp', () => {
+    const ts = parseAutoBackupTimestamp('auto-backup-2024-04-28T12-30-00.zip');
+    expect(ts).toBe(new Date('2024-04-28T12:30:00Z').getTime());
+  });
+
+  it('returns a timestamp in the past for an old filename', () => {
+    const file = makeFilename(10);
+    const ts = parseAutoBackupTimestamp(file);
+    expect(ts).not.toBeNull();
+    expect(ts!).toBeLessThan(Date.now() - 9 * 24 * 60 * 60 * 1000);
+  });
+
+  it('returns a timestamp in the recent past for a fresh filename', () => {
+    const file = makeFilename(1);
+    const ts = parseAutoBackupTimestamp(file);
+    expect(ts).not.toBeNull();
+    expect(ts!).toBeGreaterThan(Date.now() - 2 * 24 * 60 * 60 * 1000);
+  });
+
+  it('returns null for a manual backup filename (no auto-backup prefix)', () => {
+    expect(parseAutoBackupTimestamp('manual-backup-2024-04-28T12-30-00.zip')).toBeNull();
+  });
+
+  it('returns null for an auto-backup with an unparseable timestamp section', () => {
+    expect(parseAutoBackupTimestamp('auto-backup-unknown.zip')).toBeNull();
+  });
+
+  it('returns null for a plain .zip with no recognisable pattern', () => {
+    expect(parseAutoBackupTimestamp('data-export.zip')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildCronExpression
+// ---------------------------------------------------------------------------
 
 describe('buildCronExpression', () => {
   describe('hourly', () => {

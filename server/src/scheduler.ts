@@ -94,15 +94,28 @@ async function runBackup(): Promise<void> {
   }
 }
 
+/**
+ * Parse the creation timestamp of an auto-backup file from its filename.
+ * Filename format: auto-backup-YYYY-MM-DDTHH-MM-SS.zip
+ * Returns null when the filename doesn't match the expected pattern.
+ */
+export function parseAutoBackupTimestamp(filename: string): number | null {
+  const m = filename.match(/^auto-backup-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})\.zip$/);
+  if (!m) return null;
+  const ms = new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}Z`).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
 function cleanupOldBackups(keepDays: number): void {
   try {
     const MS_PER_DAY = 24 * 60 * 60 * 1000;
     const cutoff = Date.now() - keepDays * MS_PER_DAY;
-    const files = fs.readdirSync(backupsDir).filter(f => f.endsWith('.zip'));
+    const files = fs.readdirSync(backupsDir).filter(f => f.startsWith('auto-backup-') && f.endsWith('.zip'));
     for (const file of files) {
       const filePath = path.join(backupsDir, file);
-      const stat = fs.statSync(filePath);
-      if (stat.birthtimeMs < cutoff) {
+      // Prefer filename timestamp — reliable on overlayfs where birthtimeMs is always 0.
+      const fileTime = parseAutoBackupTimestamp(file) ?? fs.statSync(filePath).mtimeMs;
+      if (fileTime < cutoff) {
         fs.unlinkSync(filePath);
         const { logInfo: li } = require('./services/auditLog');
         li(`Auto-Backup old backup deleted: ${file}`);
@@ -380,4 +393,4 @@ function stop(): void {
   if (autoArchiveTask) { autoArchiveTask.stop(); autoArchiveTask = null; }
 }
 
-export { start, stop, startDemoReset, startTripReminders, startTodoReminders, startVersionCheck, startAutoPhotoSync, startAutoArchive, startIdempotencyCleanup, loadSettings, saveSettings, VALID_INTERVALS };
+export { start, stop, startDemoReset, startTripReminders, startTodoReminders, startVersionCheck, startAutoPhotoSync, startAutoArchive, startIdempotencyCleanup, loadSettings, saveSettings, VALID_INTERVALS, cleanupOldBackups };
