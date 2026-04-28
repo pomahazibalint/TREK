@@ -79,7 +79,9 @@ export default function LoginPage(): React.ReactElement {
           window.history.replaceState({}, '', '/login')
           if (data.token) {
             await loadUser()
-            navigate('/dashboard', { replace: true })
+            const oidcRedirect = sessionStorage.getItem('oidc_redirect')
+            sessionStorage.removeItem('oidc_redirect')
+            navigate(oidcRedirect || redirectTarget || '/dashboard', { replace: true })
           } else {
             setError(data.error || 'OIDC login failed')
           }
@@ -109,6 +111,7 @@ export default function LoginPage(): React.ReactElement {
         setAppConfig(config)
         if (!config.has_users) setMode('register')
         if (config.oidc_only_mode && config.oidc_configured && config.has_users && !invite && !noRedirect) {
+          sessionStorage.setItem('oidc_redirect', redirectTarget)
           window.location.href = '/api/auth/oidc/login'
         }
         // Auto-select language if not explicitly set by user
@@ -587,6 +590,7 @@ export default function LoginPage(): React.ReactElement {
                   }}
                   onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.background = '#1f2937' }}
                   onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.background = '#111827' }}
+                  onClick={() => sessionStorage.setItem('oidc_redirect', redirectTarget)}
                 >
                   <Shield size={16} />
                   {t('login.oidcSignIn', { name: appConfig?.oidc_display_name || 'SSO' })}
@@ -792,6 +796,7 @@ export default function LoginPage(): React.ReactElement {
                 }}
                 onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.background = '#f9fafb'; e.currentTarget.style.borderColor = '#9ca3af' }}
                 onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#d1d5db' }}
+                onClick={() => sessionStorage.setItem('oidc_redirect', redirectTarget)}
               >
                 <Shield size={16} />
                 {t('login.oidcSignIn', { name: appConfig.oidc_display_name })}
