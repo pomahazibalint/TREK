@@ -13,7 +13,7 @@ import { encryptMfaSecret, decryptMfaSecret } from './mfaCrypto';
 import { getAllPermissions } from './permissions';
 import { decrypt_api_key, maybe_encrypt_api_key, encrypt_api_key } from './apiKeyCrypto';
 import { createEphemeralToken } from './ephemeralTokens';
-import { revokeUserSessions } from '../mcp';
+import { revokeUserSessions } from '../mcp/sessionManager';
 import { startTripReminders } from '../scheduler';
 import { deleteUserWithCleanup } from './userCleanupService';
 import { User } from '../types';
