@@ -11,6 +11,7 @@ import { revokeUserSessions } from '../mcp';
 import { validatePassword } from './passwordPolicy';
 import { getPhotoProviderConfig } from './memories/helpersService';
 import { send as sendNotification } from './notificationService';
+import { deleteUserWithCleanup } from './userCleanupService';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -155,7 +156,7 @@ export function deleteUser(id: string, currentUserId: number) {
   const userToDel = db.prepare('SELECT id, email FROM users WHERE id = ?').get(id) as { id: number; email: string } | undefined;
   if (!userToDel) return { error: 'User not found', status: 404 };
 
-  db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  deleteUserWithCleanup(userToDel.id);
   return { email: userToDel.email };
 }
 

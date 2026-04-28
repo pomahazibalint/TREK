@@ -144,6 +144,26 @@ describe('Admin user management', () => {
     expect(res.body.success).toBe(true);
   });
 
+  it('ADMIN-005b — DELETE /admin/users/:id cleans up FK references before removing row', async () => {
+    // admin owns the trip; userToDelete invited invitee and paid for a budget item
+    const { user: admin } = createAdmin(testDb);
+    const { user: userToDelete } = createUser(testDb);
+    const { user: invitee } = createUser(testDb);
+    const trip = testDb.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?) RETURNING id').get(admin.id, 'Trip') as { id: number };
+    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)').run(trip.id, invitee.id, userToDelete.id);
+    testDb.prepare('INSERT INTO budget_items (trip_id, category, name, total_price, paid_by_user_id) VALUES (?, ?, ?, ?, ?)').run(trip.id, 'Food', 'Dinner', 40, userToDelete.id);
+
+    const res = await request(app)
+      .delete(`/api/admin/users/${userToDelete.id}`)
+      .set('Cookie', authCookie(admin.id));
+    expect(res.status).toBe(200);
+    // invited_by must be NULLed, not cascade-deleted (trip is still alive)
+    const member = testDb.prepare('SELECT invited_by FROM trip_members WHERE user_id = ?').get(invitee.id) as any;
+    expect(member?.invited_by).toBeNull();
+    const item = testDb.prepare('SELECT paid_by_user_id FROM budget_items WHERE trip_id = ?').get(trip.id) as any;
+    expect(item?.paid_by_user_id).toBeNull();
+  });
+
   it('ADMIN-006 — admin cannot delete their own account', async () => {
     const { user: admin } = createAdmin(testDb);
 
