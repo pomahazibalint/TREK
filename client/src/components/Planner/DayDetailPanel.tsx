@@ -109,7 +109,7 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
       .then(data => {
         setAccommodations(data.accommodations || [])
         const allForDay = (data.accommodations || []).filter(a =>
-          days.some(d => d.id >= a.start_day_id && d.id <= a.end_day_id && d.id === day?.id)
+          dayInAccRange(a)
         )
         setDayAccommodations(allForDay)
         setAccommodation(allForDay[0] || null)
@@ -140,7 +140,7 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
       setAccommodations(updated)
       setAccommodation(newAcc)
       setDayAccommodations(updated.filter(a =>
-        days.some(d => d.id >= a.start_day_id && d.id <= a.end_day_id && d.id === day?.id)
+        dayInAccRange(a)
       ))
       setShowHotelPicker(false)
       setHotelForm({ check_in: '', check_in_end: '', check_out: '', confirmation: '', place_id: null })
@@ -164,12 +164,23 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
       const updated = accommodations.filter(a => a.id !== accommodation.id)
       setAccommodations(updated)
       setDayAccommodations(updated.filter(a =>
-        days.some(d => d.id >= a.start_day_id && d.id <= a.end_day_id && d.id === day?.id)
+        dayInAccRange(a)
       ))
       setAccommodation(null)
       onAccommodationChange?.()
     } catch {}
   }
+
+  // Check whether the current day falls within an accommodation's date range using
+  // positional order in the days array, not raw ID comparison. After repeated
+  // extend/shrink cycles, IDs are non-monotonic relative to day_number, so
+  // Math.min/max on IDs would silently produce wrong results.
+  const dayInAccRange = (a: any) => {
+    const startIdx = days.findIndex(d => d.id === a.start_day_id);
+    const endIdx = days.findIndex(d => d.id === a.end_day_id);
+    const currIdx = days.findIndex(d => d.id === day?.id);
+    return startIdx !== -1 && endIdx !== -1 && currIdx >= startIdx && currIdx <= endIdx;
+  };
 
   if (!day) return null
 
@@ -510,7 +521,15 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <CustomSelect
                           value={String(hotelDayRange.start)}
-                          onChange={v => setHotelDayRange(prev => ({ start: Number(v), end: Math.max(Number(v), prev.end) }))}
+                          onChange={v => {
+                            const newStartId = Number(v);
+                            setHotelDayRange(prev => {
+                              const newStartIdx = days.findIndex(d => d.id === newStartId);
+                              const prevEndIdx = days.findIndex(d => d.id === prev.end);
+                              const end = newStartIdx !== -1 && prevEndIdx >= newStartIdx ? prev.end : newStartId;
+                              return { start: newStartId, end };
+                            });
+                          }}
                           options={days.map((d, i) => ({
                             value: String(d.id),
                             label: `${d.title || t('planner.dayN', { n: i + 1 })}${d.date ? ` — ${new Date(d.date + 'T00:00:00Z').toLocaleDateString(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' })}` : ''}`,
@@ -522,7 +541,15 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <CustomSelect
                           value={String(hotelDayRange.end)}
-                          onChange={v => setHotelDayRange(prev => ({ start: Math.min(prev.start, Number(v)), end: Number(v) }))}
+                          onChange={v => {
+                            const newEndId = Number(v);
+                            setHotelDayRange(prev => {
+                              const newEndIdx = days.findIndex(d => d.id === newEndId);
+                              const prevStartIdx = days.findIndex(d => d.id === prev.start);
+                              const start = newEndIdx !== -1 && prevStartIdx <= newEndIdx ? prev.start : newEndId;
+                              return { start, end: newEndId };
+                            });
+                          }}
                           options={days.map((d, i) => ({
                             value: String(d.id),
                             label: `${d.title || t('planner.dayN', { n: i + 1 })}${d.date ? ` — ${new Date(d.date + 'T00:00:00Z').toLocaleDateString(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' })}` : ''}`,
@@ -638,10 +665,8 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
                       accommodationsApi.list(tripId).then(d => {
                         const all = d.accommodations || []
                         setAccommodations(all)
-                        setDayAccommodations(all.filter(a =>
-                          days.some(dd => dd.id >= a.start_day_id && dd.id <= a.end_day_id && dd.id === day?.id)
-                        ))
-                        const acc = all.find(a => days.some(dd => dd.id >= a.start_day_id && dd.id <= a.end_day_id && dd.id === day?.id))
+                        setDayAccommodations(all.filter(a => dayInAccRange(a)))
+                        const acc = all.find(a => dayInAccRange(a))
                         setAccommodation(acc || null)
                       })
                       onAccommodationChange?.()
