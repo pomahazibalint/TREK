@@ -961,10 +961,10 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
 
   // ── Main Gallery ──────────────────────────────────────────────────────────
 
-  const galleryPhotos = useMemo(() => [
+  const galleryPhotos = [
     ...allVisible.map((p, i) => adaptToPhoto(p, tripId, i)),
     ...localPhotos,
-  ], [allVisible, localPhotos, tripId])
+  ]
 
   const openLightboxForPhoto = (photo: Photo, filteredPhotos: Photo[]) => {
     const tripPhoto = allVisible.find(p => p.asset_id === photo.asset_id && p.provider === photo.provider)
