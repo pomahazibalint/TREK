@@ -12,6 +12,7 @@ import { useContextMenu, ContextMenu } from '../shared/ContextMenu'
 import { placesApi } from '../../api/client'
 import { useTripStore } from '../../store/tripStore'
 import { useCanDo } from '../../store/permissionsStore'
+import { useAddonStore } from '../../store/addonStore'
 import type { Place, Category, Day, AssignmentsMap } from '../../types'
 
 interface PlacesSidebarProps {
@@ -45,6 +46,7 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
   const loadTrip = useTripStore((s) => s.loadTrip)
   const can = useCanDo()
   const canEditPlaces = can('place_edit', trip)
+  const googleListImportEnabled = useAddonStore((s) => s.isEnabled('google_list_import'))
 
   const handleGpxImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -198,7 +200,7 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
           >
             <Upload size={11} strokeWidth={2} /> {t('places.importCsv')}
           </button>
-          <button
+          {googleListImportEnabled && <button
             onClick={() => setGoogleListOpen(true)}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
@@ -209,7 +211,7 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
             }}
           >
             <MapPin size={11} strokeWidth={2} /> {t('places.importGoogleList')}
-          </button>
+          </button>}
         </div>
         </>}
 
@@ -508,7 +510,7 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
         </div>,
         document.body
       )}
-      {googleListOpen && ReactDOM.createPortal(
+      {googleListImportEnabled && googleListOpen && ReactDOM.createPortal(
         <div
           onClick={() => { setGoogleListOpen(false); setGoogleListUrl('') }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}

@@ -6,6 +6,7 @@ import { broadcast } from '../websocket';
 import { validateStringLengths } from '../middleware/validate';
 import { checkPermission } from '../services/permissions';
 import { AuthRequest } from '../types';
+import { isAddonEnabled } from '../services/adminService';
 import {
   listPlaces,
   createPlace,
@@ -97,6 +98,7 @@ router.post('/import/csv', authenticate, requireTripAccess, csvUpload.single('fi
 
 // Import places from a shared Google Maps list URL
 router.post('/import/google-list', authenticate, requireTripAccess, async (req: Request, res: Response) => {
+  if (!isAddonEnabled('google_list_import')) return res.status(403).json({ error: 'Google Maps list import is disabled.' });
   const authReq = req as AuthRequest;
   if (!checkPermission('place_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))
     return res.status(403).json({ error: 'No permission' });

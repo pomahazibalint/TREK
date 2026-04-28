@@ -1242,6 +1242,12 @@ function runMigrations(db: Database.Database): void {
         CREATE INDEX IF NOT EXISTS idx_oauth_consents_client_user ON oauth_consents(client_id, user_id);
       `);
     },
+    // Migration 106: Google Maps list import admin toggle
+    () => {
+      db.prepare(
+        "INSERT OR IGNORE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).run('google_list_import', 'Google Maps List Import', 'Import places from a shared Google Maps list URL. Uses an unofficial Google endpoint — disable if needed.', 'feature', 'List', 1, 13);
+    },
   ];
 
   if (currentVersion < migrations.length) {
