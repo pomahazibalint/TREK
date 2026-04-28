@@ -1362,6 +1362,9 @@ const ru: Record<string, string | { name: string; category: string }[]> = {
   'photos.linkPlace': 'Привязать место',
   'photos.noPlace': 'Без места',
   'photos.uploadN': '{n} фото загружено',
+  'photos.dropHere': 'Перетащите фото сюда',
+  'photos.dropHereActive': 'Перетащите фото сюда...',
+  'photos.dropHint': 'JPG, PNG, WebP · макс. 10 МБ · до 30 фото',
 
   // Backup restore modal
   'backup.restoreConfirmTitle': 'Восстановить копию?',

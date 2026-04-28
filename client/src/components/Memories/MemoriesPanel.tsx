@@ -1010,7 +1010,7 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
   )
 
   const sourcesBar = connected ? (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
       {visibleLinks.map(renderPill)}
 
       {overflowLinks.length > 0 && (

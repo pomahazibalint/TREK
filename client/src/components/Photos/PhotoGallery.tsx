@@ -553,7 +553,7 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
 
       {/* Sources bar — provider album/date-range pills injected by parent */}
       {sourcesBar && (
-        <div style={{ padding: '8px 20px', borderBottom: '1px solid var(--border-faint,var(--border-primary))', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, overflow: 'hidden', background: 'var(--bg-secondary)' }}>
+        <div style={{ padding: '8px 20px', borderBottom: '1px solid var(--border-faint,var(--border-primary))', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, background: 'var(--bg-secondary)' }}>
           {sourcesBar}
         </div>
       )}

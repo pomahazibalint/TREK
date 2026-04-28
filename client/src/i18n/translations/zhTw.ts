@@ -1316,6 +1316,9 @@ const zhTw: Record<string, string | { name: string; category: string }[]> = {
   'photos.linkPlace': '關聯地點',
   'photos.noPlace': '無地點',
   'photos.uploadN': '上傳 {n} 張照片',
+  'photos.dropHere': '將照片拖放至此處',
+  'photos.dropHereActive': '將照片拖放至此處...',
+  'photos.dropHint': 'JPG、PNG、WebP · 最大 10 MB · 最多 30 張照片',
 
   // Backup restore modal
   'backup.restoreConfirmTitle': '恢復備份？',

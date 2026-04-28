@@ -1367,6 +1367,9 @@ const de: Record<string, string | { name: string; category: string }[]> = {
   'photos.linkPlace': 'Ort verknüpfen',
   'photos.noPlace': 'Kein Ort',
   'photos.uploadN': '{n} Foto(s) hochladen',
+  'photos.dropHere': 'Fotos hier ablegen',
+  'photos.dropHereActive': 'Fotos hier ablegen...',
+  'photos.dropHint': 'JPG, PNG, WebP · max. 10 MB · bis zu 30 Fotos',
 
   // Backup restore modal
   'backup.restoreConfirmTitle': 'Backup wiederherstellen?',

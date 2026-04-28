@@ -1362,6 +1362,9 @@ const nl: Record<string, string | { name: string; category: string }[]> = {
   'photos.linkPlace': 'Koppel plaats',
   'photos.noPlace': 'Geen plaats',
   'photos.uploadN': '{n} foto(\'s) uploaden',
+  'photos.dropHere': 'Zet foto\'s hier neer',
+  'photos.dropHereActive': 'Zet foto\'s hier neer...',
+  'photos.dropHint': 'JPG, PNG, WebP · max. 10 MB · tot 30 foto\'s',
 
   // Backup restore modal
   'backup.restoreConfirmTitle': 'Back-up herstellen?',

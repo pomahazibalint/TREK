@@ -1362,6 +1362,9 @@ const zh: Record<string, string | { name: string; category: string }[]> = {
   'photos.linkPlace': '关联地点',
   'photos.noPlace': '无地点',
   'photos.uploadN': '上传 {n} 张照片',
+  'photos.dropHere': '将照片拖放至此处',
+  'photos.dropHereActive': '将照片拖放至此处...',
+  'photos.dropHint': 'JPG、PNG、WebP · 最大 10 MB · 最多 30 张照片',
 
   // Backup restore modal
   'backup.restoreConfirmTitle': '恢复备份？',

@@ -1485,6 +1485,9 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'photos.linkPlace': 'Link Place',
   'photos.noPlace': 'No Place',
   'photos.uploadN': '{n} photo(s) upload',
+  'photos.dropHere': 'Drop photos here',
+  'photos.dropHereActive': 'Drop photos here...',
+  'photos.dropHint': 'JPG, PNG, WebP · max. 10 MB · up to 30 photos',
 
   // Backup restore modal
   'backup.restoreConfirmTitle': 'Restore Backup?',

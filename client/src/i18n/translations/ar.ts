@@ -1366,6 +1366,9 @@ const ar: Record<string, string | { name: string; category: string }[]> = {
   'photos.linkPlace': 'ربط بمكان',
   'photos.noPlace': 'بلا مكان',
   'photos.uploadN': 'رفع {n} صورة',
+  'photos.dropHere': 'أفلت الصور هنا',
+  'photos.dropHereActive': 'أفلت الصور هنا...',
+  'photos.dropHint': 'JPG، PNG، WebP · الحد الأقصى 10 ميغابايت · حتى 30 صورة',
 
   // Backup restore modal
   'backup.restoreConfirmTitle': 'استعادة النسخة الاحتياطية؟',
