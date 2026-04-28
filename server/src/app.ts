@@ -45,7 +45,7 @@ export function createApp(): express.Application {
   const app = express();
 
   // Trust first proxy (nginx/Docker) for correct req.ip
-  if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY) {
+  if (process.env.NODE_ENV?.toLowerCase() === 'production' || process.env.TRUST_PROXY) {
     app.set('trust proxy', Number.parseInt(process.env.TRUST_PROXY) || 1);
   }
 
@@ -59,20 +59,20 @@ export function createApp(): express.Application {
       if (!origin || allowedOrigins.includes(origin)) callback(null, true);
       else callback(new Error('Not allowed by CORS'));
     };
-  } else if (process.env.NODE_ENV === 'production') {
+  } else if (process.env.NODE_ENV?.toLowerCase() === 'production') {
     corsOrigin = false;
   } else {
     corsOrigin = true;
   }
 
-  const shouldForceHttps = process.env.FORCE_HTTPS === 'true';
+  const shouldForceHttps = process.env.FORCE_HTTPS?.toLowerCase() === 'true';
   // HSTS: active whenever traffic is production, not only when FORCE_HTTPS is set.
   // Self-hosters behind Traefik / Caddy / Cloudflare Tunnel often leave FORCE_HTTPS
   // unset because the proxy handles the redirect, but they still want HSTS headers.
   // includeSubDomains stays OFF by default — enabling it on an apex domain would
   // force HTTPS on every sibling subdomain. Opt in with HSTS_INCLUDE_SUBDOMAINS=true.
-  const hstsActive = shouldForceHttps || process.env.NODE_ENV === 'production';
-  const hstsIncludeSubdomains = process.env.HSTS_INCLUDE_SUBDOMAINS === 'true';
+  const hstsActive = shouldForceHttps || process.env.NODE_ENV?.toLowerCase() === 'production';
+  const hstsIncludeSubdomains = process.env.HSTS_INCLUDE_SUBDOMAINS?.toLowerCase() === 'true';
 
   app.use(cors({ origin: corsOrigin, credentials: true }));
   app.use(helmet({
@@ -297,7 +297,7 @@ export function createApp(): express.Application {
   app.delete('/mcp', mcpHandler);
 
   // Production static file serving
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV?.toLowerCase() === 'production') {
     const publicPath = path.join(__dirname, '../public');
     app.use(express.static(publicPath, {
       setHeaders: (res, filePath) => {
@@ -314,7 +314,7 @@ export function createApp(): express.Application {
 
   // Global error handler
   app.use((err: Error & { status?: number; statusCode?: number }, _req: Request, res: Response, _next: NextFunction) => {
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.NODE_ENV?.toLowerCase() === 'production') {
       console.error('Unhandled error:', err.message);
     } else {
       console.error('Unhandled error:', err);
