@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import apiClient, { addonsApi } from '../../api/client'
 import { Camera, Plus, Share2, EyeOff, Eye, X, Check, Search, ArrowUpDown, MapPin, Filter, Link2, RefreshCw, Unlink, FolderOpen, Info, ChevronLeft, ChevronRight, CalendarRange, Timer, Settings } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
@@ -136,6 +136,12 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
   const [dateRangePreviewLoading, setDateRangePreviewLoading] = useState(false)
   const [newLinkAutoSync, setNewLinkAutoSync] = useState(false)
   const [syncing, setSyncing] = useState<number | null>(null)
+
+  const [localPhotos, setLocalPhotos] = useState<Photo[]>([])
+  const [showSourcesPopover, setShowSourcesPopover] = useState(false)
+  const [showAddSource, setShowAddSource] = useState(false)
+  const sourcesPopoverRef = useRef<HTMLDivElement>(null)
+  const addSourceRef = useRef<HTMLDivElement>(null)
 
 
   //helpers for building urls
@@ -323,7 +329,7 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
 
   // WebSocket: reload photos when another user adds/removes/shares
   useEffect(() => {
-    const handler = () => loadPhotos()
+    const handler = () => { loadPhotos(); loadLocalPhotos() }
     window.addEventListener('memories:updated', handler)
     return () => window.removeEventListener('memories:updated', handler)
   }, [tripId])
@@ -335,6 +341,15 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
     } catch {
       setTripPhotos([])
     }
+  }
+
+  const loadLocalPhotos = async () => {
+    try {
+      const res = await fetch(`/api/trips/${tripId}/photos`, { credentials: 'include' })
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      setLocalPhotos(data.photos || [])
+    } catch { setLocalPhotos([]) }
   }
 
   const loadInitial = async () => {
@@ -373,7 +388,7 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
       setAvailableProviders([])
       setConnected(false)
     }
-    await loadPhotos()
+    await Promise.all([loadPhotos(), loadLocalPhotos()])
     await loadAlbumLinks()
     setLoading(false)
   }
@@ -405,6 +420,15 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
       loadAlbums(selectedProvider)
     }
   }, [showAlbumPicker, selectedProvider, tripId])
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (sourcesPopoverRef.current && !sourcesPopoverRef.current.contains(e.target as Node)) setShowSourcesPopover(false)
+      if (addSourceRef.current && !addSourceRef.current.contains(e.target as Node)) setShowAddSource(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   const loadPickerPhotos = async (useDate: boolean) => {
     setPickerLoading(true)
@@ -498,6 +522,44 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
 
   const makePickerKey = (provider: string, assetId: string): string => `${provider}::${assetId}`
 
+  const uploadLocalPhoto = async (fd: FormData) => {
+    const res = await fetch(`/api/trips/${tripId}/photos`, { method: 'POST', credentials: 'include', body: fd })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    await loadLocalPhotos()
+  }
+
+  const deletePhotoById = async (photoId: number) => {
+    if (photoId < 0) {
+      const tripPhoto = allVisible.find((_, i) => -(i + 1) === photoId)
+      if (tripPhoto) await removePhoto(tripPhoto)
+    } else {
+      const res = await fetch(`/api/trips/${tripId}/photos/${photoId}`, { method: 'DELETE', credentials: 'include' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setLocalPhotos(prev => prev.filter(p => p.id !== photoId))
+    }
+  }
+
+  const updatePhotoById = async (photoId: number, data: Partial<Photo>) => {
+    if (photoId < 0) return
+    const res = await fetch(`/api/trips/${tripId}/photos/${photoId}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    if (!res.ok) throw new Error()
+    const result = await res.json()
+    setLocalPhotos(prev => prev.map(p => p.id === photoId ? { ...p, ...result.photo } : p))
+  }
+
+  const handlePhotoClick = (photo: Photo, filteredPhotos: Photo[]): boolean | void => {
+    if (photo.provider && photo.asset_id) {
+      const providerPhotos = filteredPhotos.filter(p => p.provider && p.asset_id)
+      openLightboxForPhoto(photo, providerPhotos)
+      return true
+    }
+  }
+
   const ownPhotos = tripPhotos.filter(p => p.user_id === currentUser?.id)
   const othersPhotos = tripPhotos.filter(p => p.user_id !== currentUser?.id && p.shared)
   const allVisibleRaw = [...ownPhotos, ...othersPhotos]
@@ -525,22 +587,6 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', ...font }}>
         <div className="w-8 h-8 border-2 rounded-full animate-spin"
           style={{ borderColor: 'var(--border-primary)', borderTopColor: 'var(--text-primary)' }} />
-      </div>
-    )
-  }
-
-  // ── Not connected ─────────────────────────────────────────────────────────
-
-  if (!connected && allVisible.length === 0) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 40, textAlign: 'center', ...font }}>
-        <Camera size={40} style={{ color: 'var(--text-faint)', marginBottom: 12 }} />
-        <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
-          {t('memories.notConnected', { provider_name: enabledProviders.length === 1 ? enabledProviders[0]?.name : 'Photo provider' })}
-        </h3>
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', maxWidth: 300 }}>
-          {enabledProviders.length === 1 ? t('memories.notConnectedHint', { provider_name: enabledProviders[0]?.name }) : t('memories.notConnectedMultipleHint', { provider_names: enabledProviders.map(p => p.name).join(', ') })}
-        </p>
       </div>
     )
   }
@@ -915,7 +961,10 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
 
   // ── Main Gallery ──────────────────────────────────────────────────────────
 
-  const galleryPhotos = allVisible.map((p, i) => adaptToPhoto(p, tripId, i))
+  const galleryPhotos = useMemo(() => [
+    ...allVisible.map((p, i) => adaptToPhoto(p, tripId, i)),
+    ...localPhotos,
+  ], [allVisible, localPhotos, tripId])
 
   const openLightboxForPhoto = (photo: Photo, filteredPhotos: Photo[]) => {
     const tripPhoto = allVisible.find(p => p.asset_id === photo.asset_id && p.provider === photo.provider)
@@ -932,55 +981,84 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
       .then(r => setLightboxInfo(r.data)).catch(() => {}).finally(() => setLightboxInfoLoading(false))
   }
 
-  const manageActions = connected ? (
-    <div style={{ position: 'relative' }}>
-      <button onClick={() => setShowManage(v => !v)}
-        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border-primary)', background: showManage ? 'var(--bg-secondary)' : 'none', color: 'var(--text-muted)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-        <Settings size={13} /> Manage
+  const MAX_VISIBLE_PILLS = 2
+  const visibleLinks = albumLinks.slice(0, MAX_VISIBLE_PILLS)
+  const overflowLinks = albumLinks.slice(MAX_VISIBLE_PILLS)
+
+  const renderPill = (link: typeof albumLinks[0]) => (
+    <div key={link.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 99, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0, maxWidth: 180 }}>
+      {link.sync_type === 'date_range' ? <CalendarRange size={11} style={{ flexShrink: 0 }} /> : <FolderOpen size={11} style={{ flexShrink: 0 }} />}
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 90 }}>{link.album_name}</span>
+      <button onClick={e => { e.stopPropagation(); syncAlbum(link.id, link.provider) }} disabled={syncing === link.id}
+        title={t('memories.syncAlbum')}
+        style={{ background: 'none', border: 'none', cursor: syncing === link.id ? 'default' : 'pointer', padding: 1, display: 'flex', color: 'var(--text-faint)', flexShrink: 0, lineHeight: 0 }}>
+        <RefreshCw size={11} style={{ animation: syncing === link.id ? 'spin 1s linear infinite' : 'none' }} />
       </button>
-      {showManage && (
-        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 6, background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 50, minWidth: 200, overflow: 'hidden' }}>
-          <button onClick={() => { setShowManage(false); openPicker() }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: 'var(--text-primary)', textAlign: 'left' }}>
-            <Plus size={14} /> {t('memories.addPhotos')}
+      {link.user_id === currentUser?.id && (
+        <button onClick={e => { e.stopPropagation(); toggleAutoSync(link.id, link.auto_sync) }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 1, display: 'flex', color: link.auto_sync ? 'var(--text-primary)' : 'var(--text-faint)', flexShrink: 0, lineHeight: 0 }}>
+          <Timer size={11} />
+        </button>
+      )}
+      {link.user_id === currentUser?.id && (
+        <button onClick={e => { e.stopPropagation(); unlinkAlbum(link.id) }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 1, display: 'flex', color: 'var(--text-faint)', flexShrink: 0, lineHeight: 0 }}>
+          <X size={11} />
+        </button>
+      )}
+    </div>
+  )
+
+  const sourcesBar = connected ? (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, overflow: 'hidden' }}>
+      {visibleLinks.map(renderPill)}
+
+      {overflowLinks.length > 0 && (
+        <div ref={sourcesPopoverRef} style={{ position: 'relative', flexShrink: 0 }}>
+          <button onClick={() => setShowSourcesPopover(v => !v)}
+            style={{ padding: '3px 8px', borderRadius: 99, border: '1px solid var(--border-primary)', background: showSourcesPopover ? 'var(--bg-tertiary)' : 'var(--bg-secondary)', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+            +{overflowLinks.length}
           </button>
-          <button onClick={() => { setShowManage(false); openAlbumPicker() }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: 'var(--text-primary)', textAlign: 'left' }}>
-            <Link2 size={14} /> {t('memories.linkAlbum')}
-          </button>
-          <button onClick={() => { setShowManage(false); openDateRangePicker() }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: 'var(--text-primary)', textAlign: 'left' }}>
-            <CalendarRange size={14} /> {t('memories.linkDateRange')}
-          </button>
-          {albumLinks.length > 0 && (
-            <>
-              <div style={{ height: 1, background: 'var(--border-primary)', margin: '4px 0' }} />
-              {albumLinks.map(link => (
-                <div key={link.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', fontSize: 12, color: 'var(--text-muted)' }}>
-                  {link.sync_type === 'date_range' ? <CalendarRange size={11} /> : <FolderOpen size={11} />}
-                  <span style={{ flex: 1, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.album_name}</span>
-                  <button onClick={() => syncAlbum(link.id, link.provider)} disabled={syncing === link.id} title={t('memories.syncAlbum')}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: 'var(--text-faint)', flexShrink: 0 }}>
-                    <RefreshCw size={11} style={{ animation: syncing === link.id ? 'spin 1s linear infinite' : 'none' }} />
-                  </button>
-                  {link.user_id === currentUser?.id && (
-                    <button onClick={() => toggleAutoSync(link.id, link.auto_sync)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: link.auto_sync ? 'var(--text-primary)' : 'var(--text-faint)', flexShrink: 0 }}>
-                      <Timer size={11} />
-                    </button>
-                  )}
-                  {link.user_id === currentUser?.id && (
-                    <button onClick={() => unlinkAlbum(link.id)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: 'var(--text-faint)', flexShrink: 0 }}>
-                      <X size={11} />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </>
+          {showSourcesPopover && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 50, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 4, minWidth: 220 }}>
+              {overflowLinks.map(renderPill)}
+            </div>
           )}
         </div>
       )}
+
+      <div ref={addSourceRef} style={{ position: 'relative', flexShrink: 0, marginLeft: 'auto' }}>
+        <button onClick={() => setShowAddSource(v => !v)}
+          style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+          <Plus size={12} /> Add source
+        </button>
+        {showAddSource && (
+          <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 50, minWidth: 190, overflow: 'hidden' }}>
+            {availableProviders.length > 1 && (
+              <div style={{ padding: '8px 10px 4px', display: 'flex', gap: 4, flexWrap: 'wrap', borderBottom: '1px solid var(--border-primary)' }}>
+                {availableProviders.map(p => (
+                  <button key={p.id} onClick={() => setSelectedProvider(p.id)}
+                    style={{ padding: '3px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid', background: selectedProvider === p.id ? 'var(--text-primary)' : 'var(--bg-card)', borderColor: selectedProvider === p.id ? 'var(--text-primary)' : 'var(--border-primary)', color: selectedProvider === p.id ? 'var(--bg-primary)' : 'var(--text-muted)' }}>
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button onClick={() => { setShowAddSource(false); openPicker() }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: 'var(--text-primary)', textAlign: 'left' }}>
+              <Search size={13} /> {t('memories.addPhotos')}
+            </button>
+            <button onClick={() => { setShowAddSource(false); openAlbumPicker() }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: 'var(--text-primary)', textAlign: 'left' }}>
+              <Link2 size={13} /> {t('memories.linkAlbum')}
+            </button>
+            <button onClick={() => { setShowAddSource(false); openDateRangePicker() }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: 'var(--text-primary)', textAlign: 'left' }}>
+              <CalendarRange size={13} /> {t('memories.linkDateRange')}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   ) : null
 
@@ -991,8 +1069,11 @@ export default function MemoriesPanel({ tripId, startDate, endDate, days = [], p
         places={places}
         days={days}
         tripId={tripId}
-        onPhotoClick={openLightboxForPhoto}
-        headerActions={manageActions}
+        onPhotoClick={handlePhotoClick}
+        onUpload={uploadLocalPhoto}
+        onDelete={deletePhotoById}
+        onUpdate={updatePhotoById}
+        sourcesBar={sourcesBar}
       />
 
       {/* Confirm share popup */}

@@ -15,8 +15,9 @@ interface PhotoGalleryProps {
   places: Place[]
   days: Day[]
   tripId: number
-  onPhotoClick?: (photo: Photo, filteredPhotos: Photo[]) => void
+  onPhotoClick?: (photo: Photo, filteredPhotos: Photo[]) => boolean | void
   headerActions?: React.ReactNode
+  sourcesBar?: React.ReactNode
 }
 
 // ── Data helpers ─────────────────────────────────────────────────────────────
@@ -405,7 +406,7 @@ function TimelineDaySection({ section, expanded, onToggle, filteredPhotos, place
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, places, days, tripId, onPhotoClick: onPhotoClickProp, headerActions }: PhotoGalleryProps) {
+export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, places, days, tripId, onPhotoClick: onPhotoClickProp, headerActions, sourcesBar }: PhotoGalleryProps) {
   const { t, language } = useTranslation()
   const locale = getLocaleForLanguage(language)
 
@@ -438,6 +439,8 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
     [photos, filterDayIds, filterLocation, filterUploaders, filterDateFrom, filterDateTo]
   )
 
+  const lightboxPhotos = useMemo(() => filteredPhotos.filter(p => p.id > 0), [filteredPhotos])
+
   const filteredSections = useMemo(() => {
     const filtered = buildSections(filteredPhotos, days)
     // Preserve all trip-day sections (even empty ones after filtering) so the structure stays stable
@@ -448,15 +451,18 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
   }, [filteredPhotos, allSections, days])
 
   const handlePhotoClick = (photo: Photo) => {
-    if (onPhotoClickProp) { onPhotoClickProp(photo, filteredPhotos); return }
-    const idx = filteredPhotos.findIndex(p => p.id === photo.id)
+    if (onPhotoClickProp) {
+      const handled = onPhotoClickProp(photo, filteredPhotos)
+      if (handled) return
+    }
+    const idx = lightboxPhotos.findIndex(p => p.id === photo.id)
     setLightboxIndex(idx >= 0 ? idx : null)
   }
 
   const handleDelete = async (photoId: number) => {
     await onDelete(photoId)
     if (lightboxIndex !== null) {
-      const newLen = filteredPhotos.filter(p => p.id !== photoId).length
+      const newLen = lightboxPhotos.filter(p => p.id !== photoId).length
       if (newLen === 0) setLightboxIndex(null)
       else if (lightboxIndex >= newLen) setLightboxIndex(newLen - 1)
     }
@@ -544,6 +550,13 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
           </button>
         )}
       </div>
+
+      {/* Sources bar — provider album/date-range pills injected by parent */}
+      {sourcesBar && (
+        <div style={{ padding: '8px 20px', borderBottom: '1px solid var(--border-faint,var(--border-primary))', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, overflow: 'hidden', background: 'var(--bg-secondary)' }}>
+          {sourcesBar}
+        </div>
+      )}
 
       {/* Filter bar */}
       <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--border-faint,var(--border-primary))', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap', background: 'var(--bg-secondary)' }}>
@@ -656,10 +669,10 @@ export default function PhotoGallery({ photos, onUpload, onDelete, onUpdate, pla
         </div>
       </div>}
 
-      {/* Lightbox — only for direct upload photos (provider photos use their own lightbox) */}
-      {lightboxIndex !== null && !onPhotoClickProp && onDelete && onUpdate && (
+      {/* Lightbox — local photos only; provider photos open MemoriesPanel's own lightbox */}
+      {lightboxIndex !== null && onDelete && onUpdate && (
         <PhotoLightbox
-          photos={filteredPhotos}
+          photos={lightboxPhotos}
           initialIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
           onUpdate={onUpdate}

@@ -140,9 +140,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
     addonsApi.enabled().then(data => {
       const map: Record<string, boolean> = {}
       data.addons.forEach(a => { map[a.id] = true })
-      // Check if any photo provider is enabled (for memories tab to show)
-      const hasPhotoProviders = data.addons.some(a => a.type === 'photo_provider')
-      setEnabledAddons({ packing: !!map.packing, budget: !!map.budget, documents: !!map.documents, collab: !!map.collab, memories: hasPhotoProviders, elevation: !!map.elevation })
+      setEnabledAddons({ packing: !!map.packing, budget: !!map.budget, documents: !!map.documents, collab: !!map.collab, elevation: !!map.elevation })
     }).catch(() => {})
     authApi.getAppConfig().then(config => {
       if (config.allowed_file_types) setAllowedFileTypes(config.allowed_file_types)
@@ -181,7 +179,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
     ...(enabledAddons.packing ? [{ id: 'listen', label: t('trip.tabs.lists'), shortLabel: t('trip.tabs.listsShort'), icon: PackageCheck }] : []),
     ...(enabledAddons.budget ? [{ id: 'finanzplan', label: t('trip.tabs.budget'), icon: Wallet }] : []),
     ...(enabledAddons.documents ? [{ id: 'dateien', label: t('trip.tabs.files'), icon: FolderOpen }] : []),
-    ...(enabledAddons.memories ? [{ id: 'memories', label: t('memories.title'), icon: Camera }] : []),
+    { id: 'memories', label: t('memories.title'), icon: Camera },
     ...(enabledAddons.collab ? [{ id: 'collab', label: t('admin.addons.catalog.collab.name'), icon: Users }] : []),
   ]
 
