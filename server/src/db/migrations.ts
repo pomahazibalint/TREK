@@ -1252,6 +1252,13 @@ function runMigrations(db: Database.Database): void {
     () => {
       db.prepare("UPDATE addons SET type = 'integration' WHERE id = 'google_list_import'").run();
     },
+    // Migration 108: Move google_list_import to 'feature' type and add link_preview feature flag
+    () => {
+      db.prepare("UPDATE addons SET type = 'feature' WHERE id = 'google_list_import'").run();
+      db.prepare(
+        "INSERT OR IGNORE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).run('link_preview', 'Link Previews', 'Fetch metadata for URLs shared in Collab. The server makes outbound requests to external sites.', 'feature', 'Link2', 1, 14);
+    },
   ];
 
   if (currentVersion < migrations.length) {

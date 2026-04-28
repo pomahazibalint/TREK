@@ -9,6 +9,7 @@ import { validateStringLengths } from '../middleware/validate';
 import { checkPermission } from '../services/permissions';
 import { AuthRequest } from '../types';
 import { db } from '../db/database';
+import { isAddonEnabled } from '../services/adminService';
 import {
   verifyTripAccess,
   listNotes,
@@ -339,6 +340,7 @@ router.delete('/messages/:id', authenticate, (req: Request, res: Response) => {
 /* ------------------------------------------------------------------ */
 
 router.get('/link-preview', authenticate, async (req: Request, res: Response) => {
+  if (!isAddonEnabled('link_preview')) return res.status(403).json({ error: 'Link previews are disabled.' });
   const { url } = req.query as { url?: string };
   if (!url) return res.status(400).json({ error: 'URL is required' });
 

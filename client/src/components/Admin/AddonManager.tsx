@@ -4,10 +4,10 @@ import { useTranslation } from '../../i18n'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useAddonStore } from '../../store/addonStore'
 import { useToast } from '../shared/Toast'
-import { Puzzle, ListChecks, Wallet, FileText, CalendarDays, Globe, Briefcase, Image, Terminal, Link2 } from 'lucide-react'
+import { Puzzle, ListChecks, Wallet, FileText, CalendarDays, Globe, Briefcase, Image, Terminal, Link2, Shield, List } from 'lucide-react'
 
 const ICON_MAP = {
-  ListChecks, Wallet, FileText, CalendarDays, Puzzle, Globe, Briefcase, Image, Terminal, Link2,
+  ListChecks, Wallet, FileText, CalendarDays, Puzzle, Globe, Briefcase, Image, Terminal, Link2, List,
 }
 
 interface Addon {
@@ -141,6 +141,7 @@ export default function AddonManager({ bagTrackingEnabled, onToggleBagTracking }
   const globalAddons = addons.filter(a => a.type === 'global')
   const photoProviderAddons = addons.filter(isPhotoProviderAddon)
   const integrationAddons = addons.filter(a => a.type === 'integration')
+  const featureAddons = addons.filter(a => a.type === 'feature')
   const photosAddon = tripAddons.find(isPhotosAddon)
   const providerOptions: ProviderOption[] = photoProviderAddons.map((provider) => ({
       key: provider.id,
@@ -328,6 +329,21 @@ export default function AddonManager({ bagTrackingEnabled, onToggleBagTracking }
                 ))}
               </div>
             )}
+
+            {/* Feature Flags */}
+            {featureAddons.length > 0 && (
+              <div>
+                <div className="px-6 py-2.5 border-b border-t flex items-center gap-2" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border-secondary)' }}>
+                  <Shield size={13} style={{ color: 'var(--text-muted)' }} />
+                  <span className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                    {t('admin.addons.type.feature')} — {t('admin.addons.featureHint')}
+                  </span>
+                </div>
+                {featureAddons.map(addon => (
+                  <AddonRow key={addon.id} addon={addon} onToggle={handleToggle} t={t} />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -378,7 +394,7 @@ function AddonRow({ addon, onToggle, t, nameOverride, descriptionOverride, statu
             </span>
           )}
           <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>
-            {addon.type === 'global' ? t('admin.addons.type.global') : addon.type === 'integration' ? t('admin.addons.type.integration') : t('admin.addons.type.trip')}
+            {addon.type === 'global' ? t('admin.addons.type.global') : addon.type === 'integration' ? t('admin.addons.type.integration') : addon.type === 'feature' ? t('admin.addons.type.feature') : t('admin.addons.type.trip')}
           </span>
         </div>
         <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{displayDescription}</p>
