@@ -527,30 +527,30 @@ export async function getPlacePhoto(
   lat: number,
   lng: number,
   name?: string,
-): Promise<{ photoUrl: string | null; attribution: string | null }> {
+): Promise<{ photoUrl: string | null; attribution: string | null; thumbB64: string | null }> {
   // Check in-memory cache first
   const cached = photoCache.get(placeId);
   if (cached) {
     const ttl = cached.error ? ERROR_TTL : PHOTO_TTL;
     if (Date.now() - cached.fetchedAt < ttl) {
-      if (cached.error) return { photoUrl: null, attribution: null };
-      return { photoUrl: cached.photoUrl, attribution: cached.attribution };
+      if (cached.error) return { photoUrl: null, attribution: null, thumbB64: null };
+      return { photoUrl: cached.photoUrl, attribution: cached.attribution, thumbB64: null };
     }
     photoCache.delete(placeId);
   }
 
   // Check persistent photo cache (survives server restarts, shared across users)
   const dbCached = db.prepare(
-    'SELECT photo_url, attribution FROM place_photo_cache WHERE place_key = ?'
-  ).get(placeId) as { photo_url: string | null; attribution: string | null } | undefined;
+    'SELECT photo_url, attribution, thumb_b64 FROM place_photo_cache WHERE place_key = ?'
+  ).get(placeId) as { photo_url: string | null; attribution: string | null; thumb_b64: string | null } | undefined;
   if (dbCached) {
     db.prepare("UPDATE place_photo_cache SET last_used_at = CURRENT_TIMESTAMP WHERE place_key = ?").run(placeId);
     if (dbCached.photo_url) {
       photoCache.set(placeId, { photoUrl: dbCached.photo_url, attribution: dbCached.attribution, fetchedAt: Date.now() });
-      return { photoUrl: dbCached.photo_url, attribution: dbCached.attribution };
+      return { photoUrl: dbCached.photo_url, attribution: dbCached.attribution, thumbB64: dbCached.thumb_b64 };
     }
     photoCache.set(placeId, { photoUrl: '', attribution: null, fetchedAt: Date.now(), error: true });
-    return { photoUrl: null, attribution: null };
+    return { photoUrl: null, attribution: null, thumbB64: null };
   }
 
   const apiKey = getMapsKey(userId);
@@ -568,7 +568,7 @@ export async function getPlacePhoto(
               'INSERT OR REPLACE INTO place_photo_cache (place_key, photo_url, attribution, source) VALUES (?, ?, ?, ?)'
             ).run(placeId, wiki.photoUrl, wiki.attribution, 'wikimedia');
           } catch { /* non-fatal */ }
-          return wiki;
+          return { ...wiki, thumbB64: null };
         }
       } catch { /* fall through */ }
     }
@@ -578,7 +578,7 @@ export async function getPlacePhoto(
         'INSERT OR IGNORE INTO place_photo_cache (place_key, photo_url, attribution, source) VALUES (?, NULL, NULL, ?)'
       ).run(placeId, isCoordLookup ? 'wikimedia' : 'google');
     } catch { /* non-fatal */ }
-    return { photoUrl: null, attribution: null };
+    return { photoUrl: null, attribution: null, thumbB64: null };
   }
 
   // Google Photos API fetch
@@ -593,7 +593,7 @@ export async function getPlacePhoto(
   if (!detailsRes.ok) {
     console.error('Google Places photo details error:', details.error?.message || detailsRes.status);
     photoCache.set(placeId, { photoUrl: '', attribution: null, fetchedAt: Date.now(), error: true });
-    return { photoUrl: null, attribution: null };
+    return { photoUrl: null, attribution: null, thumbB64: null };
   }
 
   if (!details.photos?.length) {
@@ -603,7 +603,7 @@ export async function getPlacePhoto(
         'INSERT OR IGNORE INTO place_photo_cache (place_key, photo_url, attribution, source) VALUES (?, NULL, NULL, ?)'
       ).run(placeId, 'google');
     } catch { /* non-fatal */ }
-    return { photoUrl: null, attribution: null };
+    return { photoUrl: null, attribution: null, thumbB64: null };
   }
 
   const photo = details.photos[0];
@@ -619,7 +619,7 @@ export async function getPlacePhoto(
 
   if (!photoUrl) {
     photoCache.set(placeId, { photoUrl: '', attribution, fetchedAt: Date.now(), error: true });
-    return { photoUrl: null, attribution: null };
+    return { photoUrl: null, attribution: null, thumbB64: null };
   }
 
   photoCache.set(placeId, { photoUrl, attribution, fetchedAt: Date.now() });
@@ -630,7 +630,7 @@ export async function getPlacePhoto(
     ).run(placeId, photoUrl, attribution, 'google');
   } catch { /* non-fatal */ }
 
-  return { photoUrl, attribution };
+  return { photoUrl, attribution, thumbB64: null };
 }
 
 // ── Reverse geocoding ────────────────────────────────────────────────────────

@@ -24,7 +24,7 @@ function drainQueue() {
     const item = requestQueue.shift()!
     activeRequests++
     mapsApi.placePhoto(item.photoId, item.lat, item.lng, item.name)
-      .then(async (data: { photoUrl?: string }) => {
+      .then(async (data: { photoUrl?: string; thumbB64?: string }) => {
         const photoUrl = data.photoUrl || null
         if (!photoUrl) {
           const entry: PhotoEntry = { photoUrl: null, thumbDataUrl: null }
@@ -32,9 +32,13 @@ function drainQueue() {
           notify(item.cacheKey, entry)
           return
         }
-        const entry: PhotoEntry = { photoUrl, thumbDataUrl: null }
+        const entry: PhotoEntry = { photoUrl, thumbDataUrl: data.thumbB64 || null }
         cache.set(item.cacheKey, entry)
         notify(item.cacheKey, entry)
+        if (data.thumbB64) {
+          notifyThumb(item.cacheKey, data.thumbB64)
+          return
+        }
         const thumb = await urlToBase64(photoUrl)
         if (thumb) {
           entry.thumbDataUrl = thumb

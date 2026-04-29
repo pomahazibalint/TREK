@@ -75,8 +75,8 @@ router.get('/place-photo/:placeId', authenticate, async (req: Request, res: Resp
   const lng = parseFloat(req.query.lng as string);
 
   try {
-    const result = await getPlacePhoto(authReq.user.id, placeId, lat, lng, req.query.name as string);
-    res.json(result);
+    const { photoUrl, attribution, thumbB64 } = await getPlacePhoto(authReq.user.id, placeId, lat, lng, req.query.name as string);
+    res.json({ photoUrl, attribution, thumbB64 });
   } catch (err: unknown) {
     const status = (err as { status?: number }).status || 500;
     const message = err instanceof Error ? err.message : 'Error fetching photo';
