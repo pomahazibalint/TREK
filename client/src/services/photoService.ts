@@ -39,6 +39,7 @@ function drainQueue() {
         if (thumb) {
           entry.thumbDataUrl = thumb
           notifyThumb(item.cacheKey, thumb)
+          mapsApi.reportThumb(item.photoId, thumb).catch(() => {})
         }
       })
       .catch(() => {
