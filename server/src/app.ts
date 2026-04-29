@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -75,6 +76,7 @@ export function createApp(): express.Application {
   const hstsIncludeSubdomains = process.env.HSTS_INCLUDE_SUBDOMAINS?.toLowerCase() === 'true';
 
   app.use(cors({ origin: corsOrigin, credentials: true }));
+  app.use(compression());
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {

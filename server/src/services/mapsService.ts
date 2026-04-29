@@ -528,7 +528,7 @@ export async function getPlacePhoto(
   lng: number,
   name?: string,
 ): Promise<{ photoUrl: string | null; attribution: string | null }> {
-  // Check cache first
+  // Check in-memory cache first
   const cached = photoCache.get(placeId);
   if (cached) {
     const ttl = cached.error ? ERROR_TTL : PHOTO_TTL;
@@ -537,6 +537,20 @@ export async function getPlacePhoto(
       return { photoUrl: cached.photoUrl, attribution: cached.attribution };
     }
     photoCache.delete(placeId);
+  }
+
+  // Check persistent photo cache (survives server restarts, shared across users)
+  const dbCached = db.prepare(
+    'SELECT photo_url, attribution FROM place_photo_cache WHERE place_key = ?'
+  ).get(placeId) as { photo_url: string | null; attribution: string | null } | undefined;
+  if (dbCached) {
+    db.prepare("UPDATE place_photo_cache SET last_used_at = CURRENT_TIMESTAMP WHERE place_key = ?").run(placeId);
+    if (dbCached.photo_url) {
+      photoCache.set(placeId, { photoUrl: dbCached.photo_url, attribution: dbCached.attribution, fetchedAt: Date.now() });
+      return { photoUrl: dbCached.photo_url, attribution: dbCached.attribution };
+    }
+    photoCache.set(placeId, { photoUrl: '', attribution: null, fetchedAt: Date.now(), error: true });
+    return { photoUrl: null, attribution: null };
   }
 
   const apiKey = getMapsKey(userId);
@@ -549,25 +563,25 @@ export async function getPlacePhoto(
         const wiki = await fetchWikimediaPhoto(lat, lng, name);
         if (wiki) {
           photoCache.set(placeId, { ...wiki, fetchedAt: Date.now() });
+          try {
+            db.prepare(
+              'INSERT OR REPLACE INTO place_photo_cache (place_key, photo_url, attribution, source) VALUES (?, ?, ?, ?)'
+            ).run(placeId, wiki.photoUrl, wiki.attribution, 'wikimedia');
+          } catch { /* non-fatal */ }
           return wiki;
-        } else {
-          photoCache.set(placeId, { photoUrl: '', attribution: null, fetchedAt: Date.now(), error: true });
         }
       } catch { /* fall through */ }
     }
     photoCache.set(placeId, { photoUrl: '', attribution: null, fetchedAt: Date.now(), error: true });
+    try {
+      db.prepare(
+        'INSERT OR IGNORE INTO place_photo_cache (place_key, photo_url, attribution, source) VALUES (?, NULL, NULL, ?)'
+      ).run(placeId, isCoordLookup ? 'wikimedia' : 'google');
+    } catch { /* non-fatal */ }
     return { photoUrl: null, attribution: null };
   }
 
-  // Google Photos — check DB before hitting the API (survives server restarts)
-  const dbPhoto = db.prepare(
-    "SELECT image_url FROM places WHERE google_place_id = ? AND image_url IS NOT NULL AND image_url != ''"
-  ).get(placeId) as { image_url: string } | undefined;
-  if (dbPhoto?.image_url) {
-    photoCache.set(placeId, { photoUrl: dbPhoto.image_url, attribution: null, fetchedAt: Date.now() });
-    return { photoUrl: dbPhoto.image_url, attribution: null };
-  }
-
+  // Google Photos API fetch
   const detailsRes = await fetch(`https://places.googleapis.com/v1/places/${placeId}`, {
     headers: {
       'X-Goog-Api-Key': apiKey,
@@ -584,6 +598,11 @@ export async function getPlacePhoto(
 
   if (!details.photos?.length) {
     photoCache.set(placeId, { photoUrl: '', attribution: null, fetchedAt: Date.now(), error: true });
+    try {
+      db.prepare(
+        'INSERT OR IGNORE INTO place_photo_cache (place_key, photo_url, attribution, source) VALUES (?, NULL, NULL, ?)'
+      ).run(placeId, 'google');
+    } catch { /* non-fatal */ }
     return { photoUrl: null, attribution: null };
   }
 
@@ -605,14 +624,11 @@ export async function getPlacePhoto(
 
   photoCache.set(placeId, { photoUrl, attribution, fetchedAt: Date.now() });
 
-  // Persist photo URL to database
   try {
     db.prepare(
-      'UPDATE places SET image_url = ?, updated_at = CURRENT_TIMESTAMP WHERE google_place_id = ? AND (image_url IS NULL OR image_url = ?)'
-    ).run(photoUrl, placeId, '');
-  } catch (dbErr) {
-    console.error('Failed to persist photo URL to database:', dbErr);
-  }
+      'INSERT OR REPLACE INTO place_photo_cache (place_key, photo_url, attribution, source) VALUES (?, ?, ?, ?)'
+    ).run(placeId, photoUrl, attribution, 'google');
+  } catch { /* non-fatal */ }
 
   return { photoUrl, attribution };
 }

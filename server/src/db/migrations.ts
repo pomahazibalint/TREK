@@ -1259,6 +1259,21 @@ function runMigrations(db: Database.Database): void {
         "INSERT OR IGNORE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)"
       ).run('link_preview', 'Link Previews', 'Fetch metadata for URLs shared in Collab. The server makes outbound requests to external sites.', 'feature', 'Link2', 1, 14);
     },
+    // Migration 109: Place photo cache — persists photo URLs and client-generated thumbnails across restarts
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS place_photo_cache (
+          place_key   TEXT PRIMARY KEY,
+          photo_url   TEXT,
+          thumb_b64   TEXT,
+          attribution TEXT,
+          source      TEXT NOT NULL,
+          last_used_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_ppc_last_used ON place_photo_cache(last_used_at);
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {

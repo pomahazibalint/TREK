@@ -1,4 +1,5 @@
 import { mapsApi } from '../api/client'
+import type { Place } from '../types'
 
 // Shared photo cache — used by PlaceAvatar (sidebar) and MapView (map markers)
 interface PhotoEntry {
@@ -108,6 +109,31 @@ export function urlToBase64(url: string, size: number = 48): Promise<string | nu
     img.onerror = () => resolve(null)
     img.src = url
   })
+}
+
+export function seedFromPlace(place: Place): void {
+  const cacheKey = place.google_place_id || place.osm_id || `${place.lat},${place.lng}`
+  if (!cacheKey || cache.has(cacheKey)) return
+
+  if (place.thumb_b64) {
+    cache.set(cacheKey, { photoUrl: place.photo_url ?? null, thumbDataUrl: place.thumb_b64 })
+    return
+  }
+
+  if (place.photo_url) {
+    const placeKey = place.google_place_id || place.osm_id
+    const entry: PhotoEntry = { photoUrl: place.photo_url, thumbDataUrl: null }
+    cache.set(cacheKey, entry)
+    // Generate thumbnail locally then report back so subsequent loads are fully cached
+    urlToBase64(place.photo_url).then(thumb => {
+      if (!thumb) return
+      entry.thumbDataUrl = thumb
+      notifyThumb(cacheKey, thumb)
+      if (placeKey) {
+        mapsApi.reportThumb(placeKey, thumb).catch(() => {})
+      }
+    })
+  }
 }
 
 export function fetchPhoto(

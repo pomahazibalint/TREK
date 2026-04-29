@@ -57,6 +57,8 @@ export default function MapSettingsTab(): React.ReactElement {
     currency: null,
     price_level: null,
     image_url: null,
+    photo_url: null,
+    thumb_b64: null,
     google_place_id: null,
     osm_id: null,
     route_geometry: null,

@@ -52,6 +52,7 @@ const server = app.listen(PORT, () => {
   scheduler.startAutoPhotoSync();
   scheduler.startAutoArchive();
   scheduler.startIdempotencyCleanup();
+  scheduler.startPhotoCleanup();
   import('./services/atlasService').then(({ warmAdmin1Geo, geocodeAllPlaceRegions }) => {
     warmAdmin1Geo().then(() => geocodeAllPlaceRegions());
   });

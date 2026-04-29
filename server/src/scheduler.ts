@@ -384,6 +384,20 @@ function startIdempotencyCleanup(): void {
   });
 }
 
+function startPhotoCleanup(): void {
+  // Run weekly on Sunday at 4 AM — evict photo cache entries unused for over a year
+  cron.schedule('0 4 * * 0', () => {
+    try {
+      const { db } = require('./db/database');
+      const result = db.prepare("DELETE FROM place_photo_cache WHERE last_used_at < datetime('now', '-1 year')").run();
+      if (result.changes > 0) {
+        const { logInfo: li } = require('./services/auditLog');
+        li(`Photo cache cleanup: removed ${result.changes} stale entries`);
+      }
+    } catch { /* non-fatal */ }
+  });
+}
+
 function stop(): void {
   if (currentTask) { currentTask.stop(); currentTask = null; }
   if (demoTask) { demoTask.stop(); demoTask = null; }
@@ -393,4 +407,4 @@ function stop(): void {
   if (autoArchiveTask) { autoArchiveTask.stop(); autoArchiveTask = null; }
 }
 
-export { start, stop, startDemoReset, startTripReminders, startTodoReminders, startVersionCheck, startAutoPhotoSync, startAutoArchive, startIdempotencyCleanup, loadSettings, saveSettings, VALID_INTERVALS, cleanupOldBackups };
+export { start, stop, startDemoReset, startTripReminders, startTodoReminders, startVersionCheck, startAutoPhotoSync, startAutoArchive, startIdempotencyCleanup, startPhotoCleanup, loadSettings, saveSettings, VALID_INTERVALS, cleanupOldBackups };

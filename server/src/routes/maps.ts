@@ -85,6 +85,27 @@ router.get('/place-photo/:placeId', authenticate, async (req: Request, res: Resp
   }
 });
 
+// POST /photo-cache/:placeKey/thumb — client reports back a generated thumbnail
+router.post('/photo-cache/:placeKey/thumb', authenticate, (req: Request, res: Response) => {
+  const { placeKey } = req.params;
+  const { thumb_b64 } = req.body;
+
+  if (typeof thumb_b64 !== 'string' || thumb_b64.length === 0 || thumb_b64.length > 30000) {
+    return res.status(400).json({ error: 'thumb_b64 must be a non-empty string under 30KB' });
+  }
+
+  try {
+    const result = db.prepare(
+      'UPDATE place_photo_cache SET thumb_b64 = ?, last_used_at = CURRENT_TIMESTAMP WHERE place_key = ?'
+    ).run(thumb_b64, placeKey);
+    if (result.changes === 0) return res.status(404).json({ error: 'Cache entry not found' });
+    res.json({ ok: true });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Database error';
+    res.status(500).json({ error: message });
+  }
+});
+
 // GET /reverse
 router.get('/reverse', authenticate, async (req: Request, res: Response) => {
   const { lat, lng, lang } = req.query as { lat: string; lng: string; lang?: string };

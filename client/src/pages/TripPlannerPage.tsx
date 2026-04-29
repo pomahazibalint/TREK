@@ -5,7 +5,7 @@ import { useTripStore } from '../store/tripStore'
 import { useCanDo } from '../store/permissionsStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { MapView } from '../components/Map/MapView'
-import { getCached, fetchPhoto } from '../services/photoService'
+import { getCached, fetchPhoto, seedFromPlace } from '../services/photoService'
 import DayPlanSidebar from '../components/Planner/DayPlanSidebar'
 import PlacesSidebar from '../components/Planner/PlacesSidebar'
 import PlaceInspector from '../components/Planner/PlaceInspector'
@@ -236,7 +236,13 @@ export default function TripPlannerPage(): React.ReactElement | null {
     for (const p of places) {
       if (p.image_url) continue
       const cacheKey = p.google_place_id || p.osm_id || `${p.lat},${p.lng}`
-      if (!cacheKey || getCached(cacheKey)) continue
+      if (!cacheKey) continue
+      // Seed from list response if server already has cached photo data
+      if (p.photo_url || p.thumb_b64) {
+        seedFromPlace(p)
+        continue
+      }
+      if (getCached(cacheKey)) continue
       const photoId = p.google_place_id || p.osm_id
       if (photoId || (p.lat && p.lng)) {
         fetchPhoto(cacheKey, photoId || `coords:${p.lat}:${p.lng}`, p.lat, p.lng, p.name)

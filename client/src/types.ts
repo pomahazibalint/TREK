@@ -87,6 +87,8 @@ export interface Place {
   currency: string | null
   price_level: number | null
   image_url: string | null
+  photo_url: string | null
+  thumb_b64: string | null
   google_place_id: string | null
   osm_id: string | null
   route_geometry: string | null

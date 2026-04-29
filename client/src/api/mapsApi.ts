@@ -9,4 +9,5 @@ export const mapsApi = {
   reverse: (lat: number, lng: number, lang?: string) => apiClient.get('/maps/reverse', { params: { lat, lng, lang } }).then(r => r.data),
   resolveUrl: (url: string) => apiClient.post('/maps/resolve-url', { url }).then(r => r.data),
   elevation: (locations: { latitude: number; longitude: number }[]) => apiClient.post('/maps/elevation', { locations }).then(r => r.data),
+  reportThumb: (placeKey: string, thumb_b64: string) => apiClient.post(`/maps/photo-cache/${encodeURIComponent(placeKey)}/thumb`, { thumb_b64 }).then(r => r.data),
 }

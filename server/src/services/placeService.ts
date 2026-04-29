@@ -18,14 +18,24 @@ interface UnsplashSearchResponse {
 // List places
 // ---------------------------------------------------------------------------
 
+interface PlaceWithCategoryAndPhoto extends PlaceWithCategory {
+  cached_photo_url: string | null;
+  cached_thumb_b64: string | null;
+  cached_attribution: string | null;
+  cache_key: string | null;
+}
+
 export function listPlaces(
   tripId: string,
   filters: { search?: string; category?: string; tag?: string },
 ) {
   let query = `
-    SELECT DISTINCT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon
+    SELECT DISTINCT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon,
+      ppc.photo_url as cached_photo_url, ppc.thumb_b64 as cached_thumb_b64, ppc.attribution as cached_attribution,
+      COALESCE(p.google_place_id, p.osm_id) as cache_key
     FROM places p
     LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN place_photo_cache ppc ON ppc.place_key = COALESCE(p.google_place_id, p.osm_id)
     WHERE p.trip_id = ?
   `;
   const params: (string | number)[] = [tripId];
@@ -48,13 +58,27 @@ export function listPlaces(
 
   query += ' ORDER BY p.created_at DESC';
 
-  const places = db.prepare(query).all(...params) as PlaceWithCategory[];
+  const places = db.prepare(query).all(...params) as PlaceWithCategoryAndPhoto[];
+
+  // Batch-update last_used_at for all cache hits
+  const hitKeys = [...new Set(
+    places.filter(p => p.cache_key != null && p.cached_photo_url != null).map(p => p.cache_key as string)
+  )];
+  if (hitKeys.length > 0) {
+    try {
+      db.prepare(
+        `UPDATE place_photo_cache SET last_used_at = CURRENT_TIMESTAMP WHERE place_key IN (${hitKeys.map(() => '?').join(',')})`
+      ).run(...hitKeys);
+    } catch { /* non-fatal */ }
+  }
 
   const placeIds = places.map(p => p.id);
   const tagsByPlaceId = loadTagsByPlaceIds(placeIds);
 
   return places.map(p => ({
     ...p,
+    photo_url: p.cached_photo_url ?? null,
+    thumb_b64: p.cached_thumb_b64 ?? null,
     category: p.category_id ? {
       id: p.category_id,
       name: p.category_name,
